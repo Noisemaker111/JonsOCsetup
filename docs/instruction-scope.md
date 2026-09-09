@@ -9,7 +9,7 @@ checkout, not commands agents should run from every project.
 ## Corrected in this cleanup
 
 - AGENTS.md now explicitly separates global personal rules, the active project,
-  config maintenance and shared ledger storage. Quest and usage instructions
+  config maintenance, and shared ledger storage. Quest and usage instructions
   account for unavailable tools rather than requiring agents to invent access.
 - README has a scope map and labels existing model pins, payment restrictions,
   historical host observations and planned Quest behavior appropriately.
