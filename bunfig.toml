@@ -1,0 +1,8 @@
+# generations/ holds immutable promoted copies of this whole repo, each with its
+# own test/ directory. Without a root, `bun test` walks into them and runs stale
+# suites against the live config — every promotion adds another full copy of
+# every test, and their failures look like real ones.
+[test]
+root = "./test"
+# Sweeps scratch directories a failing test leaked before its own cleanup ran.
+preload = ["./test/scratch-sweep.ts"]

@@ -1,0 +1,40 @@
+diff --git a/cliproxyapi/search-shim-start.ps1 b/cliproxyapi/search-shim-start.ps1
+index 1d6b949..21e0262 100644
+--- a/cliproxyapi/search-shim-start.ps1
++++ b/cliproxyapi/search-shim-start.ps1
+@@ -11,7 +11,6 @@ function Test-Port([int]$Port) {
+ 
+ function Start-Detached([string]$Exe, [string]$Args, [string]$WorkDir) {
+   $cmd = if ($Args) { "`"$Exe`" $Args" } else { "`"$Exe`"" }
+-  if ($WorkDir) { $cmd = "cmd.exe /c cd /d `"$WorkDir`" && $cmd" }
+   Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+     CommandLine = $cmd
+     CurrentDirectory = $(if ($WorkDir) { $WorkDir } else { $root })
+
+diff --git a/cliproxyapi/search-shim.ts b/cliproxyapi/search-shim.ts
+index ada3244..4b94d08 100644
+--- a/cliproxyapi/search-shim.ts
++++ b/cliproxyapi/search-shim.ts
+@@ -159,7 +159,7 @@ async function loadStartApps() {
+   try {
+     const ps = Bun.spawn(
+       ["powershell", "-NoProfile", "-Command", "Get-StartApps | Select-Object Name,AppID | ConvertTo-Json -Compress"],
+-      { stdout: "pipe", stderr: "pipe" },
++      { stdout: "pipe", stderr: "pipe", windowsHide: true },
+     )
+     const text = await new Response(ps.stdout).text()
+     const parsed = JSON.parse(text)
+@@ -196,10 +196,10 @@ async function buildIndex() {
+ function runHit(hit: Hit) {
+   const target = hit.launch
+   if (target.startsWith("steam://") || target.startsWith("shell:")) {
+-    Bun.spawn(["cmd.exe", "/c", "start", "", target], { stdout: "ignore", stderr: "ignore" })
++    Bun.spawn(["cmd.exe", "/c", "start", "", target], { stdout: "ignore", stderr: "ignore", windowsHide: true })
+     return
+   }
+-  Bun.spawn(["explorer.exe", target], { stdout: "ignore", stderr: "ignore" })
++  Bun.spawn(["explorer.exe", target], { stdout: "ignore", stderr: "ignore", windowsHide: true })
+ }
+ 
+ function upstreamFor(model: string): string {
+

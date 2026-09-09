@@ -1,0 +1,63 @@
+<div id="astra-evidence-chart">
+<style>
+#astra-evidence-chart{color:var(--foreground);position:relative}
+#astra-evidence-chart section{margin-top:24px}
+#astra-evidence-chart .legend{display:flex;flex-wrap:wrap;gap:12px;margin:10px 0}
+#astra-evidence-chart .legend button{background:transparent;color:var(--foreground);border:0;padding:4px 0;cursor:pointer;font:inherit}
+#astra-evidence-chart .legend button[aria-pressed="false"]{opacity:.5}
+#astra-evidence-chart .swatch{display:inline-block;width:16px;height:3px;margin-right:6px;vertical-align:middle}
+#astra-evidence-chart svg{display:block;width:100%;overflow:visible}
+#astra-evidence-chart svg text{fill:var(--foreground);font-size:12px;font-weight:400}
+#astra-evidence-chart .axis path,#astra-evidence-chart .axis line{stroke:var(--border)}
+#astra-evidence-chart .tooltip{position:absolute;pointer-events:none;background:var(--popover);color:var(--popover-foreground);padding:8px;border:1px solid var(--border);z-index:2}
+#astra-evidence-chart .tooltip[hidden]{display:none}
+</style>
+<h2>Measured usage across the Astra sessions</h2>
+<div class="text-small" data-capture></div>
+<section><h3>Account allowance used</h3><div class="text-small">Provider observations · all account activity</div><div data-quota></div></section>
+<section><h3>Cumulative Astra work</h3><div class="text-small">Uncached input + output, including reasoning · Astra children grouped with their parent</div><div class="legend" data-legend></div><div data-work></div></section>
+<section><h3>Where the recorded tokens went</h3><div class="legend" data-mix-legend></div><div data-mix></div></section>
+<div class="text-small" data-coverage></div>
+<div class="tooltip" role="tooltip" hidden></div>
+<script type="application/json" data-measurements><!--HARVEST_DATA--></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script>
+(()=>{
+const root=document.getElementById('astra-evidence-chart');
+const data=JSON.parse(root.querySelector('[data-measurements]').textContent),colors=Array.from({length:6},(_,i)=>`var(--viz-series-${i+1})`);
+const shown=new Set(data.families.map(f=>f.label)),tipbox=root.querySelector('.tooltip');
+const time=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit'}),fmt=n=>new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(n);
+root.querySelector('[data-capture]').textContent=`${time.format(data.from)}–${time.format(data.to)} Eastern · ${data.requests} reconciled requests · captured ${time.format(data.to)}`;
+root.querySelector('[data-coverage]').textContent=`${data.sessions} sessions in ${data.families.length} families · ${data.repeated} repeated readings removed · ${data.rejected} rejected intervals. Token observations; no per-session allowance charges inferred.`;
+function button(parent,key,label,color,set,redraw){const b=document.createElement('button');b.type='button';b.setAttribute('aria-pressed','true');const s=document.createElement('span');s.className='swatch';s.style.background=color;b.append(s,document.createTextNode(label));b.onclick=()=>{set.has(key)?set.delete(key):set.add(key);b.setAttribute('aria-pressed',String(set.has(key)));redraw();};parent.append(b);}
+data.families.forEach((f,i)=>button(root.querySelector('[data-legend]'),f.label,f.label,colors[i%6],shown,draw));
+const types=[['cacheRead','Cached input',colors[0]],['input','Uncached input',colors[1]],['output','Visible output',colors[2]],['reasoning','Reasoning',colors[3]]],mixShown=new Set(types.map(t=>t[0]));
+types.forEach(([key,label,color])=>button(root.querySelector('[data-mix-legend]'),key,label,color,mixShown,drawMix));
+function tip(event,lines){tipbox.replaceChildren(...lines.map(line=>{const d=document.createElement('div');d.textContent=line;return d;}));tipbox.hidden=false;const b=root.getBoundingClientRect();tipbox.style.left=Math.max(0,Math.min(event.clientX-b.left+12,b.width-tipbox.offsetWidth))+'px';tipbox.style.top=Math.max(0,event.clientY-b.top-tipbox.offsetHeight-10)+'px';}
+function frame(container,height,label,left=72){const width=container.getBoundingClientRect().width,m={left,right:16,top:22,bottom:54};d3.select(container).selectAll('svg').remove();const svg=d3.select(container).append('svg').attr('viewBox',`0 0 ${width} ${height}`).attr('role','img').attr('aria-label',label);svg.append('title').text(label);svg.append('rect').attr('data-chart-frame','').attr('x',m.left).attr('y',m.top).attr('width',width-m.left-m.right).attr('height',height-m.top-m.bottom).attr('fill','none').attr('stroke','var(--border)');return{svg,width,height,m};}
+function axisLabels(svg,width,height,m,xtext,ytext){svg.append('text').attr('class','axis-title').attr('data-axis','x').attr('x',(m.left+width-m.right)/2).attr('y',height-8).attr('text-anchor','middle').text(xtext);svg.append('text').attr('class','axis-title').attr('data-axis','y').attr('transform',`translate(15,${(m.top+height-m.bottom)/2}) rotate(-90)`).attr('text-anchor','middle').text(ytext);}
+function checkTicks(svg){const ticks=[...svg.node().querySelectorAll('.x-axis .tick text')];let last=null;for(const t of ticks){const r=t.getBoundingClientRect();if(last&&last.right+4>r.left)t.style.visibility='hidden';else last=r;}}
+function linePlot(container,series,ylabel,quota=false){const{svg,width,height,m}=frame(container,270,ylabel+' over time');const all=series.flatMap(s=>s.values),extent=d3.extent(all,d=>d.y),span=(extent[1]-extent[0])||1;
+const x=d3.scaleTime().domain(d3.extent([new Date(data.from),new Date(data.to)])).range([m.left+4,width-m.right-4]);
+const domain=quota?[Math.max(0,(extent[0]??0)-span*.15),Math.min(100,(extent[1]??1)+span*.15)]:[0,(extent[1]||1)*1.08];
+const y=d3.scaleLinear().domain(domain).range([height-m.bottom-4,m.top+4]);
+svg.append('g').attr('class','axis x-axis').attr('transform',`translate(0,${height-m.bottom})`).call(d3.axisBottom(x).ticks(width<500?3:5).tickFormat(d=>time.format(d)));
+svg.append('g').attr('class','axis').attr('transform',`translate(${m.left},0)`).call(d3.axisLeft(y).ticks(4).tickFormat(quota?d=>`${d}%`:d3.format('~s')));axisLabels(svg,width,height,m,'Time (Eastern)',ylabel);
+const line=d3.line().x(d=>x(d.x)).y(d=>y(d.y)).curve(d3.curveStepAfter);
+series.forEach(s=>{svg.append('path').attr('data-series',s.label).datum(s.values).attr('d',line).attr('fill','none').attr('stroke',s.color).attr('stroke-width',2);const last=s.values.at(-1);if(last)svg.append('circle').attr('cx',x(last.x)).attr('cy',y(last.y)).attr('r',3).attr('fill',s.color);});
+const guide=svg.append('line').attr('data-chart-hover-guide','').attr('y1',m.top).attr('y2',height-m.bottom).attr('stroke','var(--foreground)').attr('opacity',0),markers=svg.append('g');let pinned=false;
+function hover(event){const px=Math.max(m.left+4,Math.min(width-m.right-4,d3.pointer(event,svg.node())[0])),at=+x.invert(px);guide.attr('x1',px).attr('x2',px).attr('opacity',.5);markers.selectAll('*').remove();const rows=[time.format(at)];series.forEach(s=>{let i=d3.bisector(d=>d.x).center(s.values,at);if(s.values[i]?.x>at)i--;const v=s.values[i];if(!v)return;markers.append('circle').attr('data-chart-hover-marker','').attr('cx',px).attr('cy',y(v.y)).attr('r',4).attr('fill',s.color);rows.push(`${s.label}: ${quota?v.y+'%':fmt(v.y)+' tokens'}`);});tip(event,rows);}
+svg.append('rect').attr('data-chart-hit','').attr('data-chart-hover-overlay','cross-series').attr('x',m.left).attr('y',m.top).attr('width',width-m.left-m.right).attr('height',height-m.top-m.bottom).attr('fill','transparent').on('pointermove',e=>{if(!pinned)hover(e);}).on('pointerleave',()=>{if(!pinned){tipbox.hidden=true;guide.attr('opacity',0);markers.selectAll('*').remove();}}).on('click',e=>{pinned=!pinned;hover(e);});checkTicks(svg);
+}
+function drawMix(){const rows=[...data.families.map(f=>({label:f.label,...f.astra})),{label:'Guardians',...data.guardians}],container=root.querySelector('[data-mix]'),{svg,width,height,m}=frame(container,rows.length*50+80,'Recorded token components by session family',88);
+const sums=rows.map(r=>types.reduce((n,[key])=>n+(mixShown.has(key)?r[key]:0),0)),x=d3.scaleLinear().domain([0,(d3.max(sums)||1)*1.04]).range([m.left+2,width-m.right-2]),y=d3.scaleBand().domain(rows.map(r=>r.label)).range([m.top+3,height-m.bottom-3]).padding(.4);
+rows.forEach(row=>{let total=0;types.forEach(([key,,color])=>{if(!mixShown.has(key))return;svg.append('rect').attr('data-component',key).attr('x',x(total)).attr('y',y(row.label)).attr('width',Math.max(0,x(total+row[key])-x(total))).attr('height',y.bandwidth()).attr('fill',color);total+=row[key];});const lines=[row.label,...types.filter(([key])=>mixShown.has(key)).map(([key,label])=>`${label}: ${fmt(row[key])} tokens`)];svg.append('rect').attr('data-chart-hit','').attr('x',m.left).attr('y',y(row.label)-8).attr('width',width-m.left-m.right).attr('height',44).attr('fill','transparent').on('pointermove',e=>tip(e,lines)).on('pointerleave',()=>{tipbox.hidden=true;}).on('click',e=>tip(e,lines));});
+svg.append('g').attr('class','axis x-axis').attr('transform',`translate(0,${height-m.bottom})`).call(d3.axisBottom(x).ticks(width<500?3:5).tickFormat(d3.format('~s')));
+svg.append('g').attr('class','axis').attr('transform',`translate(${m.left},0)`).call(d3.axisLeft(y).tickSize(0));axisLabels(svg,width,height,m,'Tokens','Session family');checkTicks(svg);
+}
+function draw(){linePlot(root.querySelector('[data-quota]'),[{label:'Shared allowance',values:data.quota.map(q=>({x:q.at,y:q.usedPercent})),color:colors[0]}],'Allowance used (%)',true);
+linePlot(root.querySelector('[data-work]'),data.families.flatMap((f,i)=>{if(!shown.has(f.label))return[];let total=0;return[{label:f.label,color:colors[i%6],values:[{x:data.from,y:0},...f.points.map(p=>({x:p.at,y:total+=p.tokens.input+p.tokens.output+p.tokens.reasoning})),{x:data.to,y:total}]}];}),'Uncached + output tokens');drawMix();}
+new ResizeObserver(draw).observe(root);draw();
+})();
+</script>
+</div>

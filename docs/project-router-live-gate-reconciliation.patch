@@ -1,0 +1,100 @@
+diff --git a/test/harnesses.test.ts b/test/harnesses.test.ts
+index 255da0a..68d545b 100644
+--- a/test/harnesses.test.ts
++++ b/test/harnesses.test.ts
+@@ -1,6 +1,7 @@
+ import { expect, test } from "bun:test"
+ import { readFileSync } from "node:fs"
+ import { join } from "node:path"
++import { parse } from "json5"
+ import { HARNESSES, harnessFor, harnessForProvider, harnessList, resolveHarnessName } from "../harnesses"
+ import { streamErrorMessage } from "../plugins-active/harness-run"
+ 
+@@ -29,7 +30,10 @@ test("native subagent is the Quest dispatch path", () => {
+   expect(config).not.toMatch(/"orchestrator"\s*:/)
+   // The MCP server block may stay for the desk flow, but the Quest giver never gets mcp_* tools.
+   expect(config).not.toMatch(/"mcp_agent"\s*:\s*true/)
+-  expect(config).toMatch(/"mcp_agent"\s*:\s*false/)
++  const rules = parse(config).agents["quest-giver"].permissions
++  const effect = (action: string) => rules.findLast((rule: any) => rule.action === "*" || rule.action === action)?.effect
++  for (const action of ["mcp_agent", "subagent", "shell", "patch"]) expect(effect(action)).toBe("deny")
++  for (const action of ["quest", "execute", "usage_status"]) expect(effect(action)).toBe("allow")
+ })
+ 
+ test("codex omits -m for the account default", () => {
+diff --git a/test/orchestration-ledger.test.ts b/test/orchestration-ledger.test.ts
+index 9e6aff0..acf6cd2 100644
+--- a/test/orchestration-ledger.test.ts
++++ b/test/orchestration-ledger.test.ts
+@@ -173,16 +173,16 @@ test("reconciliation preserves terminal truth and classifies duplicate and unbou
+   rmSync(dir, { recursive: true, force: true })
+ })
+ 
+-test("orchestration review flow messages the same integration session", () => {
++test("orchestration review flow belongs to verified worker steps", () => {
+   const giver = parse(readFileSync(join(configRoot, "opencode.jsonc"), "utf8")).agents["quest-giver"].system as string
+   const injection = readFileSync(join(configRoot, "harnesses", "server.ts"), "utf8")
+-  const skill = readFileSync(join(configRoot, "skills", "review", "SKILL.md"), "utf8")
+-  const combined = `${giver}\n${injection}\n${skill}`
++  const combined = `${giver}\n${injection}`
+   expect(giver).toMatch(/quest run/)
+-  // The giver has no shell: review is a worker step that loads skills/review.
++  // Review is assigned to workers; the retired review skill is not a dependency.
+   expect(giver).toMatch(/do not implement or review/i)
+-  expect(combined).toContain("skills/review")
+-  expect(combined).toContain("owns the final integrated diff invokes this skill")
++  expect(giver).toContain("verification sized to the risk")
++  expect(giver).toContain("Read results and receipts from the Quest")
++  expect(giver).toContain("Never invent results or mark unfinished steps done")
+   expect(combined).not.toContain("then ALWAYS spawn the reviewer subagent")
+   expect(combined).not.toContain("spawn the reviewer per the orchestration rules")
+   expect(combined).not.toContain("spawn ONE integration subagent")
+diff --git a/test/plugin-boundaries.test.ts b/test/plugin-boundaries.test.ts
+index 5ca8852..b91e735 100644
+--- a/test/plugin-boundaries.test.ts
++++ b/test/plugin-boundaries.test.ts
+@@ -113,7 +113,7 @@ test("quests is the only plugin rendering the Quest count", () => {
+ })
+ 
+ test("the repo-local boundary rule lives in the OpenCode skill, not the global prompt", () => {
+-  const skill = readFileSync(join(root, "skills", "opencode", "SKILL.md"), "utf8")
++  const skill = readFileSync(join(root, ".agents", "skills", "opencode", "SKILL.md"), "utf8")
+   expect(skill).toMatch(/one plugin/i)
+   expect(skill).toMatch(/directory names its owner|cross-plugin imports/i)
+   expect(skill).toMatch(/vendored\/published|published package/i)
+diff --git a/test/quota-cap-failover.test.ts b/test/quota-cap-failover.test.ts
+index d8a7993..b6beea5 100644
+--- a/test/quota-cap-failover.test.ts
++++ b/test/quota-cap-failover.test.ts
+@@ -302,7 +302,8 @@ test("jsonc has no leftover model-* fake agents", () => {
+   expect(config.agents["quest-giver"]).toBeDefined()
+   expect(config.agents.orchestrator).toBeUndefined()
+   expect(config.agents.build).toMatchObject({ mode: "subagent", hidden: true })
+-  expect(config.agents.build.permissions).toContainEqual({ action: "task", resource: "*", effect: "deny" })
++  expect(config.agents.build.permissions).toContainEqual({ action: "subagent", resource: "*", effect: "deny" })
++  for (const action of ["edit", "write", "patch", "shell"]) expect(config.agents.build.permissions).toContainEqual({ action, resource: "*", effect: "allow" })
+   for (const id of ["general", "explore", "plan"]) expect(config.agents[id]).toMatchObject({ mode: "subagent", hidden: true })
+   expect(ROUTER_SRC).not.toMatch(/systemPart\(routingCard/)
+   expect(ROUTER_SRC).not.toMatch(/systemPart\(FANOUT_RULES/)
+@@ -338,7 +339,7 @@ test("mergeFavs keeps jsonc Go models when model.json is Muse-only", () => {
+ 
+ test("quest giver dispatches implementers", () => {
+   const root = join(dirname(fileURLToPath(import.meta.url)), "..")
+-  const giver = parse(readFileSync(join(root, "opencode.jsonc"), "utf8")).agents["quest-giver"].system as string
++  const giver = parseJson5(readFileSync(join(root, "opencode.jsonc"), "utf8")).agents["quest-giver"].system as string
+   expect(existsSync(join(root, "agent", "orchestrator.md"))).toBe(false)
+   expect(existsSync(join(root, "agent", "build.md"))).toBe(false)
+   expect(giver).toMatch(/quest run/)
+diff --git a/test/shared-tree.test.ts b/test/shared-tree.test.ts
+index 19b1e3b..a2cdba5 100644
+--- a/test/shared-tree.test.ts
++++ b/test/shared-tree.test.ts
+@@ -40,7 +40,7 @@ test("a different path is isolated and must be declared deliberately", () => {
+ 
+ test("the repo-local shared-tree rule lives in the OpenCode skill", () => {
+   const agents = readFileSync(join(root, "AGENTS.md"), "utf8")
+-  const skill = readFileSync(join(root, "skills", "opencode", "SKILL.md"), "utf8")
++  const skill = readFileSync(join(root, ".agents", "skills", "opencode", "SKILL.md"), "utf8")
+   expect(skill).toMatch(/owned worktrees/i)
+   expect(skill).toMatch(/verifies the host session directory/i)
+   expect(agents).not.toMatch(/shared tree/i)

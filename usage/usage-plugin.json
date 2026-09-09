@@ -1,0 +1,17 @@
+{
+  "name": "opencode-usage-plugin",
+  "version": "1.0.0",
+  "description": "Subscription usage HUD and quota-aware routing for OpenCode Go, Grok SuperGrok, OpenAI, and Cursor.",
+  "author": "Jk101",
+  "license": "MIT",
+  "keywords": ["opencode", "plugin", "usage", "quota", "grok", "openai", "cursor", "opencode-go"],
+  "repository": "https://github.com/Noisemaker111/opencode-usage-plugin",
+  "homepage": "https://github.com/Noisemaker111/opencode-usage-plugin#readme",
+  "entrypoints": {
+    "server": "server.ts",
+    "tui": "tui-active/usage.tsx",
+    "formatter": "tui-usage-format.ts",
+    "collector": "usage-collector.ts"
+  },
+  "config": "usage-plans.json"
+}

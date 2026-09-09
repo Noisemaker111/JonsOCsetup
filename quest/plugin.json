@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "name": "opencode-quests",
+  "description": "Durable Quests, native worker dispatch, completion delivery and board",
+  "server": "quest/server.ts",
+  "tui": "quest/tui-active/quests.tsx",
+  "assets": [
+    "quest/quest-cli.ts",
+    "quest/quest.schema.json"
+  ]
+}

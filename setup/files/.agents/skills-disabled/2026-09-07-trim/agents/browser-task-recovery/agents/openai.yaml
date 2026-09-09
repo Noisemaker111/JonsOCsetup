@@ -1,0 +1,5 @@
+interface:
+  display_name: "Browser Task Recovery"
+  short_description: "Recover repeated browser and target-selection failures"
+policy:
+  allow_implicit_invocation: true

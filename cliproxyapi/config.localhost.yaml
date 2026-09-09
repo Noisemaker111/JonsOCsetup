@@ -1,0 +1,18 @@
+# Local CLIProxyAPI for OpenCode. api-keys is the localhost gate, not a vendor secret.
+host: "127.0.0.1"
+port: 8317
+auth-dir: "~/.cli-proxy-api"
+api-keys:
+  - "local"
+debug: false
+logging-to-file: true
+plugins:
+  enabled: false
+remote-management:
+  allow-remote: false
+  secret-key: ""
+
+# Never consume credit balances or use a preview model as a quota fallback.
+quota-exceeded:
+  antigravity-credits: false
+  switch-preview-model: false

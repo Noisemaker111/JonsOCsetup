@@ -1,0 +1,774 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "quest-giver",
+  "plugin": ["./plugin-bootstrap"],
+  "mcp": {
+    "mcp": {
+      "type": "local",
+      // Absolute path: the host spawns this relative to the instance cwd, so
+      // a relative "harnesses/..." only resolves when the instance happens to
+      // start in the config dir — every fresh instance elsewhere failed with
+      // "MCP error -32000: Connection closed" (1 MCP failed).
+      "command": ["C:/Program Files/nodejs/node.exe", "C:/Users/Jk101/.config/opencode/harnesses/opencode-mcp-stdio.mjs"],
+      "enabled": true,
+      // Desk wait/steer stays in the tool until COMPLETE; 10s was a one-shot.
+      "timeout": 86400000
+    }
+  },
+  "experimental": {
+    "subagent_depth": 1
+  },
+  "tools": {
+    "task": true,
+    "subagent": true,
+    "claude_code_task": false,
+    "claude_code": false
+  },
+  "providers": {
+    "opencode": { "models": { "muse-spark-1.3-contributor-free": { "settings": { "reasoningEffort": "medium" } } } },
+    "openai": {
+      "name": "OpenAI",
+      "models": {
+        "gpt-5.6-sol": {
+          "name": "GPT-5.6 Sol"
+        },
+        "gpt-5.6-luna-fast": {
+          "name": "GPT-5.6 Luna Fast",
+          "settings": { "reasoningEffort": "max" }
+        },
+         "gpt-5.6-luna": {
+          "name": "GPT-5.6 Luna",
+          "variants": [
+            { "id": "max", "settings": { "reasoningEffort": "max" } }
+          ]
+        },
+        "gpt-6-astra": {
+          "name": "GPT-6 Astra",
+          "settings": { "reasoningEffort": "high" },
+          "variants": [
+            { "id": "medium", "settings": { "reasoningEffort": "medium" } },
+            { "id": "high", "settings": { "reasoningEffort": "high" } }
+          ]
+        }
+      }
+    },
+    "cliproxyapi": {
+      "name": "CLIProxyAPI",
+      "package": "@opencode-ai/ai/providers/openai-compatible",
+      "env": [],
+      "settings": {
+        "baseURL": "http://127.0.0.1:8317/v1",
+        "apiKey": "local"
+      },
+      "models": {
+        "grok-4.6": { "name": "Grok 4.6 (CLIProxy)", "limit": { "context": 500000, "output": 500000 } },
+        "grok-4.5": { "name": "Grok 4.5 (CLIProxy)", "limit": { "context": 500000, "output": 500000 } },
+        "gpt-5.6-sol": {
+          "name": "GPT-5.6 Sol (CLIProxy)",
+          "limit": { "context": 400000, "output": 128000 },
+          "settings": { "reasoningEffort": "xhigh" },
+          "variants": [
+            { "id": "xhigh", "settings": { "reasoningEffort": "xhigh" } },
+            { "id": "max", "settings": { "reasoningEffort": "max" } }
+          ]
+        },
+        "gpt-5.6-luna": { "name": "GPT-5.6 Luna (CLIProxy)", "limit": { "context": 400000, "output": 128000 }, "variants": [{ "id": "medium", "settings": { "reasoningEffort": "medium" } }] },
+        "gpt-5.6-terra": { "name": "GPT-5.6 Terra (CLIProxy)", "limit": { "context": 400000, "output": 128000 } },
+        "gpt-6-astra": { "name": "GPT-6 Astra (CLIProxy)", "settings": { "reasoningEffort": "high" }, "limit": { "context": 400000, "output": 128000 } },
+        "claude-fable-5-1": {
+          "name": "Claude Fable 5.1 (CLIProxy)",
+          "limit": { "context": 1000000, "output": 128000 },
+          "settings": { "reasoningEffort": "high" },
+          "variants": [
+            { "id": "high", "settings": { "reasoningEffort": "high" } },
+            { "id": "xhigh", "settings": { "reasoningEffort": "xhigh" } },
+            { "id": "max", "settings": { "reasoningEffort": "max" } }
+          ]
+        },
+        "claude-sonnet-5": { "name": "Claude Sonnet 5 (CLIProxy)", "limit": { "context": 200000, "output": 64000 } },
+        "claude-haiku-4-5-20251001": { "name": "Claude Haiku 4.5 (CLIProxy)", "limit": { "context": 200000, "output": 64000 } },
+        "claude-opus-5": { "name": "Claude Opus 5 (CLIProxy)", "limit": { "context": 1000000, "output": 128000 } }
+      }
+    },
+    "grok-sub": {
+      "name": "Grok Build (SuperGrok)",
+      "package": "@opencode-ai/ai/providers/openai-compatible",
+      "env": [],
+      "settings": {
+        "baseURL": "http://127.0.0.1:8317/v1",
+        "apiKey": "local"
+      },
+      "models": {
+        // Explicit limits are required: grok-sub is a bare openai-compatible
+        // provider with no models.dev catalog entry, so an omitted limit makes
+        // OpenCode fall back to a generic 200k default and compact a 500k
+        // model less than halfway through its window.
+        "grok-4.6": { "name": "Grok 4.6 (SuperGrok)", "limit": { "context": 500000, "output": 500000 } },
+        "grok-4.5": { "name": "Grok 4.5 (SuperGrok)", "limit": { "context": 500000, "output": 500000 } }
+      }
+    },
+    // Claude Code, Grok Build and Codex ride the in-process harness bridge on 3012
+    // (plugins-active/claude-code-session.ts): the vendor CLI runs on its own
+    // subscription, no proxy login needed. Only grok-4.6 rides CLIProxyAPI.
+    "claude-code": {
+      "name": "Claude Code",
+      "package": "@opencode-ai/ai/providers/openai-compatible",
+      "env": [],
+      "settings": {
+        "baseURL": "http://127.0.0.1:3012/v1",
+        "apiKey": "local"
+      },
+      "models": {
+        // Same reason as grok-sub: unknown provider id, so the limit must be
+        // stated or OpenCode invents one.
+        "claude": { "name": "Claude Code", "limit": { "context": 200000, "output": 64000 } },
+        "opus": { "name": "Claude Code Opus", "limit": { "context": 200000, "output": 64000 } },
+        "sonnet": { "name": "Claude Code Sonnet", "limit": { "context": 200000, "output": 64000 } },
+        "haiku": { "name": "Claude Code Haiku", "limit": { "context": 200000, "output": 64000 } }
+      }
+    },
+    "grok-build": {
+      "name": "Grok Build (Harness)",
+      "package": "@opencode-ai/ai/providers/openai-compatible",
+      "env": [],
+      "settings": {
+        "baseURL": "http://127.0.0.1:3012/v1",
+        "apiKey": "local"
+      },
+      "models": {
+        "grok-4.6": { "name": "Grok Build 4.6", "limit": { "context": 500000, "output": 500000 } },
+        "grok-4.5": { "name": "Grok Build 4.5", "limit": { "context": 500000, "output": 500000 } }
+      }
+    },
+    "codex": {
+      "name": "Codex (Harness)",
+      "package": "@opencode-ai/ai/providers/openai-compatible",
+      "env": [],
+      "settings": {
+        "baseURL": "http://127.0.0.1:3012/v1",
+        "apiKey": "local"
+      },
+      "models": {
+        "default": { "name": "Codex (account default)", "limit": { "context": 400000, "output": 128000 } },
+        "gpt-5.6-sol": { "name": "Codex Sol", "limit": { "context": 400000, "output": 128000 } }
+      }
+    },
+    "cursor": {
+      "name": "Cursor (via local proxy)",
+      "package": "@opencode-ai/ai/providers/openai-compatible",
+      "env": ["CURSOR_API_KEY"],
+      "settings": {
+        "baseURL": "http://localhost:3000/v1",
+        "apiKey": "cursor-local"
+      },
+      "models": {
+        "composer-2": { "name": "Composer 2" },
+        "composer-2.5": { "name": "Composer 2.5" },
+        "composer-2.5-fast": { "name": "Composer 2.5 (Fast)" },
+        "claude-4-sonnet": { "name": "Claude 4 Sonnet" },
+        "claude-sonnet-5": { "name": "Claude Sonnet 5" },
+        "claude-4.6-sonnet": { "name": "Claude 4.6 Sonnet" },
+        "claude-sonnet-4.6": { "name": "Claude Sonnet 4.6" },
+        "claude-3.5-sonnet": { "name": "Claude 3.5 Sonnet" },
+        "claude-3.7-sonnet": { "name": "Claude 3.7 Sonnet" },
+        "claude-haiku": { "name": "Claude Haiku" },
+        "claude-opus-5": { "name": "Claude Opus 5" },
+        "claude-opus-4.8": { "name": "Claude Opus 4.8" },
+        "claude-opus-4.7": { "name": "Claude Opus 4.7" },
+        "claude-fable-5": { "name": "Claude Fable 5" },
+        "claude-opus-4": { "name": "Claude Opus 4" },
+        "gpt-4o": { "name": "GPT-4o" },
+        "gpt-4.1": { "name": "GPT-4.1" },
+        "gpt-5": { "name": "GPT-5" },
+        "gpt-5.1": { "name": "GPT-5.1" },
+        "gpt-5.2": { "name": "GPT-5.2" },
+        "gpt-5.3-codex": { "name": "GPT-5.3 Codex" },
+        "gpt-5.5": { "name": "GPT-5.5" },
+        "gpt-5.5-pro": { "name": "GPT-5.5 Pro" },
+         "gpt-5.6-luna": { "name": "GPT-5.6 Luna" },
+        "gpt-5.6-sol": { "name": "GPT-5.6 Sol" },
+        "gpt-5.6-terra": { "name": "GPT-5.6 Terra" },
+        "o3": { "name": "o3" },
+        "o4-mini": { "name": "o4 Mini" },
+        "gemini-2.5-pro": { "name": "Gemini 2.5 Pro" },
+        "gemini-2.5-flash": { "name": "Gemini 2.5 Flash" },
+        "gemini-3.1-pro": { "name": "Gemini 3.1 Pro" },
+        "gemini-3.1-flash": { "name": "Gemini 3.1 Flash" },
+        "gemini-3.5-flash": { "name": "Gemini 3.5 Flash" },
+        "gemini-3.7-flash": { "name": "Gemini 3.7 Flash" },
+        "gemini-3-pro": { "name": "Gemini 3 Pro" },
+        "grok-4.6": { "name": "Grok 4.6" },
+        "grok-4.5": { "name": "Grok 4.5" },
+        "grok-4.3": { "name": "Grok 4.3" },
+        "grok-build-0.1": { "name": "Grok Build 0.1" },
+        "grok-4": { "name": "Grok 4" },
+        "grok-4-fast": { "name": "Grok 4 Fast" },
+        "cursor-small": { "name": "Cursor Small" },
+        "cursor-fast": { "name": "Cursor Fast" },
+        "cursor-composer": { "name": "Cursor Composer" },
+        "cursor-claude": { "name": "Cursor Claude" }
+      }
+    },
+    "openrouter": {
+      "name": "OpenRouter (metered)",
+      "env": ["OPENROUTER_API_KEY"]
+    }
+  },
+  "agents": {
+    "proxy-claude": {
+      "description": "Native subscription broker worker pinned to cliproxyapi/claude-opus-5.",
+      "mode": "subagent",
+      "hidden": true,
+      "model": "cliproxyapi/claude-opus-5",
+      "tools": {"task":false,"subagent":false},
+      "permissions": [
+        {"action":"task","resource":"*","effect":"deny"},
+        {"action":"subagent","resource":"*","effect":"deny"},
+        {"action":"edit","resource":"*","effect":"allow"},
+        {"action":"write","resource":"*","effect":"allow"},
+        {"action":"patch","resource":"*","effect":"allow"},
+        {"action":"shell","resource":"*","effect":"allow"}
+      ]
+    },
+    "proxy-sonnet": {
+      "description": "Native subscription broker worker pinned to cliproxyapi/claude-sonnet-5.",
+      "mode": "subagent",
+      "hidden": true,
+      "model": "cliproxyapi/claude-sonnet-5",
+      "tools": {"task":false,"subagent":false},
+      "permissions": [
+        {"action":"task","resource":"*","effect":"deny"},
+        {"action":"subagent","resource":"*","effect":"deny"},
+        {"action":"edit","resource":"*","effect":"allow"},
+        {"action":"write","resource":"*","effect":"allow"},
+        {"action":"patch","resource":"*","effect":"allow"},
+        {"action":"shell","resource":"*","effect":"allow"}
+      ]
+    },
+    "proxy-haiku": {
+      "description": "Native subscription broker worker pinned to cliproxyapi/claude-haiku-4-5-20251001.",
+      "mode": "subagent",
+      "hidden": true,
+      "model": "cliproxyapi/claude-haiku-4-5-20251001",
+      "tools": {"task":false,"subagent":false},
+      "permissions": [
+        {"action":"task","resource":"*","effect":"deny"},
+        {"action":"subagent","resource":"*","effect":"deny"},
+        {"action":"edit","resource":"*","effect":"allow"},
+        {"action":"write","resource":"*","effect":"allow"},
+        {"action":"patch","resource":"*","effect":"allow"},
+        {"action":"shell","resource":"*","effect":"allow"}
+      ]
+    },
+    "proxy-sol": {
+      "description": "Native subscription broker worker pinned to cliproxyapi/gpt-5.6-sol.",
+      "mode": "subagent",
+      "hidden": true,
+      "model": "cliproxyapi/gpt-5.6-sol",
+      "tools": {"task":false,"subagent":false},
+      "permissions": [
+        {"action":"task","resource":"*","effect":"deny"},
+        {"action":"subagent","resource":"*","effect":"deny"},
+        {"action":"edit","resource":"*","effect":"allow"},
+        {"action":"write","resource":"*","effect":"allow"},
+        {"action":"patch","resource":"*","effect":"allow"},
+        {"action":"shell","resource":"*","effect":"allow"}
+      ]
+    },
+    "proxy-luna": {
+      "description": "Native subscription broker worker pinned to cliproxyapi/gpt-5.6-luna.",
+      "mode": "subagent",
+      "hidden": true,
+      "model": "cliproxyapi/gpt-5.6-luna",
+      "tools": {"task":false,"subagent":false},
+      "permissions": [
+        {"action":"task","resource":"*","effect":"deny"},
+        {"action":"subagent","resource":"*","effect":"deny"},
+        {"action":"edit","resource":"*","effect":"allow"},
+        {"action":"write","resource":"*","effect":"allow"},
+        {"action":"patch","resource":"*","effect":"allow"},
+        {"action":"shell","resource":"*","effect":"allow"}
+      ]
+    },
+    "proxy-terra": {
+      "description": "Native subscription broker worker pinned to cliproxyapi/gpt-5.6-terra.",
+      "mode": "subagent",
+      "hidden": true,
+      "model": "cliproxyapi/gpt-5.6-terra",
+      "tools": {"task":false,"subagent":false},
+      "permissions": [
+        {"action":"task","resource":"*","effect":"deny"},
+        {"action":"subagent","resource":"*","effect":"deny"},
+        {"action":"edit","resource":"*","effect":"allow"},
+        {"action":"write","resource":"*","effect":"allow"},
+        {"action":"patch","resource":"*","effect":"allow"},
+        {"action":"shell","resource":"*","effect":"allow"}
+      ]
+    },
+    "proxy-fable": {
+      "description": "Native subscription broker worker pinned to cliproxyapi/claude-fable-5-1.",
+      "mode": "subagent",
+      "hidden": true,
+      "model": "cliproxyapi/claude-fable-5-1",
+      "tools": {"task":false,"subagent":false},
+      "permissions": [
+        {"action":"task","resource":"*","effect":"deny"},
+        {"action":"subagent","resource":"*","effect":"deny"},
+        {"action":"edit","resource":"*","effect":"allow"},
+        {"action":"write","resource":"*","effect":"allow"},
+        {"action":"patch","resource":"*","effect":"allow"},
+        {"action":"shell","resource":"*","effect":"allow"}
+      ]
+    },
+    "quest-giver": {
+      "description": "The one project controller Jk talks to. Infers durable Quests and delegates them end to end.",
+      "mode": "primary",
+      "model": "opencode/muse-spark-1.3-contributor-free",
+      "color": "#e8c547",
+      "tools": {
+        "task": true,
+        "subagent": true,
+        "mcp_agent": false,
+        "mcp_agent_status": false,
+        "mcp_agent_output": false,
+        "mcp_pick_model": false
+      },
+      "permissions": [
+        { "action": "project_discover", "resource": "*", "effect": "allow" },
+        { "action": "project_resolve", "resource": "*", "effect": "allow" },
+        { "action": "project_select", "resource": "*", "effect": "allow" },
+        { "action": "project_route", "resource": "*", "effect": "allow" },
+        { "action": "project_result", "resource": "*", "effect": "allow" },
+        { "action": "project_clone", "resource": "*", "effect": "allow" },
+        { "action": "project_route_status", "resource": "*", "effect": "allow" },
+        { "action": "project_verify", "resource": "*", "effect": "allow" },
+        { "action": "project_goal", "resource": "*", "effect": "allow" },
+        {
+          "action": "task",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "write",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "patch",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "deny"
+        }
+      ]
+    },
+    "build": {
+      "description": "Hidden implementation capability used only by Quest-dispatched worker sessions.",
+      "mode": "subagent",
+      "hidden": true,
+      "model": "opencode/muse-spark-1.3-contributor-free",
+      "tools": {
+        "task": false,
+        "subagent": false
+      },
+      "permissions": [
+        {
+          "action": "task",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "write",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "patch",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "allow"
+        }
+      ]
+    },
+    "claude": {
+      "description": "Claude Code Opus worker (harness bridge). Picked by model hint claude/opus.",
+      "mode": "subagent",
+      "hidden": true,
+      "model": "claude-code/opus",
+      "tools": {
+        "task": false,
+        "subagent": false
+      },
+      "permissions": [
+        {
+          "action": "task",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "write",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "patch",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "allow"
+        }
+      ]
+    },
+    "claude-sonnet": {
+      "description": "Claude Code Sonnet worker (harness bridge). Picked by model hint sonnet.",
+      "mode": "subagent",
+      "hidden": true,
+      "model": "claude-code/sonnet",
+      "tools": {
+        "task": false,
+        "subagent": false
+      },
+      "permissions": [
+        {
+          "action": "task",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "write",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "patch",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "allow"
+        }
+      ]
+    },
+    "claude-haiku": {
+      "description": "Claude Code Haiku worker (harness bridge). Picked by model hint haiku.",
+      "mode": "subagent",
+      "hidden": true,
+      "model": "claude-code/haiku",
+      "tools": {
+        "task": false,
+        "subagent": false
+      },
+      "permissions": [
+        {
+          "action": "task",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "write",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "patch",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "allow"
+        }
+      ]
+    },
+    "grok": {
+      "description": "Grok 4.6 worker via CLIProxyAPI. Picked by model hint grok.",
+      "mode": "subagent",
+      "hidden": true,
+      "model": "cliproxyapi/grok-4.6",
+      "tools": {
+        "task": false,
+        "subagent": false
+      },
+      "permissions": [
+        {
+          "action": "task",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "write",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "patch",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "allow"
+        }
+      ]
+    },
+    "astra": {
+      "description": "GPT-6 Astra worker via OpenAI. Picked by model hint openai/gpt-6-astra; Quest policy controls the authorized reasoning variant.",
+      "mode": "subagent",
+      "hidden": true,
+      "model": "openai/gpt-6-astra",
+      "tools": {
+        "task": false,
+        "subagent": false
+      },
+      "permissions": [
+        {
+          "action": "task",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "write",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "patch",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "allow"
+        }
+      ]
+    },
+    "astra-proxy": {
+      "description": "GPT-6 Astra worker via subscription broker. Picked by model hint cliproxyapi/gpt-6-astra.",
+      "mode": "subagent",
+      "hidden": true,
+      "model": "cliproxyapi/gpt-6-astra",
+      "tools": {
+        "task": false,
+        "subagent": false
+      },
+      "permissions": [
+        {
+          "action": "task",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "write",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "patch",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "deny"
+        }
+      ]
+    },
+    "luna": {
+      "description": "GPT-5.6 Luna Fast worker via OpenAI. Picked by explicit model hint.",
+      "mode": "subagent",
+      "hidden": true,
+      "model": "openai/gpt-5.6-luna-fast",
+      "tools": {
+        "task": false,
+        "subagent": false
+      },
+      "permissions": [
+        {
+          "action": "task",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "write",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "patch",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "allow"
+        }
+      ]
+    },
+    "codex": {
+      "description": "Codex worker (harness bridge). Picked by model hint codex.",
+      "mode": "subagent",
+      "hidden": true,
+      "model": "codex/default",
+      "tools": {
+        "task": false,
+        "subagent": false
+      },
+      "permissions": [
+        {
+          "action": "task",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "write",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "patch",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "external_directory",
+          "resource": "*",
+          "effect": "allow"
+        }
+      ]
+    },
+    "general": {
+      "mode": "subagent",
+      "hidden": true
+    },
+    "explore": {
+      "mode": "subagent",
+      "hidden": true
+    },
+    "plan": {
+      "mode": "subagent",
+      "hidden": true
+    }
+  }
+}

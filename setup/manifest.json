@@ -1,0 +1,1016 @@
+{
+  "schema": 1,
+  "name": "JonsOCsetup",
+  "entries": [
+    {
+      "source": "setup/files/Projects/opencode-hub/AGENTS.md",
+      "target": "Projects/opencode-hub/AGENTS.md",
+      "sha256": "b4cc49f46622cd2b8f210ca1c07353d1253e67b29965cc813957d826b986c47f",
+      "importedFrom": "Projects/opencode-hub/AGENTS.md"
+    },
+    {
+      "source": "setup/files/Projects/opencode-hub/CLAUDE.md",
+      "target": "Projects/opencode-hub/CLAUDE.md",
+      "sha256": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49",
+      "importedFrom": "Projects/opencode-hub/CLAUDE.md"
+    },
+    {
+      "source": "setup/files/.agents/matt-pocock.md",
+      "target": ".agents/matt-pocock.md",
+      "sha256": "8ccacd0bbeea8c578ab0f82e255a33a5ef56c43ab102c6d4ac7ea324e6782ad0",
+      "importedFrom": ".agents/matt-pocock.md"
+    },
+    {
+      "source": "setup/files/.agents/.skill-lock.json",
+      "target": ".agents/.skill-lock.json",
+      "sha256": "29e6317f0bb4e7cf61764f76e4b0193f6c97170a5adcd592fb7a29e66f9c8ba4",
+      "importedFrom": ".agents/.skill-lock.json"
+    },
+    {
+      "source": "setup/files/.agents/plugins/marketplace.json",
+      "target": ".agents/plugins/marketplace.json",
+      "sha256": "99b4fd68fbf4fa1d0d95a626f0aca0af1033b4381e9c233a60963c91b706e945",
+      "importedFrom": ".agents/plugins/marketplace.json"
+    },
+    {
+      "source": "setup/files/.codex/AGENTS.md",
+      "target": ".codex/AGENTS.md",
+      "sha256": "dda15e780433417ab96a6dd1423cee38162dc0db1abd4f18e5e77c1b511eaf77",
+      "importedFrom": ".codex/AGENTS.md"
+    },
+    {
+      "source": "setup/files/.agents/scripts/apply-matt-pocock-preferences.ps1",
+      "target": ".agents/scripts/apply-matt-pocock-preferences.ps1",
+      "sha256": "c6b846ab6bd1fde9f986b266b51cfd9b3c1b9fce9bda5a0d4dabaa08bdc7c229",
+      "importedFrom": ".agents/scripts/apply-matt-pocock-preferences.ps1"
+    },
+    {
+      "source": "setup/files/.agents/scripts/check-personal-harness.mjs",
+      "target": ".agents/scripts/check-personal-harness.mjs",
+      "sha256": "fa5138a543d67f9ea25bb8e16df1efa4b87182032a695e17085360a57e79ce87",
+      "importedFrom": ".agents/scripts/check-personal-harness.mjs"
+    },
+    {
+      "source": "setup/files/.agents/docs/matt-pocock-skills.md",
+      "target": ".agents/docs/matt-pocock-skills.md",
+      "sha256": "43e337dde8c9046f031d55660513bff029897cbb92430ac15fa4895fb7f1c791",
+      "importedFrom": ".agents/docs/matt-pocock-skills.md"
+    },
+    {
+      "source": "setup/files/.agents/docs/matt-pocock-source-review.md",
+      "target": ".agents/docs/matt-pocock-source-review.md",
+      "sha256": "06e9ca033a5aa3a8e3f694d09041d61cb2203c5dea122df2d8c94bca7a750a87",
+      "importedFrom": ".agents/docs/matt-pocock-source-review.md"
+    },
+    {
+      "source": "setup/files/.codex/skills/convex-deploy-guard/SKILL.md",
+      "target": ".codex/skills/convex-deploy-guard/SKILL.md",
+      "sha256": "ccc74e8d997b30bbad79d8e052857ffa5ccba5721273bda5d52f6dfa1c097cca",
+      "importedFrom": ".codex/skills/convex-deploy-guard/SKILL.md"
+    },
+    {
+      "source": "skills/github/SKILL.md",
+      "target": ".agents/skills/github/SKILL.md",
+      "sha256": "7bd1c2dffb6ebfc1f7277670f1941f1905444d6d140fd21e1a5cb6321448b8d5",
+      "importedFrom": ".agents/skills/github/SKILL.md"
+    },
+    {
+      "source": "skills/help-i-cant-work-right/handoff.md",
+      "target": ".agents/skills/help-i-cant-work-right/handoff.md",
+      "sha256": "15a12f23a6ce4651ff87a7f7afaed83009255a31098779419ff6c63ad4502794",
+      "importedFrom": ".agents/skills/help-i-cant-work-right/handoff.md"
+    },
+    {
+      "source": "skills/help-i-cant-work-right/SKILL.md",
+      "target": ".agents/skills/help-i-cant-work-right/SKILL.md",
+      "sha256": "167cebdfbb14bb64adfd9a07e20b81b8d8ea2d3b2765ddaed1ad0f1cc4b1e5bf",
+      "importedFrom": ".agents/skills/help-i-cant-work-right/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills/opencode-dev-workflow/SKILL.md",
+      "target": ".agents/skills/opencode-dev-workflow/SKILL.md",
+      "sha256": "6c7c10d8323dedddc27008c0926ca80d30941239d409375201407c6b2e0eba96",
+      "importedFrom": ".agents/skills/opencode-dev-workflow/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills/README.md",
+      "target": ".agents/skills/README.md",
+      "sha256": "32c6596f492d16587692f7b5792e36c53dab7cb681ace03947ee36463100b206",
+      "importedFrom": ".agents/skills/README.md"
+    },
+    {
+      "source": "setup/files/.agents/skills/web-artifacts-builder/LICENSE.txt",
+      "target": ".agents/skills/web-artifacts-builder/LICENSE.txt",
+      "sha256": "bc6b3af2f331cbc7fb0da1344efb2cbe5877a31498b4d70dbc7000f3405a1362",
+      "importedFrom": ".agents/skills/web-artifacts-builder/LICENSE.txt"
+    },
+    {
+      "source": "setup/files/.agents/skills/web-artifacts-builder/scripts/bundle-artifact.sh",
+      "target": ".agents/skills/web-artifacts-builder/scripts/bundle-artifact.sh",
+      "sha256": "abf0e480bf6585b56fab8526a407dfb7dc740812bddd70c636e1e8f3df5f9618",
+      "importedFrom": ".agents/skills/web-artifacts-builder/scripts/bundle-artifact.sh"
+    },
+    {
+      "source": "setup/files/.agents/skills/web-artifacts-builder/scripts/init-artifact.sh",
+      "target": ".agents/skills/web-artifacts-builder/scripts/init-artifact.sh",
+      "sha256": "355e5dd4382aaaee91f01f1627eaeab30b2676ffa8d9b3ec328a1ae450ebccaa",
+      "importedFrom": ".agents/skills/web-artifacts-builder/scripts/init-artifact.sh"
+    },
+    {
+      "source": "setup/files/.agents/skills/web-artifacts-builder/scripts/shadcn-components.tar.gz",
+      "target": ".agents/skills/web-artifacts-builder/scripts/shadcn-components.tar.gz",
+      "sha256": "1296f069e825de7933de7e8ac63672495cacce3f88f2dc45554dbcddbcbca60f",
+      "importedFrom": ".agents/skills/web-artifacts-builder/scripts/shadcn-components.tar.gz"
+    },
+    {
+      "source": "setup/files/.agents/skills/web-artifacts-builder/SKILL.md",
+      "target": ".agents/skills/web-artifacts-builder/SKILL.md",
+      "sha256": "81c5002c6643b0de7b8710b00e7a9038daa6fb9b68d59870ee6adb12da8d10f8",
+      "importedFrom": ".agents/skills/web-artifacts-builder/SKILL.md"
+    },
+    {
+      "source": "skills/windows-shell/SKILL.md",
+      "target": ".agents/skills/windows-shell/SKILL.md",
+      "sha256": "b6dd2d17d56f0ec952e29e856bec4a06db65d4456451d511363e04b926b2dac2",
+      "importedFrom": ".agents/skills/windows-shell/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/browser-task-recovery/agents/openai.yaml",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/browser-task-recovery/agents/openai.yaml",
+      "sha256": "12297d56a3cebe8f0bb5609c903d6d0dc37553da5a587827c2da579f16a53f0b",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/browser-task-recovery/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/browser-task-recovery/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/browser-task-recovery/SKILL.md",
+      "sha256": "4c2b658dec72b46a57e6bb879751e63dd58a28f1772d08a5275c1952289ea812",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/browser-task-recovery/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/code-review/agents/openai.yaml",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/code-review/agents/openai.yaml",
+      "sha256": "8229ca854e11dc8e6aef2131ee03f31fb1561cf905fab9ccc325180cf3331352",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/code-review/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/code-review/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/code-review/SKILL.md",
+      "sha256": "2876f6e0a08f1809a6da5518f84cb48f2e6e88d1542407dba1f5647d49edd3c0",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/code-review/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/diagnosing-bugs/agents/openai.yaml",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/diagnosing-bugs/agents/openai.yaml",
+      "sha256": "3e430dbe4334a87597488c060cb3dc3786bb00c9182877d6f5ec41f62490e90b",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/diagnosing-bugs/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/diagnosing-bugs/scripts/hitl-loop.template.sh",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/diagnosing-bugs/scripts/hitl-loop.template.sh",
+      "sha256": "35103539fc36873eea36074769ad454f9379d6fc8b2dc0e26ce987fd3bfe5503",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/diagnosing-bugs/scripts/hitl-loop.template.sh"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/diagnosing-bugs/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/diagnosing-bugs/SKILL.md",
+      "sha256": "b8c17dbe2de7d38ade5797db1f36ad9842f363a20ec3e5085ca4847c49d9567f",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/diagnosing-bugs/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/grilling/agents/openai.yaml",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/grilling/agents/openai.yaml",
+      "sha256": "1411d7df7d99b7e621a1ff8283c8133cc2464be63d064e52d8ce169c6800ee9b",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/grilling/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/grilling/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/grilling/SKILL.md",
+      "sha256": "10ff989e7498b23b5acb49d5048f11dcd906757d2f79c5cdf8a00001381296f2",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/grilling/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/handoff/agents/openai.yaml",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/handoff/agents/openai.yaml",
+      "sha256": "f8a96161d2b521ca32d5bbc7bfc299588555094788a7ac2462e17a1493cff7bf",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/handoff/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/handoff/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/handoff/SKILL.md",
+      "sha256": "013a3f285f7f5bd6e70062299920746a3d2861d1f9ed944bb8199bc77f3aaf00",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/handoff/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/implement/agents/openai.yaml",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/implement/agents/openai.yaml",
+      "sha256": "7d531e17370288bdf5eabb7a586d7c2de16c21db12afb91873685b6165c88db6",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/implement/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/implement/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/implement/SKILL.md",
+      "sha256": "5aa3f34d3e188c651292d2d9d39b75dbc4c7f6760659883e24f7db748671516c",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/implement/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/prototype/agents/openai.yaml",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/prototype/agents/openai.yaml",
+      "sha256": "5af65e43ab41a350436697b81e27b7f848d36782043b73c322bb2c9fa9cc55dc",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/prototype/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/prototype/LOGIC.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/prototype/LOGIC.md",
+      "sha256": "f61c7d249e786a79ef289018901c348271e1798dd0b0bc5607b5c6f4d4a01ab9",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/prototype/LOGIC.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/prototype/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/prototype/SKILL.md",
+      "sha256": "3123d865c2e056f7146c0b0d48efe919f0924cd58be727d38730ac3129386aa6",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/prototype/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/prototype/UI.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/prototype/UI.md",
+      "sha256": "723211e878acbc7b6ff09755263f3295cde724ba902ff0064da41eed51d45ad3",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/prototype/UI.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/research/agents/openai.yaml",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/research/agents/openai.yaml",
+      "sha256": "9b4c470d63221c1f68f22df70b83e2f12401b317babe0d1b7b5f24a974474d0d",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/research/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/research/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/research/SKILL.md",
+      "sha256": "6ecf219c9fab56e88506361bdca168a15c966d6c0ac2bb9c5265478cc73b3cc5",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/research/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/resolving-merge-conflicts/agents/openai.yaml",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/resolving-merge-conflicts/agents/openai.yaml",
+      "sha256": "a1f4f96838f2ed6282eb28abbbf99029cb8fadce552baf53da90a025b8bffddf",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/resolving-merge-conflicts/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/resolving-merge-conflicts/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/resolving-merge-conflicts/SKILL.md",
+      "sha256": "9d8114f8ef0b31f535a265fc05c364bd8cf2e2895a830040e06c22acb11f54b0",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/resolving-merge-conflicts/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/tdd/agents/openai.yaml",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/tdd/agents/openai.yaml",
+      "sha256": "ea6f01cf1b8c06a4b0f5b649d74b1b8ce8685e72af1b38d70d877693e092af0b",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/tdd/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/tdd/mocking.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/tdd/mocking.md",
+      "sha256": "3ceb807fdf4a47d6a93d4d9a891e5ba6d362a6247bd08adc451feebfc17361ef",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/tdd/mocking.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/tdd/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/tdd/SKILL.md",
+      "sha256": "2293e39614d382397005e02879b8761e65d03561d48f13368a0bfc2799c66608",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/tdd/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/tdd/tests.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/tdd/tests.md",
+      "sha256": "859f9e592c188fda4fc7277dd180e4ce9c7a2e13f6efe1f6f29eccc9d28c106a",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/tdd/tests.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/to-spec/agents/openai.yaml",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/to-spec/agents/openai.yaml",
+      "sha256": "37828cc6c0f903575798fe17374b0bb6fd28e59bc622d7fb32df76f55946d2b3",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/to-spec/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/to-spec/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/to-spec/SKILL.md",
+      "sha256": "76cb63240ed3d3588d312c22069a4dc785f8ddb77f7c4ed45e276c98a364ca75",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/to-spec/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/to-tickets/agents/openai.yaml",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/to-tickets/agents/openai.yaml",
+      "sha256": "836fa8476e3ab9bc1bcfca13bfbebadf600fba6c6e8b69407a1e8a1f2b9d87b1",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/to-tickets/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/to-tickets/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/to-tickets/SKILL.md",
+      "sha256": "6c71f0bb1bd050a8ce4c2b1ff488df28e5ad6cae1571bdbc35855bac2cdeddee",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/to-tickets/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/writing-for-agents/agents/openai.yaml",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/writing-for-agents/agents/openai.yaml",
+      "sha256": "eacb24b2a618cfb81dacb0416f4fdd75ddf3a8060f8ddb99aae1b1e301907e4b",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/writing-for-agents/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/writing-for-agents/SKILL-MECHANICS.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/writing-for-agents/SKILL-MECHANICS.md",
+      "sha256": "c768e6307c7c10728c401c213f2c4ba71c542127eeb7ad2956aabd15a0fa0059",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/writing-for-agents/SKILL-MECHANICS.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/agents/writing-for-agents/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/agents/writing-for-agents/SKILL.md",
+      "sha256": "551adca942227b44192edba88acd4e8db911f0121ce58ad16944ccf6a896a74a",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/agents/writing-for-agents/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/.gitignore",
+      "target": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/.gitignore",
+      "sha256": "93b88ed85040dde8e32509c7fbb4a435d60c73ad0a9d123cc8055c8b21642e90",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/.gitignore"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/LICENSE",
+      "target": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/LICENSE",
+      "sha256": "9097d5ac174f4ec77e181c24c90ee4d5220af2a0ba821b4d5b2a9fad071740ab",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/LICENSE"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/README.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/README.md",
+      "sha256": "87cc01fdb10f1242a8ee7cdfb35d5855f4a55b1c8159197f32c2737171c6e15f",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/README.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/reference.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/reference.md",
+      "sha256": "e87a2fc17f51e72cbd422f180990b010bb3061c9fc14710ef10e973aaa559edb",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/reference.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/scripts/analyze.py",
+      "target": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/scripts/analyze.py",
+      "sha256": "5bb7d5d2de01a8e0a75116eb176d10d006b7438b0572b6227b80e934f611bbc7",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/scripts/analyze.py"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/scripts/build.py",
+      "target": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/scripts/build.py",
+      "sha256": "97d6c3ccadd7a9d4e18763dea17b20be4ecc3f8f16a7a0cb4b87042344df50b3",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/scripts/build.py"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/scripts/extract.py",
+      "target": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/scripts/extract.py",
+      "sha256": "f4984521f0bbc7b6011f9d617e2702c9d7c53435e4c8d5aaf5e05cd15bb622eb",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/scripts/extract.py"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/scripts/scratch.py",
+      "target": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/scripts/scratch.py",
+      "sha256": "fa4e8fba718a6007b31042c9be904dcad7eb3681739d35f0de1b454dd252cb76",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/scripts/scratch.py"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/scripts/template.html",
+      "target": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/scripts/template.html",
+      "sha256": "250b2d23c64df11fe0ba1f7c699296a626a35719785887db274ef679f4050960",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/scripts/template.html"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/SKILL.md",
+      "sha256": "fe7f6196bedfeae3212f760e3611ede649580b44ac67848394d3b104e0c87cfa",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/codex/convex/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/codex/convex/SKILL.md",
+      "sha256": "920f568050a0ec4b8f6260069539ba6976d04c4f84e94a5b175ccc3f9498b7c1",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/codex/convex/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/codex/convex-docs/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/codex/convex-docs/SKILL.md",
+      "sha256": "4f5841372b91cb5dd58febda6a203bb2eb63dafcfc3e3111d3fd826fd7ebb8e8",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/codex/convex-docs/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/codex/convex-env/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/codex/convex-env/SKILL.md",
+      "sha256": "5b72c147333381d006e7a08af91e7ee876da6c7886d62006d6b72160c91d31aa",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/codex/convex-env/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/codex/convex-expert/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/codex/convex-expert/SKILL.md",
+      "sha256": "7ad32e3741d87e5c7fd28eaa372529c2c83bfe269aaa3873cc203c9346486b2c",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/codex/convex-expert/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/agents/openai.yaml",
+      "target": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/agents/openai.yaml",
+      "sha256": "c47d8c600111f0f0307ca688e946760d4280138ba4e2698ff89ce55a7741f3ee",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/dns-cutover.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/dns-cutover.md",
+      "sha256": "271965f6335d8d537cf66b6e1437c09a3489ee435940c697b8064bd3a4ef26e8",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/dns-cutover.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/example-manifest.json",
+      "target": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/example-manifest.json",
+      "sha256": "b809ad188e1273628327242f9f4319fb4a50c11f54d80eb85aac599d2f1482bd",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/example-manifest.json"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/failure-modes.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/failure-modes.md",
+      "sha256": "c40eacf539bf1d55a2b6471637e4f52bc575dcf8035b63e7cf90e379a084f320",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/failure-modes.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/inventory-deploy.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/inventory-deploy.md",
+      "sha256": "4a71e671437d8169a0e4982a28de03c275148b98bcb1dd72831eb7ecf69b9755",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/inventory-deploy.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/manifest-schema.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/manifest-schema.md",
+      "sha256": "c3828ff013fe5662f28c0c757253bd248f3a188f963045ea9dcd3cdf8dbbd157",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/manifest-schema.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/retirement.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/retirement.md",
+      "sha256": "0e106549154db8fdcc8cdbd88b1c2acdcecf4d5769e8ce9173faaebcb7e06405",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/references/retirement.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/scripts/audit-dns.ps1",
+      "target": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/scripts/audit-dns.ps1",
+      "sha256": "91bd0cd44e1e85f85a1c3dda410db994f58bb42db1aa33dc9c5ccfc09a42631f",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/scripts/audit-dns.ps1"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/scripts/new-manifest.ps1",
+      "target": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/scripts/new-manifest.ps1",
+      "sha256": "809e2d4da4e0a627adc737dd7085017651e11916674aa410e92a8fbe66b44776",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/scripts/new-manifest.ps1"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/scripts/portfolio-status.mjs",
+      "target": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/scripts/portfolio-status.mjs",
+      "sha256": "dfc79934d7902eb0e2a2bfb235bf49a0719ad9655041e121bf636e6b8aae5165",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/scripts/portfolio-status.mjs"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/scripts/verify-sites.mjs",
+      "target": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/scripts/verify-sites.mjs",
+      "sha256": "e5e5cb75d09834d4d8731b9cac3929a95f4b246bd61304e968f7b9e050a86b9e",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/scripts/verify-sites.mjs"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/SKILL.md",
+      "sha256": "faf99d0aef5ab30565d79b7701274e6c16c5caa8d3db564dec493514a36a0b88",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/codex-disabled/vercel-to-cloudflare-migration/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/opencode/contribute/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/opencode/contribute/SKILL.md",
+      "sha256": "9f75dc5f6d06c6817052b21104791a92d78f1c217ec116cab8ec58b8b1a28f50",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/opencode/contribute/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/opencode/opencode-tui/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/opencode/opencode-tui/SKILL.md",
+      "sha256": "8920535909134e8eecd5ff566c8d2c4a8e66adb6b6f262b274ea857a87e37ffc",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/opencode/opencode-tui/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/opencode/review/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/opencode/review/SKILL.md",
+      "sha256": "86ec69aeaf9dd57ce3730dd8a5aa86cf8d227364eec0546e4bb51ae3685811b0",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/opencode/review/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-clean/skills/model-routing/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-clean/skills/model-routing/SKILL.md",
+      "sha256": "d0eda3346448a4d4f5450ab0fa09a113be282d29945e3e15893fe0e6764d8f25",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-clean/skills/model-routing/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-clean/skills/review/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-clean/skills/review/SKILL.md",
+      "sha256": "0b6aed9ee617194000c86be52b67291b00427a71c4dccb512ea5de184decf0ff",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-clean/skills/review/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-clean/skills/windows-shell/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-clean/skills/windows-shell/SKILL.md",
+      "sha256": "7fc0ad681f1e25fd82b3d39be4fb52244011172c610726bc57b60203bddfed3f",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-clean/skills/windows-shell/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-harness/skills/model-routing/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-harness/skills/model-routing/SKILL.md",
+      "sha256": "d0eda3346448a4d4f5450ab0fa09a113be282d29945e3e15893fe0e6764d8f25",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-harness/skills/model-routing/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-harness/skills/review/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-harness/skills/review/SKILL.md",
+      "sha256": "0b6aed9ee617194000c86be52b67291b00427a71c4dccb512ea5de184decf0ff",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-harness/skills/review/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-harness/skills/windows-shell/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-harness/skills/windows-shell/SKILL.md",
+      "sha256": "7fc0ad681f1e25fd82b3d39be4fb52244011172c610726bc57b60203bddfed3f",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-harness/skills/windows-shell/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-scope-enforcement/skills/model-routing/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-scope-enforcement/skills/model-routing/SKILL.md",
+      "sha256": "d0eda3346448a4d4f5450ab0fa09a113be282d29945e3e15893fe0e6764d8f25",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-scope-enforcement/skills/model-routing/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-scope-enforcement/skills/review/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-scope-enforcement/skills/review/SKILL.md",
+      "sha256": "0b6aed9ee617194000c86be52b67291b00427a71c4dccb512ea5de184decf0ff",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-scope-enforcement/skills/review/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-scope-enforcement/skills/windows-shell/SKILL.md",
+      "target": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-scope-enforcement/skills/windows-shell/SKILL.md",
+      "sha256": "7fc0ad681f1e25fd82b3d39be4fb52244011172c610726bc57b60203bddfed3f",
+      "importedFrom": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-scope-enforcement/skills/windows-shell/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/ask-matt/agents/openai.yaml",
+      "target": ".agents/skills-disabled/ask-matt/agents/openai.yaml",
+      "sha256": "ce56f1364fb69aeef2d65e83b63af0ae27e4cf80781e02659e19545015bd9d92",
+      "importedFrom": ".agents/skills-disabled/ask-matt/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/ask-matt/PHASE-BOUNDARIES.md",
+      "target": ".agents/skills-disabled/ask-matt/PHASE-BOUNDARIES.md",
+      "sha256": "a8aa20158609ef39e2b308b6ba0660c91066838d07a867202e63a7744a88a3ed",
+      "importedFrom": ".agents/skills-disabled/ask-matt/PHASE-BOUNDARIES.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/ask-matt/SKILL.md",
+      "target": ".agents/skills-disabled/ask-matt/SKILL.md",
+      "sha256": "488c0649521e05edb311a09d2bd3fbf0c1909ad3a211ae39b24291015af555e6",
+      "importedFrom": ".agents/skills-disabled/ask-matt/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/codebase-design/agents/openai.yaml",
+      "target": ".agents/skills-disabled/codebase-design/agents/openai.yaml",
+      "sha256": "edebc9e4fcfe102114012575eaa9600b9b5fd08c311664f389c36e7bc717740f",
+      "importedFrom": ".agents/skills-disabled/codebase-design/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/codebase-design/DEEPENING.md",
+      "target": ".agents/skills-disabled/codebase-design/DEEPENING.md",
+      "sha256": "f3dd099ce99289bd213914d8ee3e2429b78309c3957ca4583f7659551b1d53c1",
+      "importedFrom": ".agents/skills-disabled/codebase-design/DEEPENING.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/codebase-design/DESIGN-IT-TWICE.md",
+      "target": ".agents/skills-disabled/codebase-design/DESIGN-IT-TWICE.md",
+      "sha256": "8e740bf98446dbd4dfdc132ac4346d9a7eedaf93de6a495889171cf7f99f16bd",
+      "importedFrom": ".agents/skills-disabled/codebase-design/DESIGN-IT-TWICE.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/codebase-design/SKILL.md",
+      "target": ".agents/skills-disabled/codebase-design/SKILL.md",
+      "sha256": "2c20617f87ec8af6a434859f381b2f061a69b530444e74eb39e78bb016a6d1e2",
+      "importedFrom": ".agents/skills-disabled/codebase-design/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/domain-modeling/ADR-FORMAT.md",
+      "target": ".agents/skills-disabled/domain-modeling/ADR-FORMAT.md",
+      "sha256": "944c92aa790e8fbdc9199640b170979abb8a34ba8d0fe18c2a01a63bce140ca0",
+      "importedFrom": ".agents/skills-disabled/domain-modeling/ADR-FORMAT.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/domain-modeling/agents/openai.yaml",
+      "target": ".agents/skills-disabled/domain-modeling/agents/openai.yaml",
+      "sha256": "f6bf2aa996c6e6f53fdd0708e18a0d16a56aed8322cca59fedbe3c0d2c75f06b",
+      "importedFrom": ".agents/skills-disabled/domain-modeling/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/domain-modeling/CONTEXT-FORMAT.md",
+      "target": ".agents/skills-disabled/domain-modeling/CONTEXT-FORMAT.md",
+      "sha256": "17ab16ce783e4d2801ee52fd9acdf550cbf44de65ae76797a93943bbedf22a13",
+      "importedFrom": ".agents/skills-disabled/domain-modeling/CONTEXT-FORMAT.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/domain-modeling/SKILL.md",
+      "target": ".agents/skills-disabled/domain-modeling/SKILL.md",
+      "sha256": "327a2b50620e2fd70abc6893cd6965e76b20f8d0adb0dc2c8d5eb3845efb643e",
+      "importedFrom": ".agents/skills-disabled/domain-modeling/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/grill-me/agents/openai.yaml",
+      "target": ".agents/skills-disabled/grill-me/agents/openai.yaml",
+      "sha256": "4dfa7ae10828b74efb68a66ac6151ced82a94328c91bd6281b2f79958cdc567f",
+      "importedFrom": ".agents/skills-disabled/grill-me/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/grill-me/SKILL.md",
+      "target": ".agents/skills-disabled/grill-me/SKILL.md",
+      "sha256": "9a45d806e0e9aa875587d724843dee145c5c92eacd4911738b7d897c181e12ff",
+      "importedFrom": ".agents/skills-disabled/grill-me/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/grill-with-docs/agents/openai.yaml",
+      "target": ".agents/skills-disabled/grill-with-docs/agents/openai.yaml",
+      "sha256": "4e3ac56fd00c573cf3a1f4b55663627d8be2e4e2d5277b790becc5a1db82d10d",
+      "importedFrom": ".agents/skills-disabled/grill-with-docs/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/grill-with-docs/SKILL.md",
+      "target": ".agents/skills-disabled/grill-with-docs/SKILL.md",
+      "sha256": "0213137cdb005977743c5cd92109c887f5ccd7de5949ea8f8e2803eb468d2661",
+      "importedFrom": ".agents/skills-disabled/grill-with-docs/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/improve-codebase-architecture/agents/openai.yaml",
+      "target": ".agents/skills-disabled/improve-codebase-architecture/agents/openai.yaml",
+      "sha256": "783dec2c8a139f698eaff60d7958a9ce83b303e4777932c80d470b01e393a55a",
+      "importedFrom": ".agents/skills-disabled/improve-codebase-architecture/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/improve-codebase-architecture/HTML-REPORT.md",
+      "target": ".agents/skills-disabled/improve-codebase-architecture/HTML-REPORT.md",
+      "sha256": "581e8bb5a521e46bbda8ca7e19b15948bed882187108092ebb90c62513b77528",
+      "importedFrom": ".agents/skills-disabled/improve-codebase-architecture/HTML-REPORT.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/improve-codebase-architecture/SKILL.md",
+      "target": ".agents/skills-disabled/improve-codebase-architecture/SKILL.md",
+      "sha256": "2c1c4abdcd75d0086a0ce479d46c8b6071942a1fbf4566c5a0dbddca8849a08d",
+      "importedFrom": ".agents/skills-disabled/improve-codebase-architecture/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/README.md",
+      "target": ".agents/skills-disabled/README.md",
+      "sha256": "daaaa801f14a5105d8a3f07c5301f0e96e491d7e2fc721a77b038a76ca2b11f5",
+      "importedFrom": ".agents/skills-disabled/README.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/setup-matt-pocock-skills/agents/openai.yaml",
+      "target": ".agents/skills-disabled/setup-matt-pocock-skills/agents/openai.yaml",
+      "sha256": "69a4d68fa3281c8c02adec574a62255eb2639ea3e7a66b8a1563f7e857cf1f99",
+      "importedFrom": ".agents/skills-disabled/setup-matt-pocock-skills/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/setup-matt-pocock-skills/domain.md",
+      "target": ".agents/skills-disabled/setup-matt-pocock-skills/domain.md",
+      "sha256": "edc6d6131fdffc4b7135704f5262124fc43355c95f61b7399dc5a4db643e28ca",
+      "importedFrom": ".agents/skills-disabled/setup-matt-pocock-skills/domain.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/setup-matt-pocock-skills/issue-tracker-github.md",
+      "target": ".agents/skills-disabled/setup-matt-pocock-skills/issue-tracker-github.md",
+      "sha256": "afd6852a80185217bd28aa5cbe456bef1e85be25be7bd1fba382d5b8ee428325",
+      "importedFrom": ".agents/skills-disabled/setup-matt-pocock-skills/issue-tracker-github.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/setup-matt-pocock-skills/issue-tracker-gitlab.md",
+      "target": ".agents/skills-disabled/setup-matt-pocock-skills/issue-tracker-gitlab.md",
+      "sha256": "ea175f73d193b3f55819c0ed9bbccf6ee0e70ad8f928e3d7607596c53380acd6",
+      "importedFrom": ".agents/skills-disabled/setup-matt-pocock-skills/issue-tracker-gitlab.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/setup-matt-pocock-skills/issue-tracker-local.md",
+      "target": ".agents/skills-disabled/setup-matt-pocock-skills/issue-tracker-local.md",
+      "sha256": "7dcda20a2eb4bdc89b95d1143423c0691309921cadae3132e6424f371030506e",
+      "importedFrom": ".agents/skills-disabled/setup-matt-pocock-skills/issue-tracker-local.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/setup-matt-pocock-skills/SKILL.md",
+      "target": ".agents/skills-disabled/setup-matt-pocock-skills/SKILL.md",
+      "sha256": "26a9c2fff4ba12d62edcd7b44819b7d2d5570cef8095667a4749293a43ab3d1c",
+      "importedFrom": ".agents/skills-disabled/setup-matt-pocock-skills/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/setup-matt-pocock-skills/triage-labels.md",
+      "target": ".agents/skills-disabled/setup-matt-pocock-skills/triage-labels.md",
+      "sha256": "4f53c9b40ce2651e3611aa090eaedbd6dbc9b71ef8c5f7e65eac0d8263190d0d",
+      "importedFrom": ".agents/skills-disabled/setup-matt-pocock-skills/triage-labels.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/teach/agents/openai.yaml",
+      "target": ".agents/skills-disabled/teach/agents/openai.yaml",
+      "sha256": "1d286dbe59fcde65d9f279fb7983b5fbed453fd29f57ff37ef6337f70bdbff40",
+      "importedFrom": ".agents/skills-disabled/teach/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/teach/GLOSSARY-FORMAT.md",
+      "target": ".agents/skills-disabled/teach/GLOSSARY-FORMAT.md",
+      "sha256": "9b99859ec28437668130d8f2ce5a342938970f8a1ed4fd38c3eab4f4b5fff210",
+      "importedFrom": ".agents/skills-disabled/teach/GLOSSARY-FORMAT.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/teach/LEARNING-RECORD-FORMAT.md",
+      "target": ".agents/skills-disabled/teach/LEARNING-RECORD-FORMAT.md",
+      "sha256": "701fa34b6748aa89e6c960ffb815257f481a7d77fb2900f9028f7edf3fdd6052",
+      "importedFrom": ".agents/skills-disabled/teach/LEARNING-RECORD-FORMAT.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/teach/MISSION-FORMAT.md",
+      "target": ".agents/skills-disabled/teach/MISSION-FORMAT.md",
+      "sha256": "8cacbb3c0644d3ae0ea4965564797099401a6930a23f7cf462918576587f2418",
+      "importedFrom": ".agents/skills-disabled/teach/MISSION-FORMAT.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/teach/RESOURCES-FORMAT.md",
+      "target": ".agents/skills-disabled/teach/RESOURCES-FORMAT.md",
+      "sha256": "e9cacf34026e11a8d1c8f9de88abe5bcbf654f4ebdb25cae8c0de0d5f48f44ec",
+      "importedFrom": ".agents/skills-disabled/teach/RESOURCES-FORMAT.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/teach/SKILL.md",
+      "target": ".agents/skills-disabled/teach/SKILL.md",
+      "sha256": "b73c806efaa326b909a046d9825c603422e2e1b483b049787f57b90b0ccaf9ae",
+      "importedFrom": ".agents/skills-disabled/teach/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/to-questionnaire/agents/openai.yaml",
+      "target": ".agents/skills-disabled/to-questionnaire/agents/openai.yaml",
+      "sha256": "25161ca143fd0c12234f43181bff25ecdb1e3b3c5a0f25c9ea17a6574590b553",
+      "importedFrom": ".agents/skills-disabled/to-questionnaire/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/to-questionnaire/SKILL.md",
+      "target": ".agents/skills-disabled/to-questionnaire/SKILL.md",
+      "sha256": "7b064e7cfd8244be9a588e2f460833c1713dcc2a5e38557b099a8bfdaa0f799b",
+      "importedFrom": ".agents/skills-disabled/to-questionnaire/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/triage/AGENT-BRIEF.md",
+      "target": ".agents/skills-disabled/triage/AGENT-BRIEF.md",
+      "sha256": "7f5f87fed3033df1b06e083c480f3e847b1fbb0647746b8a4c6a50f9f26ef44f",
+      "importedFrom": ".agents/skills-disabled/triage/AGENT-BRIEF.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/triage/agents/openai.yaml",
+      "target": ".agents/skills-disabled/triage/agents/openai.yaml",
+      "sha256": "7be025d3a053a941c6f4c265b5318fb81226386e492f77433d857e0adb0bb02c",
+      "importedFrom": ".agents/skills-disabled/triage/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/triage/OUT-OF-SCOPE.md",
+      "target": ".agents/skills-disabled/triage/OUT-OF-SCOPE.md",
+      "sha256": "1fbf9b432130c6380aa65813b55553cfda150309b27c595e183f8e335b8a190d",
+      "importedFrom": ".agents/skills-disabled/triage/OUT-OF-SCOPE.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/triage/SKILL.md",
+      "target": ".agents/skills-disabled/triage/SKILL.md",
+      "sha256": "4d88e66810da5f346ad8d7f6fbfaded37a9f52ca4fa0a52a6a6b1fc348eb632d",
+      "importedFrom": ".agents/skills-disabled/triage/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/wait-what/agents/openai.yaml",
+      "target": ".agents/skills-disabled/wait-what/agents/openai.yaml",
+      "sha256": "4c3768b98a7a54c5f17957134cef9affa5626f04feb0f509a8c0b231cc540dad",
+      "importedFrom": ".agents/skills-disabled/wait-what/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/wait-what/SKILL.md",
+      "target": ".agents/skills-disabled/wait-what/SKILL.md",
+      "sha256": "67d02e35ed4e3fce3e30bc4162d9b31479fdd115725f8549b43f8f6d56187252",
+      "importedFrom": ".agents/skills-disabled/wait-what/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/wayfinder/agents/openai.yaml",
+      "target": ".agents/skills-disabled/wayfinder/agents/openai.yaml",
+      "sha256": "d408854e016f917f7f25615911738e8fb1d90b3f6f124a50855351d3a667eba0",
+      "importedFrom": ".agents/skills-disabled/wayfinder/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/wayfinder/SKILL.md",
+      "target": ".agents/skills-disabled/wayfinder/SKILL.md",
+      "sha256": "9d92665471ce7646342ac9f774e4c02bcf6a0c98cc12a9cb193129dfe546ff7e",
+      "importedFrom": ".agents/skills-disabled/wayfinder/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/wizard/agents/openai.yaml",
+      "target": ".agents/skills-disabled/wizard/agents/openai.yaml",
+      "sha256": "98f44d682d58e262f160dc59a8befc365e0aa65820dd0261864af26aa8e59d83",
+      "importedFrom": ".agents/skills-disabled/wizard/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/wizard/SKILL.md",
+      "target": ".agents/skills-disabled/wizard/SKILL.md",
+      "sha256": "bdf31d48211ea559878f95a4f344aeabf8d85897488ba564382bab0b000daac1",
+      "importedFrom": ".agents/skills-disabled/wizard/SKILL.md"
+    },
+    {
+      "source": "setup/files/.agents/skills-disabled/wizard/template.sh",
+      "target": ".agents/skills-disabled/wizard/template.sh",
+      "sha256": "33cbe9dfb1d0e9185b60248a52aabed14bc64785a00cac695e302e739dd6c153",
+      "importedFrom": ".agents/skills-disabled/wizard/template.sh"
+    }
+  ],
+  "dependencies": [
+    {
+      "publisher": "openai-bundled",
+      "plugin": "browser",
+      "installedVersions": [
+        "26.901.41600"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-bundled",
+      "plugin": "chrome",
+      "installedVersions": [
+        "26.831.20005",
+        "26.901.41600"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-bundled",
+      "plugin": "codex-app-tools",
+      "installedVersions": [
+        "0.1.3"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-bundled",
+      "plugin": "computer-use",
+      "installedVersions": [
+        "26.901.41600"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-bundled",
+      "plugin": "sites",
+      "installedVersions": [
+        "0.1.57"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-bundled",
+      "plugin": "unified-computer-use",
+      "installedVersions": [
+        "26.901.41600"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-bundled",
+      "plugin": "visualize",
+      "installedVersions": [
+        "1.0.29"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-curated",
+      "plugin": "google-calendar",
+      "installedVersions": [
+        "27126220"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-curated",
+      "plugin": "slack",
+      "installedVersions": [
+        "27126220"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-curated-remote",
+      "plugin": "cloudflare",
+      "installedVersions": [
+        "0.1.2"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-curated-remote",
+      "plugin": "deep-research-work",
+      "installedVersions": [
+        "0.1.15"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-curated-remote",
+      "plugin": "fal",
+      "installedVersions": [
+        "1.0.0"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-curated-remote",
+      "plugin": "github",
+      "installedVersions": [
+        "0.1.12-5f7cd798dc99"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-curated-remote",
+      "plugin": "openai-templates",
+      "installedVersions": [
+        "0.1.1"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-curated-remote",
+      "plugin": "plugin-management",
+      "installedVersions": [
+        "0.1.0"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-curated-remote",
+      "plugin": "vercel",
+      "installedVersions": [
+        "0.21.4"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-primary-runtime",
+      "plugin": "documents",
+      "installedVersions": [
+        "26.904.11930"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-primary-runtime",
+      "plugin": "pdf",
+      "installedVersions": [
+        "26.904.11930"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-primary-runtime",
+      "plugin": "presentations",
+      "installedVersions": [
+        "26.904.11930"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-primary-runtime",
+      "plugin": "spreadsheets",
+      "installedVersions": [
+        "26.904.11930"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "openai-primary-runtime",
+      "plugin": "template-creator",
+      "installedVersions": [
+        "26.904.11930"
+      ],
+      "ownership": "external-dependency"
+    },
+    {
+      "publisher": "personal",
+      "plugin": "opencode-quests",
+      "installedVersions": [
+        "0.0.0+codex.guard.20260909000500",
+        "0.0.0+codex.guard.20260909024000"
+      ],
+      "ownership": "local-source"
+    }
+  ],
+  "omitted": [],
+  "excluded": [
+    "credentials and account tokens",
+    "session databases and logs",
+    "Quest runtime journals",
+    "generated plugin generations and caches",
+    "upstream host binaries and source checkouts"
+  ]
+}

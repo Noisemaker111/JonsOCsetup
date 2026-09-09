@@ -1,0 +1,30 @@
+{
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.14",
+    "@opencode-ai/plugin": "1.18.23",
+    "@opentui/core": "^0.5.8",
+    "@opentui/keymap": "^0.5.8",
+    "@opentui/solid": "^0.5.8",
+    "solid-js": "1.9.12"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "node-pty": "1.2.0-beta.14",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "runtime:host": "node scripts/host-status.mjs",
+    "runtime:start": "node scripts/opencode-runtime.mjs",
+    "runtime:verify": "bun scripts/verify-runtime.ts",
+    "runtime:ship": "bun test && bun scripts/verify-runtime.ts",
+    "runtime:dispatch": "bun scripts/verify-dispatch.ts",
+    "runtime:providers": "bun scripts/provider-audit.ts",
+    "runtime:accounts": "bun scripts/accounts.ts",
+    "runtime:usage": "bun usage/account-cli.ts",
+    "ui:lab": "bun --preload @opentui/solid/preload ui-lab/render.tsx",
+    "ui:lab:paper": "bun ui-lab/paper.ts",
+    "runtime:channel": "node scripts/runtime-channel.mjs",
+    "setup:plan": "node scripts/install-setup.mjs",
+    "setup:install": "node scripts/install-setup.mjs --apply"
+  }
+}

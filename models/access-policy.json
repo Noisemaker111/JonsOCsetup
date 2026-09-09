@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "description": "Migrated current allowed routes and transport boundaries. Changes are explicit user policy; billing class does not select a model.",
+  "routes": [
+    {
+      "providerID": "openai",
+      "modelPattern": ".+",
+      "transports": [
+        {
+          "origin": "https://chatgpt.com",
+          "pathPrefix": "/backend-api/codex/"
+        }
+      ]
+    },
+    {
+      "providerID": "opencode",
+      "modelPattern": ".+-free",
+      "transports": [
+        {
+          "origin": "https://opencode.ai",
+          "pathPrefix": "/"
+        },
+        {
+          "origin": "https://api.opencode.ai",
+          "pathPrefix": "/"
+        }
+      ]
+    },
+    {
+      "providerID": "opencode-go",
+      "modelPattern": ".+",
+      "transports": [
+        {
+          "origin": "https://opencode.ai",
+          "pathPrefix": "/"
+        },
+        {
+          "origin": "https://api.opencode.ai",
+          "pathPrefix": "/"
+        }
+      ]
+    },
+    {
+      "providerID": "cliproxyapi",
+      "modelPattern": ".+",
+      "verifyOAuthBroker": true,
+      "transports": [
+        {
+          "origin": "http://127.0.0.1:8317",
+          "pathPrefix": "/v1/"
+        }
+      ]
+    },
+    {
+      "providerID": "grok-sub",
+      "modelPattern": ".+",
+      "verifyOAuthBroker": true,
+      "transports": [
+        {
+          "origin": "http://127.0.0.1:8317",
+          "pathPrefix": "/v1/"
+        }
+      ]
+    },
+    {
+      "providerID": "claude-code",
+      "modelPattern": ".+",
+      "transports": []
+    },
+    {
+      "providerID": "codex",
+      "modelPattern": ".+",
+      "transports": []
+    },
+    {
+      "providerID": "grok-build",
+      "modelPattern": ".+",
+      "transports": []
+    }
+  ]
+}

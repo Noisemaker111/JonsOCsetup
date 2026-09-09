@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vercel to Cloudflare Migration"
+  short_description: "Safely migrate Vercel portfolios to Cloudflare"
+  default_prompt: "Audit and execute a staged Vercel-to-Cloudflare migration with DNS and email preservation, explicit production approval, reversible routing, verification, and a documented rollback path."

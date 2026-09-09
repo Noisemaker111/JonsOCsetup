@@ -1,0 +1,7 @@
+# Skill selection
+
+Skills live in `C:/Users/Jk101/.agents/skills` (shared by Codex and OpenCode) and `C:/Users/Jk101/.codex/skills` (Codex only). Each description says when it applies; load a skill only when the task matches, and read its supporting files only for the branch you are on. User instructions take precedence over a skill. If a skill causes a pause, a permission request or unfinished work, name and link its SKILL.md and follow the user's instruction instead.
+
+Most tasks need no skill. A settled change proceeds directly. Reach for `diagnosing-bugs` when a cause is uncertain or a first fix failed, `resolving-merge-conflicts` for an in-progress conflict, `code-review` for a requested review of a diff, `writing-for-agents` when editing instructions or skills, `research` for primary-source fact gathering, `tdd` when asked for test-first work, `grilling` when asked to be grilled, `browser-task-recovery` after two failures of the same browser operation, and `to-spec`, `to-tickets`, `implement`, `prototype` or `handoff` for agreed multi-session work. Selection never expands authorization for publishing, merging, releases, purchases or messages.
+
+Skills not in current use are parked in `C:/Users/Jk101/.agents/skills-disabled`; move a folder back to `skills` to re-enable it. Upstream updates come from `npx skills@latest update --global`; re-check descriptions afterwards, since long or overlapping descriptions get truncated in discovery and cause the wrong skill to load.

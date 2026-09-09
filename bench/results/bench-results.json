@@ -1,0 +1,110 @@
+{
+  "runs": [
+    {
+      "timestamp": "2026-08-26T21:40:46.228Z",
+      "task": "C:\\Users\\Jk101\\.config\\opencode\\bench\\tasks\\demo.md",
+      "repo": "C:\\Users\\Jk101\\AppData\\Local\\Temp\\opencode\\bench-demo-repo",
+      "verify": "python -m unittest bench_probe -v",
+      "candidate": "opencode-go/glm-5.3-flash",
+      "round": 1,
+      "rounds": 1,
+      "worktreeMethod": "git",
+      "worktree": "C:\\Users\\Jk101\\AppData\\Local\\Temp\\opencode\\bench\\bench-demo-repo-opencode-go-glm-5.3-flash-r1 (removed)",
+      "wallS": 44.8,
+      "exitCode": 0,
+      "timedOut": false,
+      "timeoutMin": 20,
+      "verifyPass": false,
+      "verifyWallS": 0.41,
+      "verifyOutputTail": "---------------------------------------\r\nImportError: Failed to import test module: bench_probe\r\nTraceback (most recent call last):\r\n  File \"C:\\Users\\Jk101\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\unittest\\loader.py\", line 137, in loadTestsFromName\r\n    module = __import__(module_name)\r\n             ^^^^^^^^^^^^^^^^^^^^^^^\r\nModuleNotFoundError: No module named 'bench_probe'\r\n\r\n\r\n----------------------------------------------------------------------\r\nRan 1 test in 0.000s\r\n\r\nFAILED (errors=1)\r\n",
+      "tokens": {
+        "input": 12980,
+        "output": 731,
+        "reasoning": 623,
+        "cacheRead": 40000,
+        "cacheWrite": 0
+      },
+      "estCost": 0.001612,
+      "reportedCost": 0.001912,
+      "sessions": [
+        "ses_fbffb43f5ffeClGFrRju81KQ8W"
+      ],
+      "outputLog": null,
+      "outputTail": "cess** — working dir and `README.md` readable; repo was clean at `ebcc2f0`.\n- **Toolchain probe** — git 2.55.0, node v24.18.0, bun 1.3.14, python 3.12.10 all respond.\n- **Write path** — created `PROBE_RESULT.md` documenting the checks.\n- **Git round-trip** — artifact committed as `bf02130`.\n\nNo source changes were needed; the bench can now verify the runner's ability to drive an agent through read → write → commit on this repo.\r\n\u001b[0m\r\n> general · glm-5.3-flash\r\n\u001b[0m→ \u001b[0mRead . \r\n\u001b[0m$ \u001b[0mgit log --oneline -10 2>&1; git status --short 2>&1\r\nebcc2f0 initial\r\n> general · glm-5.3-flash\r\n\u001b[0m→ \u001b[0mRead README.md \r\n> general · glm-5.3-flash\r\n\u001b[0m✱ \u001b[0mGlob \"**/*\" \u001b[90m2 matches\u001b[0m\r\n\u001b[0m$ \u001b[0mGet-ChildItem -Force -Recurse | Where-Object { $_.FullName -notmatch '\\\\\\.git\\\\' } | Select-Object FullName\r\n\u001b[32;1mFullName\u001b[0m\r\n\u001b[32;1m--------\u001b[0m\r\nC:\\Users\\Jk101\\AppData\\Local\\Temp\\opencode\\bench\\bench-demo-repo-opencode-go-glm-5.3-flash-r1\\.git\r\nC:\\Users\\Jk101\\AppData\\Local\\Temp\\opencode\\bench\\bench-demo-repo-opencode-go-glm-5.3-flash-r1\\README.md\r\n> general · glm-5.3-flash\r\n\u001b[0m$ \u001b[0mgit --version; node --version 2>&1; bun --version 2>&1; python --version 2>&1; \"probe target: $PWD\"; Get-Date -Format o\r\ngit version 2.55.0.windows.2\nv24.18.0\r\n1.3.14\nPython 3.12.10\r\nprobe target: C:\\Users\\Jk101\\AppData\\Local\\Temp\\opencode\\bench\\bench-demo-repo-opencode-go-glm-5.3-flash-r1\r\n2026-08-26T17:41:16.6613102-04:00\r\n> general · glm-5.3-flash\r\n\u001b[0m← \u001b[0mWrite PROBE_RESULT.md\r\nCreated file successfully: PROBE_RESULT.md\r\n> general · glm-5.3-flash\r\n\u001b[0m$ \u001b[0mgit add PROBE_RESULT.md; git commit -m \"bench_probe: harness smoke test artifact\"; git log --oneline -3\r\nwarning: in the working copy of 'PROBE_RESULT.md', LF will be replaced by CRLF the next time Git touches it\n[detached HEAD bf02130] bench_probe: harness smoke test artifact\n 1 file changed, 22 insertions(+)\n create mode 100644 PROBE_RESULT.md\nbf02130 bench_probe: harness smoke test artifact\nebcc2f0 initial\r\n> general · glm-5.3-flash\r\n",
+      "errors": [
+        "verify FAIL: ---------------------------------------\r"
+      ]
+    },
+    {
+      "timestamp": "2026-08-26T21:41:31.655Z",
+      "task": "C:\\Users\\Jk101\\.config\\opencode\\bench\\tasks\\demo.md",
+      "repo": "C:\\Users\\Jk101\\AppData\\Local\\Temp\\opencode\\bench-demo-repo",
+      "verify": "python -m unittest bench_probe -v",
+      "candidate": "opencode-go/deepseek-v4-flash-vision-exp",
+      "round": 1,
+      "rounds": 1,
+      "worktreeMethod": "git",
+      "worktree": "C:\\Users\\Jk101\\AppData\\Local\\Temp\\opencode\\bench\\bench-demo-repo-opencode-go-deepseek-v4-flash-vision-exp-r1 (removed)",
+      "wallS": 25.68,
+      "exitCode": 0,
+      "timedOut": false,
+      "timeoutMin": 20,
+      "verifyPass": true,
+      "verifyWallS": 0.38,
+      "verifyOutputTail": "",
+      "tokens": {
+        "input": 9123,
+        "output": 1072,
+        "reasoning": 383,
+        "cacheRead": 58880,
+        "cacheWrite": 0
+      },
+      "estCost": 0.00426272,
+      "reportedCost": 0.0033795199999999996,
+      "sessions": [
+        "ses_fbffa9257ffegcgKdhfpLgc0fN"
+      ],
+      "outputLog": null,
+      "outputTail": "emp\\opencode\\bench\\bench-demo-repo-opencode-go-deepseek-v4-flash-vision-exp-r1\r\n---\r\n---FILES---\r\n\u001b[31;1mGet-ChildItem: \u001b[31;1mA parameter cannot be found that matches parameter name 'la'.\u001b[0m\r\n> general · deepseek-v4-flash-vision-exp\r\n\u001b[0m→ \u001b[0mRead . \r\n\u001b[0m$ \u001b[0mGet-ChildItem -Force | Select-Object Mode,Length,Name\r\n\u001b[32;1mMode \u001b[0m\u001b[32;1m Length\u001b[0m\u001b[32;1m Name\u001b[0m\r\n\u001b[32;1m---- \u001b[0m \u001b[32;1m------\u001b[0m \u001b[32;1m----\u001b[0m\r\n-a-h-    142 .git\r\n-a---     76 README.md\r\n> general · deepseek-v4-flash-vision-exp\r\n\u001b[0m→ \u001b[0mRead README.md \r\n> general · deepseek-v4-flash-vision-exp\r\n\u001b[0m$ \u001b[0mGet-ChildItem -Force \"C:\\Users\\Jk101\\AppData\\Local\\Temp\\opencode\\bench\" | Select-Object Name; echo \"---SEARCH TASK---\"; Get-ChildItem -Recurse -Force -Include \"*.md\",\"*.json\" -Path \"C:\\Users\\Jk101\\AppData\\Local\\Temp\\opencode\\bench\" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch \"\\.git\" } | Select-Object FullName\r\n\u001b[32;1mName\u001b[0m\r\n\u001b[32;1m----\u001b[0m\r\nbench-demo-repo-opencode-go-deepseek-v4-flash-vision-exp-r1\r\nprompt-demo.md-1787780425344.txt\r\nprompt-demo.md-1787780446227.txt\r\n---SEARCH TASK---\r\n> general · deepseek-v4-flash-vision-exp\r\n\u001b[0m→ \u001b[0mRead C:/Users/Jk101/AppData/Local/Temp/opencode/bench/prompt-demo.md-1787780446227.txt \r\n\u001b[0m→ \u001b[0mRead C:/Users/Jk101/AppData/Local/Temp/opencode/bench/prompt-demo.md-1787780425344.txt \r\n> general · deepseek-v4-flash-vision-exp\r\n\u001b[0m← \u001b[0mWrite bench_probe.py\r\nCreated file successfully: bench_probe.py\r\n> general · deepseek-v4-flash-vision-exp\r\n\u001b[0m$ \u001b[0mpython -m unittest bench_probe -v 2>&1\r\n\u001b[31;1mtest_assert_equal (bench_probe.TestProbeAdd.test_assert_equal) ... ok\u001b[0m\r\n\u001b[31;1mtest_big_ints (bench_probe.TestProbeAdd.test_big_ints) ... ok\u001b[0m\r\n\u001b[31;1mtest_negative_inputs (bench_probe.TestProbeAdd.test_negative_inputs) ... ok\u001b[0m\r\n\u001b[31;1m\u001b[0m\r\n\u001b[31;1m----------------------------------------------------------------------\u001b[0m\r\n\u001b[31;1mRan 3 tests in 0.000s\u001b[0m\r\n\u001b[31;1m\u001b[0m\r\n\u001b[31;1mOK\u001b[0m\r\n> general · deepseek-v4-flash-vision-exp\r\n",
+      "errors": []
+    }
+  ],
+  "summary": {
+    "lastRun": "2026-08-26T21:41:57.933Z",
+    "task": "C:\\Users\\Jk101\\.config\\opencode\\bench\\tasks\\demo.md",
+    "repo": "C:\\Users\\Jk101\\AppData\\Local\\Temp\\opencode\\bench-demo-repo",
+    "verify": "python -m unittest bench_probe -v",
+    "candidates": [
+      "opencode-go/glm-5.3-flash",
+      "opencode-go/deepseek-v4-flash-vision-exp"
+    ],
+    "rounds": 1,
+    "worktreeScratch": "C:\\Users\\Jk101\\AppData\\Local\\Temp\\opencode",
+    "table": [
+      {
+        "model": "opencode-go/deepseek-v4-flash-vision-exp",
+        "medianWallS": 25.68,
+        "avgWallS": 25.68,
+        "maxWallS": 25.68,
+        "passRate": 1,
+        "avgTokens": 10578,
+        "estCostAvg": 0.00426272,
+        "errors": [],
+        "rounds": 1
+      },
+      {
+        "model": "opencode-go/glm-5.3-flash",
+        "medianWallS": 44.8,
+        "avgWallS": 44.8,
+        "maxWallS": 44.8,
+        "passRate": 0,
+        "avgTokens": 14334,
+        "estCostAvg": 0.001612,
+        "errors": [
+          "verify FAIL: ---------------------------------------\r"
+        ],
+        "rounds": 1
+      }
+    ]
+  }
+}

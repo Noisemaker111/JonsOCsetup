@@ -1,0 +1,163 @@
+{
+  "version": 1,
+  "request": {
+    "task": "coding",
+    "minSuccessRate": 0.9,
+    "minTrials": 5,
+    "qualityTolerance": 0.02,
+    "maxUsageAgeSeconds": 120,
+    "maxEvidenceAgeDays": 30,
+    "reserveFraction": 0,
+    "primaryRouteID": "proxy-sol-xhigh",
+    "allowedRouteIDs": [
+      "proxy-sol-xhigh",
+      "proxy-sol-max",
+      "proxy-fable-high",
+      "proxy-fable-xhigh",
+      "proxy-fable-max",
+      "proxy-claude-unknown",
+      "proxy-luna-unknown",
+      "proxy-terra-unknown",
+      "openai-astra-medium"
+    ]
+  },
+  "routes": [
+    {
+      "id": "proxy-sol-xhigh",
+      "accountID": "openai-429c9885edc3fc7113fc",
+      "providerID": "cliproxyapi",
+      "modelID": "gpt-5.6-sol",
+      "harness": "native",
+      "agent": "proxy-sol",
+      "reasoning": "xhigh",
+      "serviceTier": "default",
+      "verified": true,
+      "admission": "configured-choice",
+      "evidence": [],
+      "quotaPerTask": {}
+    },
+    {
+      "id": "proxy-sol-max",
+      "accountID": "openai-429c9885edc3fc7113fc",
+      "providerID": "cliproxyapi",
+      "modelID": "gpt-5.6-sol",
+      "harness": "native",
+      "agent": "proxy-sol",
+      "reasoning": "max",
+      "serviceTier": "default",
+      "verified": true,
+      "admission": "configured-choice",
+      "evidence": [],
+      "quotaPerTask": {}
+    },
+    {
+      "id": "proxy-fable-high",
+      "accountID": "claude-8ca596da07b766ac72c8",
+      "providerID": "cliproxyapi",
+      "modelID": "claude-fable-5-1",
+      "harness": "native",
+      "agent": "proxy-fable",
+      "reasoning": "high",
+      "serviceTier": "default",
+      "verified": true,
+      "admission": "configured-choice",
+      "evidence": [],
+      "quotaPerTask": {}
+    },
+    {
+      "id": "proxy-fable-xhigh",
+      "accountID": "claude-8ca596da07b766ac72c8",
+      "providerID": "cliproxyapi",
+      "modelID": "claude-fable-5-1",
+      "harness": "native",
+      "agent": "proxy-fable",
+      "reasoning": "xhigh",
+      "serviceTier": "default",
+      "verified": true,
+      "admission": "configured-choice",
+      "evidence": [],
+      "quotaPerTask": {}
+    },
+    {
+      "id": "proxy-fable-max",
+      "accountID": "claude-8ca596da07b766ac72c8",
+      "providerID": "cliproxyapi",
+      "modelID": "claude-fable-5-1",
+      "harness": "native",
+      "agent": "proxy-fable",
+      "reasoning": "max",
+      "serviceTier": "default",
+      "verified": true,
+      "admission": "configured-choice",
+      "evidence": [],
+      "quotaPerTask": {}
+    },
+    {
+      "id": "proxy-claude-unknown",
+      "accountID": "claude-8ca596da07b766ac72c8",
+      "providerID": "cliproxyapi",
+      "modelID": "claude-opus-5",
+      "harness": "native",
+      "agent": "proxy-claude",
+      "reasoning": "unknown",
+      "serviceTier": "default",
+      "verified": true,
+      "admission": "configured-choice",
+      "evidence": [],
+      "quotaPerTask": {}
+    },
+    {
+      "id": "proxy-luna-unknown",
+      "accountID": "openai-429c9885edc3fc7113fc",
+      "providerID": "cliproxyapi",
+      "modelID": "gpt-5.6-luna",
+      "harness": "native",
+      "agent": "proxy-luna",
+      "reasoning": "unknown",
+      "serviceTier": "default",
+      "verified": true,
+      "admission": "configured-choice",
+      "evidence": [],
+      "quotaPerTask": {}
+    },
+    {
+      "id": "proxy-terra-unknown",
+      "accountID": "openai-429c9885edc3fc7113fc",
+      "providerID": "cliproxyapi",
+      "modelID": "gpt-5.6-terra",
+      "harness": "native",
+      "agent": "proxy-terra",
+      "reasoning": "unknown",
+      "serviceTier": "default",
+      "verified": true,
+      "admission": "configured-choice",
+      "evidence": [],
+      "quotaPerTask": {}
+    },
+    {
+      "id": "openai-astra-medium",
+      "accountID": "openai-429c9885edc3fc7113fc",
+      "providerID": "openai",
+      "modelID": "gpt-6-astra",
+      "harness": "native",
+      "agent": "astra",
+      "reasoning": "medium",
+      "serviceTier": "default",
+      "verified": true,
+      "admission": "configured-choice",
+      "evidence": [],
+      "quotaPerTask": {}
+    }
+  ],
+  "billing": {
+    "openai-429c9885edc3fc7113fc": "subscription",
+    "claude-8ca596da07b766ac72c8": "subscription"
+  },
+  "bootstrapByProject": {
+    "ba7f7ae7bb584ce63b3afa36920b467c644b4a7effdef2f93c5ba39ff98f8576": [
+      "bun",
+      "install",
+      "--frozen-lockfile"
+    ]
+  }
+}

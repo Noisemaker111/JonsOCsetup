@@ -1,0 +1,8 @@
+{
+  "note": "Live dump from ctx.tool.transform callback on opencode2 0.0.0-beta-18314. Promise wrapper passes { add } only — built-in Task cannot be wrapped here.",
+  "draftKeys": ["add"],
+  "hasList": false,
+  "hasUpdate": false,
+  "hasGet": false,
+  "toolIds": []
+}

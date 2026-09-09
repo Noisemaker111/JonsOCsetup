@@ -1,0 +1,44 @@
+{
+  "migration": {
+    "name": "example-portfolio",
+    "created": "2026-01-01T00:00:00Z",
+    "vercelTeam": "example-team",
+    "cloudflareAccount": "example-account",
+    "assignedNameservers": ["ns1.example.cloudflare.com", "ns2.example.cloudflare.com"],
+    "status": "planned"
+  },
+  "domains": [
+    {
+      "domain": "example.com",
+      "registrar": {
+        "provider": "Example Registrar",
+        "managedAccess": true,
+        "oldNameservers": ["ns1.old.example", "ns2.old.example"]
+      },
+      "classification": "application",
+      "source": {
+        "vercelProject": "example-web",
+        "behavior": "apex redirects to www; www serves the app"
+      },
+      "target": {
+        "serviceType": "worker",
+        "name": "example-web",
+        "routes": ["example.com/*", "www.example.com/*"]
+      },
+      "dns": {
+        "zoneStatus": "pending",
+        "parity": "verified",
+        "mailParity": "verified",
+        "dnssec": "checked"
+      },
+      "approval": null,
+      "cutover": null,
+      "verification": [],
+      "rollback": {
+        "oldNameservers": ["ns1.old.example", "ns2.old.example"],
+        "fallbackOriginRetained": true
+      },
+      "blockers": []
+    }
+  ]
+}

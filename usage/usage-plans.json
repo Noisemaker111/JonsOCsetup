@@ -1,0 +1,76 @@
+{
+  "plans": {
+    "opencode-go": {
+      "windows": [
+        { "label": "5h", "cap": 12 },
+        { "label": "7d", "cap": 30 },
+        { "label": "30d", "cap": 60 }
+      ],
+      "currency": "USD",
+      "doc": "Go: server rolling 5h AND weekly AND monthly (API status rate-limited or percent>=90) are real caps — weekly 100% 402s even when 5h is ok. Local $12/5h $30/wk $60/mo is a rough $ mapping. Quota is not a model failure; never unfavorite."
+    },
+    "cursor": {
+      "windows": [
+        { "label": "5h", "cap": 20 },
+        { "label": "7d", "cap": 20 },
+        { "label": "30d", "cap": 20 }
+      ],
+      "estimated": true,
+      "doc": "Cursor: local-db estimate against the $20 subscription baseline; provider endpoint is optional."
+    },
+    "grok-sub": {
+      "windows": [
+        { "label": "5h", "cap": 30 },
+        { "label": "7d", "cap": 30 },
+        { "label": "30d", "cap": 30 }
+      ],
+      "estimated": true,
+      "doc": "SuperGrok: local-db estimate against the $30 subscription baseline (not xAI metered); provider endpoint is optional."
+    },
+    "openai": {
+      "windows": [
+        { "label": "5h", "cap": null },
+        { "label": "7d", "cap": null },
+        { "label": "30d", "cap": null }
+      ],
+      "estimated": false,
+      "doc": "OpenAI/ChatGPT: exact percentages and reset times come from GET https://chatgpt.com/backend-api/wham/usage using OAuth plus ChatGPT-Account-Id. No local dollar baseline is valid."
+    },
+    "claude-code": {
+      "windows": [
+        { "label": "5h", "cap": null },
+        { "label": "7d", "cap": null },
+        { "label": "30d", "cap": null }
+      ],
+      "estimated": false,
+      "doc": "Claude Code CLI subscription: local bridge is configured, but no provider quota endpoint is exposed here."
+    },
+    "grok-build": {
+      "windows": [
+        { "label": "5h", "cap": null },
+        { "label": "7d", "cap": null },
+        { "label": "30d", "cap": null }
+      ],
+      "estimated": false,
+      "doc": "Grok Build CLI subscription: local harness bridge is configured; quota is provider-owned and not exposed by the bridge."
+    },
+    "codex": {
+      "windows": [
+        { "label": "5h", "cap": null },
+        { "label": "7d", "cap": null },
+        { "label": "30d", "cap": null }
+      ],
+      "estimated": false,
+      "doc": "Codex CLI subscription: local harness bridge is configured; quota is provider-owned and not exposed by the bridge."
+    },
+    "openrouter": {
+      "windows": [
+        { "label": "5h", "cap": null },
+        { "label": "7d", "cap": null },
+        { "label": "30d", "cap": null }
+      ],
+      "estimated": false,
+      "doc": "OpenRouter API: metered provider; this view shows local usage only and does not infer a subscription percentage."
+    }
+  }
+}

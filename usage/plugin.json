@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "name": "opencode-usage",
+  "description": "Subscription usage and context HUD",
+  "server": "usage/server.ts",
+  "tui": "usage/tui-active/usage.tsx",
+  "assets": [
+    "usage/usage-collector.ts",
+    "usage/account-cli.ts",
+    "usage/usage-plans.json",
+    "usage/usage-plugin.json"
+  ]
+}

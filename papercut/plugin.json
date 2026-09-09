@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "name": "opencode-papercuts",
+  "description": "Local shell failure memory",
+  "server": "papercut/server.ts",
+  "assets": []
+}

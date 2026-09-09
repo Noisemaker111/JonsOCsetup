@@ -1,0 +1,3 @@
+# Captured external setup files are exact-byte imports, checked by manifest hash.
+/setup/files/** -text
+/setup/recovery/live-checkout/files/** -text
