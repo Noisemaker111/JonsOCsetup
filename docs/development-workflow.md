@@ -66,3 +66,17 @@ The installed shortcuts prepare the selected configuration, then launch the nati
 host directly in the existing console. They do not run the PTY supervisor or
 forward terminal input/output. Configuration selection finishes before host launch.
 The managed runtime remains an explicit automation harness, not an interactive shortcut.
+
+### Hub editing source
+
+The non-Git OpenCode hub keeps its existing Quest ledger identity. The reviewed
+`models/dispatch-policy.json` binds its `config` scope to the clean public
+JonsOCsetup checkout. Dispatch validates physical checkout paths and requires a
+clean source, then creates an owned repository worktree and translates
+`config/docs` to `docs`. It never follows the hub's old config junction to choose
+a source. A worker can update the hub Quest only from its verified owned workspace.
+
+Channel state remains under `~/.config/opencode/.channels` after source migration.
+For explicit candidate acceptance, set `OPENCODE_DEV_CANDIDATE` to a prepared dev
+release and invoke `ocd`; the native launcher records that release's load receipt.
+This does not select a release for other launches. Clear the variable afterward.

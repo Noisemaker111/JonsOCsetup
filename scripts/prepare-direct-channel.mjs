@@ -8,7 +8,12 @@ const channel=process.argv[2]
 if(!['dev','stable'].includes(channel))throw Error('Choose dev or stable')
 const repository=join(homedir(),'.config','opencode'),registry=join(repository,'.channels')
 const read=path=>JSON.parse(readFileSync(path,'utf8'))
-const dev=read(join(registry,'dev.json')),root=channel==='dev'?dev.root:repository
+const selectedDev=read(join(registry,'dev.json'))
+// Explicit candidate verification uses the ordinary native launcher and existing dev state.
+const candidate=channel==='dev'?process.env.OPENCODE_DEV_CANDIDATE:undefined
+const dev=candidate?read(join(candidate,'channel-release.json')):selectedDev
+if(candidate&&(dev.channel!=='dev'||dev.root!==candidate))throw Error('Invalid explicit dev candidate')
+const root=channel==='dev'?dev.root:repository
 // Use the selected reviewed helper code, never dirty shared source.
 const {generationRoot,reviewedAgentConfig}=await import(pathToFileURL(join(dev.root,'scripts/runtime-contract.mjs')))
 const {inspectHostExecutable}=await import(pathToFileURL(join(dev.root,'project-router/executable.mjs')))

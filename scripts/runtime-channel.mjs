@@ -10,7 +10,7 @@ const args = process.argv.slice(2), action = args.shift(), channel = args.shift(
 const option = name => { const at=args.indexOf(name); return at < 0 ? undefined : args[at+1] }
 function git(argv, cwd=source) { const p=spawnSync('git',['-C',cwd,...argv],{encoding:'utf8',windowsHide:true,timeout:30000});if(p.status!==0)throw Error(p.stderr||String(p.error));return p.stdout.trim() }
 const common = resolve(source,git(['rev-parse','--git-common-dir']))
-const repository = dirname(common), registry=join(repository,'.channels')
+const repository = dirname(common), runtimeHome=join(homedir(),'.config','opencode'), registry=join(runtimeHome,'.channels')
 function read(path){return JSON.parse(readFileSync(path,'utf8'))}
 function atomic(path,value){mkdirSync(dirname(path),{recursive:true});const tmp=path+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(value,null,2)+'\n');renameSync(tmp,path)}
 function envFor(root, name) {
@@ -57,9 +57,9 @@ if(action==='prepare'){
   atomic(path,{...release,generation:pointer.activeGeneration,evidence:reportPath,previous,activatedAt:new Date().toISOString()})
   console.log(JSON.stringify({active:true,channel,root,commit:release.commit,existingSessions:'unchanged'},null,2))
 }else if(action==='status'){
-  console.log(JSON.stringify(channel==='dev'?(existsSync(join(registry,'dev.json'))?read(join(registry,'dev.json')):{active:false}):{channel,root:repository,activation:read(join(repository,'plugin-activation.json'))},null,2))
+  console.log(JSON.stringify(channel==='dev'?(existsSync(join(registry,'dev.json'))?read(join(registry,'dev.json')):{active:false}):{channel,root:runtimeHome,activation:read(join(runtimeHome,'plugin-activation.json'))},null,2))
 }else if(action==='start'){
-  const root=channel==='stable'?repository:read(join(registry,'dev.json')).root
+  const root=channel==='stable'?runtimeHome:read(join(registry,'dev.json')).root
   const env=envFor(root,channel)
   if(channel==='dev'&&!args.includes('--model'))args.push('--model',read(join(registry,'dev.json')).model)
   await run('node',[join(source,'scripts/opencode-runtime.mjs'),'--config-root',root,...args],process.cwd(),env)

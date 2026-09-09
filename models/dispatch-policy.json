@@ -158,6 +158,19 @@
       "bun",
       "install",
       "--frozen-lockfile"
+    ],
+    "4b6a7cabcc32327a2a818e946a71beffdcf24e3f41e8f2426de86f70b94ab0ce": [
+      "bun",
+      "install",
+      "--frozen-lockfile"
     ]
+  },
+  "sourceByProject": {
+    "4b6a7cabcc32327a2a818e946a71beffdcf24e3f41e8f2426de86f70b94ab0ce": {
+      "projectRoot": "C:/Users/Jk101/Projects/opencode-hub",
+      "directory": "C:/Users/Jk101/.config/opencode/.worktrees/jonsocsetup-public",
+      "root": "C:/Users/Jk101/.config/opencode/.worktrees/jonsocsetup-public",
+      "scopePrefix": "config"
+    }
   }
 }

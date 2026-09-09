@@ -9,6 +9,7 @@ import { join } from "node:path"
 import { questsAPI,QuestError,type StartRun } from "./api"
 import { QuestStore } from "./store"
 import { projectIdentity, physicalDirectory, verifySourceBinding } from "./project"
+import { workerLedgerProject } from "./source-binding"
 import { QuestWorkspaces } from "./workspaces"
 import { questChanges } from "./change-view"
 import { startQuestRun,type QuestHost } from "./runtime"
@@ -20,7 +21,7 @@ export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFi
  const timer=setInterval(()=>void continuation.tick().then(()=>collectWorkflowOutcomes(store)).catch(error=>console.error('[quests] continuation failed',error)),5000);timer.unref()
  const workspaces=new QuestWorkspaces(store.runtime)
  const enrich=(view:any)=>({...view,workspaceSettings:workspaceSettings(options.settingsFile),workspacePreparation:workspaces.preparationStatus(view.project.id),continuation:continuation.status(view.id),changes:questChanges(store.read(view.id)!,workspaces)})
- return {name:"quest",output:{type:"object",additionalProperties:true},description:"Durable project work: list, get, create, update, run. Steps drive progress. For independent dependency-ready steps use run.continue with maxConcurrent (1–16, isolated worktrees); stepModels pins exact per-step routes and taskTags labels learning. Run manages worker workspace, route selection and dispatch internally. Set run.readOnly=true for bounded source research, including non-Git hubs; it permits inspection and assigned-step notes, without shell commands or file writes. Use update.workspaceMode (worktree/shared) for the global future-run setting; run.files reserves relative paths in shared mode. Use update for actual step results, artifacts and reward. Failures throw with a recovery reason; inspect an uncertain run before retrying.",input:QUEST_TOOL_INPUT,execute:async(input:any,context:any)=>{
+ return {name:"quest",output:{type:"object",additionalProperties:true},description:"Durable project work: list, get, create, update, run. Steps drive progress. For independent dependency-ready steps use run.continue with maxConcurrent (1â€“16, isolated worktrees); stepModels pins exact per-step routes and taskTags labels learning. Run manages worker workspace, route selection and dispatch internally. Set run.readOnly=true for bounded source research, including non-Git hubs; it permits inspection and assigned-step notes, without shell commands or file writes. Use update.workspaceMode (worktree/shared) for the global future-run setting; run.files reserves relative paths in shared mode. Use update for actual step results, artifacts and reward. Failures throw with a recovery reason; inspect an uncertain run before retrying.",input:QUEST_TOOL_INPUT,execute:async(input:any,context:any)=>{
   const requestID=context?.id??context?.callID
   if(!context?.sessionID||!requestID)throw new QuestError("HOST_CONTEXT_REQUIRED","Host must supply a session and tool call identity")
   const session=await host.get({sessionID:context.sessionID}),directory=(session?.data??session)?.location?.directory
@@ -31,7 +32,7 @@ export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFi
     const allowed=new Set(memberships.filter(m=>m.questID===input.id).flatMap(m=>m.stepIDs))
     if(!allowed.size||Object.keys(input.update??{}).some(k=>k!=='steps')||input.update?.steps?.some((s:any)=>!allowed.has(s.id)||Object.keys(s).some(k=>!['id','state','note'].includes(k))||typeof s.note==='string'&&s.note.length>8000))throw new QuestError('WORKER_ASSIGNMENT_DENIED','No Quest changes were saved. Workers may report only current assigned step states using update:{steps:[{id:<assigned step>,state:<state>,note:<evidence>}]}. Remove artifacts, reward, detail and all other keys; put artifact paths in note. Retry the corrected update, then get the Quest to verify it. The giver attaches global artifacts/reward and changes definitions.')
    }
-  const trusted={project:projectIdentity(directory),directory:physicalDirectory(directory),sessionID:context.sessionID,requestID}
+  const trusted={project:workerLedgerProject(store,context.sessionID,directory,input.id)??projectIdentity(directory),directory:physicalDirectory(directory),sessionID:context.sessionID,requestID}
   if(input.action==='run'){
    if((input.run?.maxConcurrent!==undefined||input.run?.stepModels!==undefined)&&input.run?.continue!==true)throw new QuestError('INVALID_INPUT','Parallel options require run.continue')
    if((input.run?.maxConcurrent??1)>1&&workspaceSettings(options.settingsFile).workspaceMode!=='worktree')throw new QuestError('WORKSPACE_MODE_REQUIRED','Parallel continuation requires isolated worktrees')
