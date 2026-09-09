@@ -40,8 +40,8 @@ test("favorite-router no longer installs routing hooks", () => {
 
 test("quota lines are injected once, by the plugin that owns quota", () => {
   // Router and models both used to push them into event.system, so every line
-  // appeared twice. The router may still *read* quota — its watchdog reports a
-  // cap when a subagent dies — it just must not own a context hook at all: the
+  // appeared twice. The router may still *read* quota â€” its watchdog reports a
+  // cap when a subagent dies â€” it just must not own a context hook at all: the
   // only reason it had one was quest admission, which is now the quests plugin.
   expect(code(router)).not.toMatch(/session\.hook\("context"/)
   expect(plugin).toMatch(/quotaSummaryLine/)
@@ -59,11 +59,11 @@ test("every system push is a SystemPart object", () => {
 
 test("the models plugin is registered and its policy is a known helper", () => {
   const set = JSON.parse(readFileSync(join(root, "plugin-set.json"), "utf8"))
-  expect(set.serverEntrypoints).toContain("plugins-active/models.ts")
+  expect(set.serverEntrypoints).toContain("models/server.ts")
   expect(set.helpersOutsideDiscovery).toContain("models/model-routing.ts")
 })
 
-test("the models plugin stays small — it is wiring, not logic", () => {
+test("the models plugin stays small â€” it is wiring, not logic", () => {
   const lines = plugin.split("\n").length
   expect(`models.ts lines: ${lines < 200}`).toBe("models.ts lines: true")
 })
