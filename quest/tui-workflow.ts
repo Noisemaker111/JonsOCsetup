@@ -53,7 +53,7 @@ export function returnToQuest(context: any) { const r = returnRoutes.get(context
 export function hasQuestReturn(context: any) { returnVersion(); return returnRoutes.has(context) }
 export function rememberReturn(context:any,q?:Quest) {
   const route=snapshotRoute(context)
-  if(q && route.type==="plugin" && route.name==="quests") route.data={...route.data,...(boardViews.get(context)??{allProjects:q.project?.id!==boardProject(context?.location?.directory??context?.state?.path?.directory).id}),questID:q.id,...(q.archive?{filter:"archived"}:{})}
+  if(route.type==="plugin" && route.name==="quests") route.data={...route.data,...(boardViews.get(context)??{}),...(q?{questID:q.id,...(q.archive?{filter:"archived"}:{})}:{})}
   returnRoutes.set(context,route)
   setReturnVersion(v=>v+1)
 }

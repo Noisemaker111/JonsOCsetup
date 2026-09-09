@@ -147,3 +147,14 @@ test("openWorkerSession falls back to a dialog when there is no live route — t
   expect(alerts.length).toBe(1)
   expect(alerts[0].message).toContain("external codex process")
 })
+
+test('worker navigation preserves selected Quest detail on narrow return',async()=>{
+ const {rememberBoardView,returnToQuest}=await import('../quest/tui-workflow')
+ const routes:any[]=[]
+ const context:any={ui:{router:{current:()=>({type:'plugin',id:'quests',name:'quests',data:{returnRoute:{type:'session',sessionID:'ses_giver'}}}),navigate:(r:any)=>routes.push(r)}},client:{session:{get:async()=>({id:'ses_child',parentID:'ses_giver'})}}}
+ rememberBoardView(context,{questID:'selected-quest',filter:'all',allProjects:false})
+ await navigateQuestSession(context,{sessionID:'ses_child',parentID:'ses_giver',providerID:'openai',modelID:'gpt-6-astra',runtime:'native'} as any)
+ returnToQuest(context)
+ expect(routes[0]).toEqual({type:'session',sessionID:'ses_child'})
+ expect(routes[1].data).toEqual({questID:'selected-quest',filter:'all',allProjects:false,returnRoute:{type:'session',sessionID:'ses_giver'}})
+})

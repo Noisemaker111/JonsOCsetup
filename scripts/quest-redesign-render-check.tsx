@@ -31,19 +31,18 @@ try {
   const run=async(id:string)=>{assert(commands.has(id),"Missing command "+id);await commands.get(id).run();return frame()}
   try {
    let text=await frame();assert(text.includes("Search quests"));assert(text.includes("invoice reminders"));assert(!text.includes("unavailable"))
-   if(width===80){assert(!text.includes("DELIVERABLE"));text=await run("quests.open");assert(text.includes("Back to Quests"));assert(text.includes("DELIVERABLE"));assert(text.indexOf("DELIVERABLE")<text.indexOf("Review and accept"));await run("quests.close");assert(!navigated)}
+   if(width===80){assert(!text.includes("DELIVERABLE"));text=await run("quests.open");assert(text.includes("Back to Quests"));assert(text.includes("QUEST STEPS"));assert(text.includes("Turn in Quest"));await run("quests.close");assert(!navigated)}
    chosen=first.id;text=await run("quests.choose");assert(text.includes("Unique description 1"));assert(!text.includes("Detail for task 11"))
    const lines=text.split("\n");const titleRow=lines.findIndex(l=>l.includes("Fix duplicate invoice"));assert(titleRow>=0)
    await run("quests.detail-down");chosen=second.id;text=await run("quests.choose");assert(text.includes("Unique description 2"),"New selection must reset detail scroll")
-   text=await run("quests.activity");assert(text.includes("No runs recorded"));assert(!text.includes("Unique description 2"))
-   text=await run("quests.changes");assert(text.includes("No worker changes recorded"))
+   for(let n=0;n<5;n++)text=await run("quests.detail-down");assert(text.includes("AGENT LOG"));assert(text.includes("No worker sessions recorded"));assert(commands.has("quests.worker"))
    chosen="invoice";text=await run("quests.search");assert(text.includes("1 matching"));assert(text.includes("invoice reminders"))
    if(width===80)assert(!text.includes("Unique description 1"))
    text=await run("quests.clear-search");assert(text.includes("3 matching"))
-   chosen=ready.id;text=await run("quests.choose");assert(text.indexOf("DELIVERABLE")<text.indexOf("Review and accept"));assert(!text.includes("Detail for task 11"))
+   chosen=ready.id;text=await run("quests.choose");assert(text.includes("Turn in Quest"));assert(!text.includes("Detail for task 11"))
    if(width===80)await run("quests.close")
    await run("quests.close");assert.deepEqual(navigated,{type:"home"})
   } finally {setup.renderer.destroy()}
  }
- console.log("QUEST_REDESIGN_RENDER_OK: narrow navigation, search, selection scroll, tabs, result-first review")
+ console.log("QUEST_REDESIGN_RENDER_OK: narrow navigation, search, selection scroll, visible agent log, turn-in actions")
 } finally {if(prior===undefined)delete process.env.OPENCODE_QUEST_ROOT;else process.env.OPENCODE_QUEST_ROOT=prior;rmSync(ledger,{recursive:true,force:true})}
