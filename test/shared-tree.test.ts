@@ -1,7 +1,8 @@
 /** Owned Quest workspaces and the explicit isolation manager are the only checkout creators. */
 import { expect, test } from "bun:test"
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync, statSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs"
 import { join, relative } from "node:path"
+import { stageCandidate } from "../scripts/plugin-deploy"
 import { isIsolatedWorktree, validateDeclaredWorktree } from "../quest/worktree"
 
 const root = join(import.meta.dir, "..")
@@ -70,13 +71,18 @@ test("bun test is scoped to this repo's test directory", () => {
 
 test("a generation never contains another generation, or the test suite", () => {
   // Staging used to copy the whole repo, so gen N contained gen N-1 (four
-  // deep), 399 duplicate test files and 92 duplicate Quest files — 204 MB that
+  // deep), 399 duplicate test files and 92 duplicate Quest files â€” 204 MB that
   // bun test walked and git tried to track.
-  const pointer = JSON.parse(readFileSync(join(root, "plugin-activation.json"), "utf8"))
-  const active = join(root, "generations", pointer.activeGeneration)
-  for (const forbidden of ["generations", "test", "bench", ".opencode"]) {
-    expect(`${forbidden}: ${existsSync(join(active, forbidden))}`).toBe(`${forbidden}: false`)
-  }
+  const parent = join(root, "tmp"); mkdirSync(parent, { recursive: true })
+  const fixture = mkdtempSync(join(parent, "stage-boundary-"))
+  try {
+    for (const name of ["generations", "test", "bench", ".opencode", "quest"]) {
+      mkdirSync(join(fixture, name)); writeFileSync(join(fixture, name, "fixture.txt"), "source")
+    }
+    const active = stageCandidate(fixture, "fixture")
+    for (const forbidden of ["generations", "test", "bench", ".opencode"]) expect(existsSync(join(active, forbidden))).toBe(false)
+    expect(existsSync(join(active, "quest", "fixture.txt"))).toBe(true)
+  } finally { rmSync(fixture, { recursive: true, force: true }) }
 })
 
 test("generations are build output, not tracked source", () => {
