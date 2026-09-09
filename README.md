@@ -21,6 +21,20 @@ Plugins have their own directories, not their own GitHub repositories. Individua
 
 After channel preparation, **`ocd`** starts dev and **`ocs`** starts stable in the native console. Neither command proxies terminal output. The source for these commands lives in `scripts/install-channel-shortcuts.mjs` and `scripts/start-direct-channel.ps1`.
 
+## Portable skills
+
+These standalone MIT-licensed skills also work outside this personal OpenCode setup. Install one without installing the runtime:
+
+```sh
+npx skills add Noisemaker111/JonsOCsetup --skill ship-fast
+npx skills add Noisemaker111/JonsOCsetup --skill skill-maker
+```
+
+- **[Ship Fast](https://skills.sh/noisemaker111/jonsocsetup/ship-fast)**: verified agent auto-merges into dev, isolated development environments, and human-approved batches into stable. Ask: "Use ship-fast to set up dev and stable for this project." [Source](skills/ship-fast/SKILL.md).
+- **[Skill Maker](https://skills.sh/noisemaker111/jonsocsetup/skill-maker)**: create, check, publish, install and confirm a skill's public listing in one continuous workflow. Ask: "Use skill-maker to make and publish this skill." [Source](skills/skill-maker/SKILL.md).
+
+Installing a skill supplies agent instructions; the agent still needs the project's authorization and actual CI/deployment configuration to carry out changes.
+
 ## Setup
 
 This is a personal Windows setup, not a generic bundled OpenCode distribution. Install the OpenCode2 host, Git, Bun and Node separately. Clone this repository to `~/.config/opencode`, restore dependencies with `bun install --frozen-lockfile`, and review the personal model/provider configuration before using it. Accounts and subscription brokers must be authenticated locally.
