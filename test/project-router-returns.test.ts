@@ -6,7 +6,7 @@ function fixture(){
  const storage={get:async(k:string)=>structuredClone(data.get(k)),set:async(k:string,v:any)=>{data.set(k,structuredClone(v))}}
  const claim=(k:string)=>{if(locks.has(k))throw Error('busy');locks.add(k);return {release(){locks.delete(k)}} as any}
  const host={get:async()=>({agent:'general',model}),create:async()=>({}),prompt:async(x:any)=>{prompts.push(x)}}
- const service=new RouteReturns(storage,host,async()=>({items:[{excerpt:'quest run: Cannot establish selected Git checkout. No worker started.'}]}),claim,()=>now)
+ const service=new RouteReturns(storage,host,async()=>({items:[{role:'assistant',excerpt:'quest run: Cannot establish selected Git checkout. No worker started.'}]}),claim,()=>now)
  const receipt:any={key:'route/one',hubSessionID:'hub',destinationSessionID:'dest',target:{name:'hub project'},state:'bound'}
  return {data,storage,host,service,receipt,prompts,claim,advance(){now+=120001}}
 }
