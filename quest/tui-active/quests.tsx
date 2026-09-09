@@ -1,3 +1,4 @@
+import { useWorkerObservations } from "./worker-observation"
 /** @jsxImportSource @opentui/solid */
 import {workspaceSettings,setWorkspaceMode} from "../workspace-settings"
 import { Plugin } from "../../tui-legacy"
@@ -40,7 +41,7 @@ function currentRoute(context: any): unknown {
  * `data.returnRoute` before navigating in, so the board's back action can
  * navigate back to it instead.
  */
-function openBoard(context: any, questID?: string, filter: QuestFilter = "open") {
+function openBoard(context: any, questID?: string, filter: QuestFilter = "all") {
   if (typeof context?.ui?.router?.navigate === "function") {
     context.ui.router.navigate({ type: "plugin", name: "quests", data: { ...(questID ? { questID } : {}), filter, returnRoute: currentRoute(context) } })
     return
@@ -113,7 +114,7 @@ function Commands(props: { context: any }) {
       { id: "quests.open", title: "Open Quest board", group: "System", palette: true, suggested: true, slash: { name: "quests", aliases: ["quest", "board"] }, run: () => openBoard(props.context) },
       { id: "quests.session", title: "Jump to worker session", group: "System", palette: true, suggested: false, slash: { name: "session", aliases: ["jump"] }, run: () => openSessionPicker(props.context) },
       { id: "quests.new", title: "Start Quest · new giver conversation", group: "Quests", palette: true, slash: { name: "quest-new" }, run: () => createGiver(props.context).catch(error => props.context.ui.dialog.alert({title:"Start Quest",message:String(error)})) },
-      { id: "quests.return", title: "Return to Quest", group: "Quests", palette: true, slash: { name: "quest-back" }, run: () => returnToQuest(props.context) },
+      { id: "quests.return", title: "Return to Quest", group: "Quests", palette: true, slash: { name: "quest-back" }, bind:"ctrl+alt+q", run: () => returnToQuest(props.context) },
     ],
   }))
   return null
@@ -148,7 +149,8 @@ function useQuests(context: any) {
  */
 export function Footer(props: { context: any }) {
   const all = useQuests(props.context)
-  const lines = () => liveWorkerLines(all(), footerWidth(props.context))
+  const observation=useWorkerObservations(props.context,()=>all().flatMap(q=>q.sessions))
+  const lines=()=>all().flatMap(quest=>quest.sessions.map(session=>({quest,session}))).sort((a,b)=>b.session.updatedAt.localeCompare(a.session.updatedAt)).slice(0,2)
   const counts = async () => {
     const picked=await props.context.ui.dialog.select({title:all.error()??"Quest counts · current project",options:QUEST_FILTERS.filter(f=>f.id!=="all").map(f=>({value:f.id,title:`${filterQuests(all(),f.id).length} ${f.label}`}))})
     if(picked)openBoard(props.context,undefined,picked)
@@ -161,7 +163,7 @@ export function Footer(props: { context: any }) {
         <For each={QUEST_FILTERS.filter(f=>!["open","all","archived"].includes(f.id))}>{f=><text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>openBoard(props.context,undefined,f.id))}>{filterQuests(all(),f.id).length} {f.label.toLowerCase()}</text>}</For>
       </Show>
     </box>
-    <For each={lines()}>{(row) => <text fg={C.muted} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context, row.questID))}>{row.line}</text>}</For>
+    <For each={lines()}>{row=><text fg={C.muted} wrapMode="none" truncate onMouseUp={(event:any)=>activate(event,()=>void openWorkerSession(props.context,row.session))}>↳ {observation(row.session).state} · {row.quest.title} · {workerLabel(row.session)} · Open worker (/session)</text>}</For>
   </box>
 }
 

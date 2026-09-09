@@ -31,7 +31,7 @@ export async function reserveDispatch(input:{runID:string;model?:string;policyFi
  let policy:DispatchPolicy
  try{policy=JSON.parse(readFileSync(input.policyFile,"utf8"))}catch{throw new Error("Configure the dispatch policy with authorized routes, quality evidence, budgets and project bootstrap before running a Quest")}
  if(policy.version!==1||!Array.isArray(policy.routes)||!policy.request?.allowedRouteIDs?.length)throw new Error("Invalid dispatch policy: version 1 and an explicit route allowlist are required")
- const snapshot=await loadUsage(),now=input.now??Date.now()
+ const snapshot=await loadUsage({refresh:true}),now=input.now??Date.now()
  let explicitRouteID:string|undefined
  if(input.model){const result=resolveDispatchSelector(policy,input.model);if(!result.route)throw new Error(result.code+': explicit model must resolve to one authorized account/reasoning/service route; use project_route_status candidates, no replacement selected');explicitRouteID=result.route.id}
  for(const route of policy.routes){if(route.admission==="configured-choice")assertConfiguredModel({providerID:route.providerID,id:route.modelID});const linked=accountsForRoute(snapshot,route.providerID,route.modelID);if(linked.length!==1||linked[0].id!==route.accountID)route.verified=false}

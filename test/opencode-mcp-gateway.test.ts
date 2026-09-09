@@ -5,12 +5,14 @@ const wrapper = join(import.meta.dir, "..", "harnesses", "opencode-mcp-stdio.mjs
 
 test("mcp_agent_status ignores a prior completed turn while a continuation runs", async () => {
   let messages: unknown[] = []
+  let active=true,outcome: string|undefined
   const server = Bun.serve({
     port: 0,
     fetch(request) {
       const path = new URL(request.url).pathname
+      if (path.endsWith("/session/active"))return Response.json({data:active?{ses_test:{type:"running"}}:{}})
       if (path.endsWith("/message")) return Response.json({ data: messages })
-      if (path.endsWith("/session/ses_test")) return Response.json({ data: { id: "ses_test", title: "model - task", model: { providerID: "openai", id: "model" } } })
+      if (path.endsWith("/session/ses_test")) return Response.json({ data: { id: "ses_test", title: "model - task", outcome,time:{updated:3,...(outcome?{idle:5}:{})}, model: { providerID: "openai", id: "model" } } })
       return new Response("not found", { status: 404 })
     },
   })
@@ -29,11 +31,13 @@ test("mcp_agent_status ignores a prior completed turn while a continuation runs"
   try {
     const old = { type: "assistant", finish: "stop", time: { completed: 1 }, content: [{ type: "text", text: "old result" }] }
     messages = [{ type: "user", time: { created: 3 }, text: "continue" }, old]
-    expect(await status()).toContain("ses_test: running")
+    expect(await status()).toContain('"state":"running"')
     messages = [{ type: "assistant", finish: "tool-calls", time: { completed: 4 }, content: [] }, { type: "user", time: { created: 3 } }, old]
-    expect(await status()).toContain("ses_test: running")
+    expect(await status()).toContain('"state":"running"')
     messages = [{ type: "assistant", finish: "stop", time: { completed: 5 }, content: [{ type: "text", text: "new result" }] }, { type: "user", time: { created: 3 } }, old]
-    expect(await status()).toContain("ses_test: completed")
+    expect(await status()).toContain('"state":"running"')
+    active=false;outcome="succeeded"
+    expect(await status()).toContain('"state":"completed"')
   } finally {
     server.stop(true)
   }
@@ -53,34 +57,16 @@ test("mcp_agent rejects a bare model ID before creating a session", async () => 
   expect(response.result.content[0].text).toContain("explicit provider/model is required")
 })
 
-test("mcp prefers config-dir live 4096 over state --service port", async () => {
-  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import("node:fs")
-  const { tmpdir } = await import("node:os")
-  const home = mkdtempSync(join(tmpdir(), "mcp-home-"))
-  mkdirSync(join(home, ".config", "opencode"), { recursive: true })
-  mkdirSync(join(home, ".local", "state", "opencode"), { recursive: true })
-  writeFileSync(join(home, ".config", "opencode", "service.json"), JSON.stringify({ password: "secret" }))
-  writeFileSync(join(home, ".local", "state", "opencode", "service.json"), JSON.stringify({ url: "http://127.0.0.1:49374", password: "other", pid: 1 }))
-  const prevHome = process.env.HOME
-  const prevUrl = process.env.OPENCODE_SERVER_URL
-  const prevFile = process.env.OPENCODE_SERVICE_FILE
-  process.env.HOME = home
-  delete process.env.OPENCODE_SERVER_URL
-  process.env.OPENCODE_SERVICE_FILE = join(home, ".config", "opencode", "service.json")
-  try {
-    const { discoverService } = await import("../harnesses/opencode-mcp-stdio.mjs")
-    const svc = discoverService()
-    expect(svc.url).toBe("http://127.0.0.1:4096")
-    expect(svc.password).toBe("secret")
-  } finally {
-    if (prevHome === undefined) delete process.env.HOME
-    else process.env.HOME = prevHome
-    if (prevUrl === undefined) delete process.env.OPENCODE_SERVER_URL
-    else process.env.OPENCODE_SERVER_URL = prevUrl
-    if (prevFile === undefined) delete process.env.OPENCODE_SERVICE_FILE
-    else process.env.OPENCODE_SERVICE_FILE = prevFile
-    rmSync(home, { recursive: true, force: true })
-  }
+test("explicit registration requires a real endpoint and is rediscovered",async()=>{
+ const {mkdtempSync,writeFileSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os')
+ const dir=mkdtempSync(join(tmpdir(),'mcp-discovery-')),file=join(dir,'service.json')
+ const oldFile=process.env.OPENCODE_SERVICE_FILE,oldUrl=process.env.OPENCODE_SERVER_URL
+ try{process.env.OPENCODE_SERVICE_FILE=file;delete process.env.OPENCODE_SERVER_URL
+  const {discoverService}=await import('../harnesses/opencode-mcp-stdio.mjs')
+  writeFileSync(file,JSON.stringify({password:'fixture'}));expect(()=>discoverService()).toThrow('no endpoint')
+  writeFileSync(file,JSON.stringify({url:'http://127.0.0.1:49374',password:'fixture'}));expect(discoverService().url).toBe('http://127.0.0.1:49374')
+  writeFileSync(file,JSON.stringify({url:'http://127.0.0.1:49375',password:'fixture'}));expect(discoverService().url).toBe('http://127.0.0.1:49375')
+ }finally{if(oldFile===undefined)delete process.env.OPENCODE_SERVICE_FILE;else process.env.OPENCODE_SERVICE_FILE=oldFile;if(oldUrl===undefined)delete process.env.OPENCODE_SERVER_URL;else process.env.OPENCODE_SERVER_URL=oldUrl;rmSync(dir,{recursive:true,force:true})}
 })
 
 test("normalizeModel parses provider/model#variant", async () => {
@@ -417,4 +403,18 @@ test("desk move rejection or wrong reported directory never sends a prompt", asy
       expect(JSON.stringify(result)).toMatch(/move rejected|Workspace binding failed/)
     } finally { server.stop(true) }
   }
+})
+
+
+test('dev discovery without scoped state never selects the stable registration',async()=>{
+ const keys=['OPENCODE_SERVER_URL','OPENCODE_SERVICE_FILE','XDG_STATE_HOME','OPENCODE_RELEASE_CHANNEL'],saved=keys.map(k=>process.env[k])
+ try{for(const key of keys)delete process.env[key];process.env.OPENCODE_RELEASE_CHANNEL='dev';const {discoverService}=await import('../harnesses/opencode-mcp-stdio.mjs');expect(()=>discoverService()).toThrow('no scoped XDG_STATE_HOME')}
+ finally{keys.forEach((k,i)=>{if(saved[i]===undefined)delete process.env[k];else process.env[k]=saved[i]})}
+})
+
+test('unsupported activity endpoint retains an existing session as unknown, and permissions show blocked',async()=>{
+ let permissions:any[]=[]
+ const server=Bun.serve({port:0,fetch(request){const path=new URL(request.url).pathname;if(path.endsWith('/session/ses_inspected'))return Response.json({data:{id:'ses_inspected',time:{updated:10}}});if(path.endsWith('/message'))return Response.json({data:[]});if(path.endsWith('/permission'))return Response.json({data:permissions});return new Response('',{status:404})}})
+ try{const call=()=>callDeskTool(server.port,'session_status',{sessionID:'ses_inspected'});expect(JSON.stringify(await call())).toContain('"state":"unknown"');permissions=[{id:'permission'}];expect(JSON.stringify(await call())).toContain('"state":"blocked"')}
+ finally{server.stop(true)}
 })

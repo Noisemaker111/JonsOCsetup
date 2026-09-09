@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { observeWorker, observationFailure } from "../quest/worker-observation.mjs"
 import {QUEST_TOOL_INPUT,QUEST_TOOL_OUTPUT} from "../quest/tool-schema.mjs"
 /**
  * opencode-mcp-stdio.mjs — MCP server that lets any harness (claude-code, codex, grok)
@@ -144,7 +145,7 @@ const TOOLS = [
   },
   {
     name: "session_status",
-    description: "Runtime poll only (running/completed). Not quest check-in.",
+    description: "Inspect owning-host execution, permissions and activity. Unreachable or unknown is not running or completed; Quest step completion is separate.",
     inputSchema: {
       type: "object",
       properties: {
@@ -178,43 +179,26 @@ function log(...args) {
 
 // --- service discovery -------------------------------------------------
 
-/** Live OC2 serve. `opencode2 serve --service` writes a random port into state/. */
-const LIVE_SERVE = "http://127.0.0.1:4096"
-
+/** Follow the host's XDG registration; never guess a port or another channel. */
 export function discoverService() {
-  if (process.env.OPENCODE_SERVER_URL) {
-    return { url: process.env.OPENCODE_SERVER_URL, password: process.env.OPENCODE_PASSWORD || "" }
-  }
-  const configPath = join(homedir(), ".config", "opencode", "service.json")
-  const statePath = join(homedir(), ".local", "state", "opencode", "service.json")
-  const candidates = [
-    process.env.OPENCODE_SERVICE_FILE,
-    configPath,
-    statePath,
-  ].filter(Boolean)
-  const loaded = []
-  for (const path of candidates) {
-    if (!existsSync(path)) continue
-    try {
-      const parsed = JSON.parse(readFileSync(path, "utf8"))
-      const url = parsed.url ? String(parsed.url).replace(/\/+$/, "") : ""
-      const password = parsed.password || process.env.OPENCODE_PASSWORD || ""
-      loaded.push({ url, password, path })
-    } catch { /* try the next candidate */ }
-  }
-  const live = loaded.find((row) => row.url === LIVE_SERVE && row.password)
-  if (live) return { url: live.url, password: live.password }
-  const passwordOnly = loaded.find((row) => !row.url && row.password)
-  if (passwordOnly) return { url: LIVE_SERVE, password: passwordOnly.password }
-  const named = loaded.find((row) => row.url && row.password)
-  if (named) return { url: named.url, password: named.password }
-  return { url: LIVE_SERVE, password: process.env.OPENCODE_PASSWORD || "" }
+ if(process.env.OPENCODE_SERVER_URL)return {url:process.env.OPENCODE_SERVER_URL,password:process.env.OPENCODE_PASSWORD||''}
+ const read=path=>{try{return JSON.parse(readFileSync(path,'utf8'))}catch{return undefined}}
+ const explicit=process.env.OPENCODE_SERVICE_FILE
+ if(explicit){const value=read(explicit);if(!value?.url)throw new Error('Explicit supporting-host registration has no endpoint. Reconnect its owning host; no fallback was attempted.');return {url:value.url,password:value.password||process.env.OPENCODE_PASSWORD||''}}
+ if(process.env.OPENCODE_RELEASE_CHANNEL==='dev'&&!process.env.XDG_STATE_HOME)throw new Error('Owning dev host endpoint unavailable: no scoped XDG_STATE_HOME. Use native Quest inspection; no stable host fallback was attempted.')
+ const state=join(process.env.XDG_STATE_HOME||join(homedir(),'.local','state'),'opencode','service.json')
+ const registered=read(state)
+ if(registered?.url)return {url:registered.url,password:registered.password||''}
+ if(process.env.OPENCODE_RELEASE_CHANNEL==='dev')throw new Error('Owning dev host endpoint unavailable. Use native quest get with inspect.section runs in the originating OpenCode session; no stable host fallback was attempted.')
+ const legacy=read(join(homedir(),'.config','opencode','service.json'))
+ if(legacy?.url)return {url:legacy.url,password:legacy.password||''}
+ throw new Error('No registered supporting-host endpoint. Reconnect the owning host or configure OPENCODE_SERVER_URL; no default port was guessed.')
 }
 
 let cachedApi = null
 /** One `call(method, path, body)` against the instance API, with the envelope peeled. */
 export function api() {
-  if (cachedApi) return cachedApi
+  // Resolve per operation: a supporting host may have changed its registered port.
   const service = discoverService()
   if (!service?.url) throw new Error("opencode service not found (service.json missing and OPENCODE_SERVER_URL not set)")
   const base = service.url.replace(/\/$/, "") + "/api"
@@ -222,13 +206,15 @@ export function api() {
   const password = service.password || process.env.OPENCODE_PASSWORD || ""
   if (password) headers.Authorization = "Basic " + Buffer.from("opencode:" + password).toString("base64")
   cachedApi = async (method, path, body) => {
-    const response = await fetch(base + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+    let response
+    try { response = await fetch(base + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(10000) }) }
+    catch(error) { throw new Error('Supporting host unreachable at '+new URL(base).origin+' ('+(error.cause?.code??error.name)+'). Inspect/reconnect the owning host, then poll again. Worker outcome is unknown; do not duplicate dispatch.') }
     const text = await response.text()
     let parsed
     try { parsed = text ? JSON.parse(text) : undefined } catch { parsed = text }
     if (!response.ok) {
       const detail = typeof parsed === "string" ? parsed : JSON.stringify(parsed ?? "")
-      throw new Error(`${method} ${path} -> ${response.status}${detail ? " " + detail.slice(0, 300) : ""}`)
+      throw Object.assign(new Error(`${method} ${path} -> ${response.status}${detail ? " " + detail.slice(0, 300) : ""}`),{status:response.status})
     }
     // Successful bodies are wrapped as { data: ... }.
     return parsed && typeof parsed === "object" && "data" in parsed ? parsed.data : parsed
@@ -732,8 +718,7 @@ function agentForQuest(cwd, questID) {
 }
 
 /** Messages come back newest-first, so the freshest assistant turn is the first hit. */
-async function latestAssistant(sessionID) {
-  const call = api()
+async function latestAssistant(sessionID, call = api()) {
   const messages = await call("GET", `/session/${sessionID}/message`)
   const items = Array.isArray(messages?.data) ? messages.data : Array.isArray(messages) ? messages : []
   const latestUser = items.findIndex((message) => message?.type === "user" || message?.info?.role === "user")
@@ -822,27 +807,19 @@ async function startAgent(input) {
   }
 }
 
-async function taskStatus(input) {
-  const sessionID = String(input.sessionID || input.runID || "").trim()
-  if (!sessionID) throw new Error("mcp_agent_status: sessionID or runID required")
-  const call = api()
-  const session = await call("GET", `/session/${sessionID}`)
-  const { items, assistant, final } = await latestAssistant(sessionID)
-  // A tool-calls finish means the model is between tool turns, not done.
-  const done = Boolean(final)
-  const state = items.length === 0 ? "queued" : done ? "completed" : "running"
-  return {
-    content: [{
-      type: "text",
-      text: [
-        `Session ${sessionID}: ${state}`,
-        `Title: ${session?.title ?? "(untitled)"}`,
-        `Model: ${session?.model?.providerID ?? "?"}/${session?.model?.id ?? "?"}`,
-        `Messages: ${items.length}${(assistant?.finish ?? assistant?.info?.finish) ? `  Finish: ${assistant?.finish ?? assistant?.info?.finish}` : ""}`,
-        session?.cost != null ? `Cost: ${session.cost}` : "",
-      ].filter(Boolean).join("\n"),
-    }],
-  }
+export async function taskStatus(input) {
+ const sessionID=String(input.sessionID||input.runID||'').trim()
+ if(!/^ses_[A-Za-z0-9_-]+$/.test(sessionID))throw new Error('Use an exact OpenCode worker session identity')
+ let result
+ try {
+  const call=api(),session=await call('GET','/session/'+sessionID)
+  let active
+  try{active=await call('GET','/session/active')}catch(error){if(error.status!==404)throw error}
+  const permissions=await call('GET','/session/'+sessionID+'/permission').catch(error=>{if(error.status===404)return [];throw error})
+  const {items}=await latestAssistant(sessionID,call)
+  result={sessionID,title:session.title,...observeWorker(session,{active:active===undefined?undefined:Object.hasOwn(active,sessionID),messages:items,permissions})}
+ }catch(error){result={sessionID,...observationFailure(error),reason:error.message+' '+observationFailure(error).reason}}
+ return {structuredContent:result,content:[{type:'text',text:JSON.stringify(result)}]}
 }
 
 async function taskOutput(input) {
@@ -1009,7 +986,8 @@ let inFlight = 0
 let stdinClosed = false
 // A tool call outlives the line that started it, so only exit once both the
 // pipe is closed and nothing is still in flight.
-const exitWhenIdle = () => { if (stdinClosed && inFlight === 0) process.exit(0) }
+// Let pending stdout and HTTP handles drain; forced exit crashes Node/libuv on Windows.
+const exitWhenIdle = () => { if (stdinClosed && inFlight === 0) process.exitCode = 0 }
 
 rl.on("line", async (line) => {
   if (!line.trim()) return

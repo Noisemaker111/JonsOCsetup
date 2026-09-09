@@ -1,3 +1,4 @@
+import { inspectWorker } from "../worker-inspection"
 /** @jsxImportSource @opentui/solid */
 import { Show, createSignal } from "solid-js"
 import { TextAttributes } from "@opentui/core"
@@ -5,7 +6,7 @@ import type { Quest } from "../types"
 import type { QuestStore } from "../store"
 import { redact } from "../privacy"
 import { nextQuestStep } from "../steps"
-import { createGiver, giverID, nudgeGiver, runDetails, startDisabled, talkToGiver, turnInDisabled, workflowAPI } from "../tui-workflow"
+import { uncertainRuns, createGiver, giverID, nudgeGiver, runDetails, startDisabled, talkToGiver, turnInDisabled, workflowAPI } from "../tui-workflow"
 import { C, activate, openWorkerSession } from "./quest-board"
 
 function RunDetailDialog(props: { context: any; message: string }) {
@@ -27,11 +28,7 @@ export async function inspectRun(context: any, q: Quest, callID: string) {
   ] })
   if (action === "details") {
     const id=session.openCodeSessionId??session.sessionID
-    let host="No native worker session was confirmed"
-    if(id?.startsWith("ses_")&&!session.harness) {
-      try {const result=await context.client.session.get({sessionID:id});const row=result?.data??result;host=row?.id===id?"Host confirms this session exists; saved run state is shown separately":"Recorded session is missing from this host"}
-      catch(error){host="Host lookup failed: "+redact(error instanceof Error?error.message:String(error))}
-    }
+    let host=JSON.stringify(await inspectWorker(context.client.session,session),null,2)
     const message=runDetails(q,session)+"\n\nHost check: "+host+"\nObserved: "+new Date().toISOString()
     context.ui.dialog.show(()=> <RunDetailDialog context={context} message={message} />)
   }
@@ -53,6 +50,7 @@ export function WorkflowActions(props: { context: any; store: QuestStore; quest:
     { id: "start", key: "s", title: "Start worker session", reason: startDisabled(props.quest()) },
     { id: "progress", key: "p", title: "Check progress / agent log" },
     { id: "nudge", key: "n", title: "Nudge giver", reason: giverID(props.quest()) ? undefined : "Create a giver conversation first" },
+    { id:"archive", key:"z", title:"Archive Quest", reason:uncertainRuns(props.quest()).length?"Reconcile active or uncertain workers before archiving":undefined },
     { id: "turn", key: "t", title: props.quest().archive ? "Reopen Quest" : "Review and accept", reason: props.quest().archive ? undefined : turnInDisabled(props.quest()) },
   ]
   const perform = async (id: string) => {
@@ -73,7 +71,10 @@ export function WorkflowActions(props: { context: any; store: QuestStore; quest:
         if (typeof model !== "string") throw new Error("Host returned an unsupported route input; no worker was started")
         const api = await workflowAPI(props.context, props.store, q)
         const run = await api.run(q.id, typeof model === "string" && model.trim() ? { model: model.trim() } : {})
-        setMessage(`Work ${run.state}. Open Activity for details.`)
+        setMessage(`Work ${run.state}. Check the agent log for live details.`)
+      }
+      if (id === "archive") {
+        if(await props.context.ui.dialog.confirm({title:"Archive Quest",message:"Archive without accepting completion? All work and history are retained.",label:"Archive"})===true)(await workflowAPI(props.context,props.store,q)).update(q.id,{archive:{accepted:false,reason:"User archived from Quest board"}})
       }
       if (id === "turn") {
         const ok = await props.context.ui.dialog.confirm({ title: action.title, message: q.archive ? "Reopen this Quest and retain its history?" : "Have you reviewed the reward and accept the completed work? This explicitly turns in the Quest; it does not publish changes.", label: action.title })
@@ -99,6 +100,8 @@ export function WorkflowActions(props: { context: any; store: QuestStore; quest:
     <box flexDirection="row" flexWrap="wrap" gap={2}>
       <text fg={busy()?C.muted:C.cyan} attributes={TextAttributes.BOLD} onMouseUp={(e:any)=>activate(e,()=>void perform(primary().id))}>[{primary().key}] {primary().title}</text>
       <text fg={C.cyan} onMouseUp={(e:any)=>activate(e,()=>void more())}>[m] More</text>
+      <text fg={C.muted} onMouseUp={(e:any)=>activate(e,()=>void perform("archive"))}>[z] Archive Quest</text>
+      <Show when={primary().id!=="turn"}><text fg={C.green} onMouseUp={(e:any)=>activate(e,()=>void perform("turn"))}>[t] {props.quest().archive?"Reopen":"Turn in Quest"}</text></Show>
     </box>
     <Show when={busy() || message()}><text fg={C.orange} wrapMode="word">{busy()?"Waiting for host…":message()}</text></Show>
   </box>
