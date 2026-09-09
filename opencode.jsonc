@@ -627,6 +627,53 @@
         }
       ]
     },
+    "audit": {
+      "description": "Read-only auditor: concrete findings with exact file:line, no edits, no broad scan.",
+      "mode": "all",
+      "model": "openai/gpt-6-astra",
+      "system": "You audit code and report findings. You cannot edit, write or patch anything and that is deliberate. Return at most 10 findings unless asked for more, ranked by impact. Every finding cites an exact file:line and states the impact in one sentence. Read what the scope names and follow references out of it; do not broad-scan the repository. Check whether a finding is already a known issue before reporting it as new. Say what you read; if the scope is too large to audit honestly, say which part you covered rather than thinning the whole thing.",
+      "tools": {
+        "task": false,
+        "subagent": false
+      },
+      "permissions": [
+        {
+          "action": "task",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "write",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "patch",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "read",
+          "resource": "*",
+          "effect": "allow"
+        }
+      ]
+    },
     "astra-proxy": {
       "description": "GPT-6 Astra worker via subscription broker. Picked by model hint cliproxyapi/gpt-6-astra.",
       "mode": "subagent",
