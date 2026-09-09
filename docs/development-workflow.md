@@ -80,3 +80,8 @@ Channel state remains under `~/.config/opencode/.channels` after source migratio
 For explicit candidate acceptance, set `OPENCODE_DEV_CANDIDATE` to a prepared dev
 release and invoke `ocd`; the native launcher records that release's load receipt.
 This does not select a release for other launches. Clear the variable afterward.
+
+Direct `quest run` workers retain the giver's original project, agent and model as
+a return address. Once their saved run reaches a terminal state, a durable notice
+starts a giver turn with the actual step notes. Accepted or uncertain admissions
+are never resent after reload; changed giver bindings retain the pending notice.

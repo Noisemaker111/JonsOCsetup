@@ -108,7 +108,7 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
     const result = await goals.control({ action, questID, stepIDs: stepIDs.length ? stepIDs : undefined } as any, { sessionID, requestID: 'goal-command:' + (prompt.id ?? crypto.randomUUID()) })
     await ctx.session.synthetic({ sessionID, text: JSON.stringify(result) })
   } }))
-  await ctx.session.hook?.('prompt',async(event:any)=>{if(event.metadata?.projectRouterGoal!==true&&event.metadata?.projectRouterReturn!==true)await goals.steer(event.sessionID)})
+  await ctx.session.hook?.('prompt',async(event:any)=>{if(event.metadata?.projectRouterGoal!==true&&event.metadata?.projectRouterReturn!==true&&event.metadata?.questWorkerReturn!==true)await goals.steer(event.sessionID)})
   const returnTimer=setInterval(()=>void returns.tick().catch(error=>console.error('[project-router] return check failed',error)),5000);returnTimer.unref()
   const abort=new AbortController()
   if(ctx.event?.subscribe)void(async()=>{try{const stream=await ctx.event.subscribe({signal:abort.signal});goals.trigger('live');for await(const event of stream){

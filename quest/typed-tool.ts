@@ -10,18 +10,20 @@ import { questsAPI,QuestError,type StartRun } from "./api"
 import { QuestStore } from "./store"
 import { projectIdentity, physicalDirectory, verifySourceBinding } from "./project"
 import { workerLedgerProject } from "./source-binding"
+import { QuestWorkerReturns } from "./worker-returns"
 import { QuestWorkspaces } from "./workspaces"
 import { questChanges } from "./change-view"
 import { startQuestRun,type QuestHost } from "./runtime"
 import {toolSummary,toolDetail,toolSection} from './tool-projection'
 export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFile?:string;settingsFile?:string;startRun?:StartRun}={}) {
  const baseStart=options.startRun??startQuestRun(store,host,{policyFile:options.policyFile??configuredDispatchPolicyFile(),settingsFile:options.settingsFile})
- const start=trackedStart(store,baseStart,options.settingsFile)
+ const returns=new QuestWorkerReturns(store,host)
+ const start=trackedStart(store,async input=>{await returns.watch(input);return baseStart(input)},options.settingsFile)
  const continuation=new QuestContinuation(store,start,{verifyContext:async(context)=>{const result=await host.get({sessionID:context.sessionID});verifySourceBinding(context,(result?.data??result)?.location?.directory)}})
- const timer=setInterval(()=>void continuation.tick().then(()=>collectWorkflowOutcomes(store)).catch(error=>console.error('[quests] continuation failed',error)),5000);timer.unref()
+ const timer=setInterval(()=>void continuation.tick().then(()=>returns.tick()).then(()=>collectWorkflowOutcomes(store)).catch(error=>console.error('[quests] continuation failed',error)),5000);timer.unref()
  const workspaces=new QuestWorkspaces(store.runtime)
  const enrich=(view:any)=>({...view,workspaceSettings:workspaceSettings(options.settingsFile),workspacePreparation:workspaces.preparationStatus(view.project.id),continuation:continuation.status(view.id),changes:questChanges(store.read(view.id)!,workspaces)})
- return {name:"quest",output:{type:"object",additionalProperties:true},description:"Durable project work: list, get, create, update, run. Steps drive progress. For independent dependency-ready steps use run.continue with maxConcurrent (1â€“16, isolated worktrees); stepModels pins exact per-step routes and taskTags labels learning. Run manages worker workspace, route selection and dispatch internally. Set run.readOnly=true for bounded source research, including non-Git hubs; it permits inspection and assigned-step notes, without shell commands or file writes. Use update.workspaceMode (worktree/shared) for the global future-run setting; run.files reserves relative paths in shared mode. Use update for actual step results, artifacts and reward. Failures throw with a recovery reason; inspect an uncertain run before retrying.",input:QUEST_TOOL_INPUT,execute:async(input:any,context:any)=>{
+ return {name:"quest",output:{type:"object",additionalProperties:true},description:"Durable project work: list, get, create, update, run. Steps drive progress. For independent dependency-ready steps use run.continue with maxConcurrent (1Ã¢â‚¬â€œ16, isolated worktrees); stepModels pins exact per-step routes and taskTags labels learning. Run manages worker workspace, route selection and dispatch internally. Set run.readOnly=true for bounded source research, including non-Git hubs; it permits inspection and assigned-step notes, without shell commands or file writes. Use update.workspaceMode (worktree/shared) for the global future-run setting; run.files reserves relative paths in shared mode. Use update for actual step results, artifacts and reward. Failures throw with a recovery reason; inspect an uncertain run before retrying.",input:QUEST_TOOL_INPUT,execute:async(input:any,context:any)=>{
   const requestID=context?.id??context?.callID
   if(!context?.sessionID||!requestID)throw new QuestError("HOST_CONTEXT_REQUIRED","Host must supply a session and tool call identity")
   const session=await host.get({sessionID:context.sessionID}),directory=(session?.data??session)?.location?.directory
