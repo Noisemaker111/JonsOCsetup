@@ -1,3 +1,4 @@
+import {verifyGiverBinding} from './user-giver'
 import {runtimeQueuePath,devQueueGeneration} from './runtime-queues'
 import {existsSync,mkdirSync,readFileSync,readdirSync,writeFileSync,renameSync} from 'node:fs'
 import {join} from 'node:path'
@@ -27,7 +28,7 @@ export class QuestWorkerReturns {
     const q=this.store.read(row.questID),run=q?.sessions.find(s=>s.runID===row.runID)
     if(!q||!run||!['completed','failed','cancelled'].includes(run.state))continue
     const parent=await this.host.get({sessionID:row.context.sessionID}),session=parent?.data??parent
-    try{verifySourceBinding(row.context,session?.location?.directory)}catch(error){row.error=String(error);this.save(row);continue}
+    try{verifyGiverBinding(this.store,row.context,session)}catch(error){row.error=String(error);this.save(row);continue}
     if(session?.agent!==row.agent||JSON.stringify(session?.model)!==JSON.stringify(row.model)){row.error='Giver model or agent changed; return retained for inspection';this.save(row);continue}
     row.state='sending';this.save(row)
     const steps=q.stages.filter(s=>run.deliverables.includes(s.id)).map(s=>({id:s.id,title:s.title,state:s.status,note:s.note?.slice(0,1500)}))

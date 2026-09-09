@@ -1,3 +1,4 @@
+import {verifyGiverBinding} from './user-giver'
 import {researchGuardReady} from "./shared-guard"
 import {assertBurnLaunchAllowed} from "../usage/telemetry-api"
 import {workspaceSettings} from "./workspace-settings"
@@ -21,7 +22,7 @@ export function startQuestRun(store:QuestStore,host:QuestHost,options:{policyFil
  return async input=>{
   let mode: "worktree"|"shared"
   let directory:string
-  try{directory=input.context.directory??unwrap(await host.get({sessionID:input.context.sessionID}))?.location?.directory;if(input.context.directory)verifySourceBinding(input.context,directory);else verifySourceBinding({...input.context,directory},directory)}catch(error){throw new QuestError("SOURCE_BINDING_FAILED",error instanceof Error?error.message:String(error))}
+  try{const owner=unwrap(await host.get({sessionID:input.context.sessionID}));directory=input.context.directory??owner?.location?.directory;if(input.context.giverDirectory)verifyGiverBinding(store,input.context,owner);else if(input.context.directory)verifySourceBinding(input.context,directory);else verifySourceBinding({...input.context,directory},directory)}catch(error){throw new QuestError("SOURCE_BINDING_FAILED",error instanceof Error?error.message:String(error))}
   try{mode=workspaceSettings(options.settingsFile).workspaceMode}catch(error){throw new QuestError("WORKSPACE_SETTINGS_INVALID",error instanceof Error?error.message:String(error))}
   if(input.readOnly&&!researchGuardReady(host))throw new QuestError("RESEARCH_GUARD_UNAVAILABLE","The host has no verified read-only research guard; no worker was started")
   const source=input.readOnly?undefined:editingSource({project:input.context.project,directory},options.policyFile,input.files)

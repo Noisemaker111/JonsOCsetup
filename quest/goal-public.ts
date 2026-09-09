@@ -1,3 +1,4 @@
+import {giverContext,verifyGiverBinding} from './user-giver'
 /** Goal is an explicit entry into canonical Quest continuation, not another scheduler. */
 import { QuestContinuation } from './continuation'
 import { QuestStore } from './store'
@@ -20,7 +21,7 @@ export function createGoalFacade(host: QuestHost) {
   const start = startQuestRun(store, host, { policyFile: configuredDispatchPolicyFile() })
   const continuation = new QuestContinuation(store, start, { goalMode: true, routeBinding:binding, verifyContext: async context => {
     const result = await host.get({ sessionID: context.sessionID }), session = result?.data ?? result
-    verifySourceBinding(context,session.location?.directory)
+    verifyGiverBinding(store,context,session)
     const row=continuation.goalStatus(context.sessionID).at(-1)
     if(row?.model){const route=binding(row.route?'route:'+row.route.routeID:row.model)
       if(row.route&&JSON.stringify(route)!==JSON.stringify(row.route))throw new QuestError('GOAL_ROUTE_CHANGED','Authorized account/service route changed')
@@ -37,7 +38,7 @@ export function createGoalFacade(host: QuestHost) {
     async event(sessionID:string,eventID:string,success:boolean){const owned=continuation.goalStatus(sessionID).findLast(r=>r.worker&&r.live);if(!owned)return;await continuation.workerEvent(sessionID,eventID,success);const row=continuation.goalStatus(sessionID).at(-1);if(row?.live&&row.state==='running')consumeGoalTerminal(store.runtime,sessionID,eventID);else if(!success||row?.state==='done')finishGoalTerminal(store.runtime,sessionID)},
     async steer(sessionID:string){const rows=continuation.goalStatus(sessionID);for(const row of rows)continuation.pauseGoal(row.context)},
     async verify(input:{questID:string;stepID:string;commandID:string;action?:'bind'|'run'},trusted:{sessionID:string;requestID:string}){
-      const result=await host.get({sessionID:trusted.sessionID}),session=result?.data??result,project=projectIdentity(session.location?.directory),q=store.read(input.questID)
+      const result=await host.get({sessionID:trusted.sessionID}),session=result?.data??result,context=giverContext(store,{...session,id:trusted.sessionID},trusted.requestID,input.questID),project=context.project,q=store.read(input.questID)
       if(!q||q.project?.id!==project.id)throw new QuestError('PROJECT_MISMATCH','Select the owning destination session before verification')
       const assignments=routerWorker(trusted.sessionID),run=q.sessions.findLast(s=>s.openCodeSessionId===trusted.sessionID||s.sessionID===trusted.sessionID)
       if(assignments.length&&(!run||q.sessions.findLast(s=>s.deliverables.includes(input.stepID))!==run||!['executing','waiting'].includes(run.state)))throw new QuestError('WORKER_ASSIGNMENT_DENIED','Verification requires current assigned step ownership')
@@ -46,14 +47,14 @@ export function createGoalFacade(host: QuestHost) {
       const contracts=(q.extensions.routerVerification??{}) as Record<string,string>
       if(input.action==='bind'){if(assignments.length)throw new QuestError('WORKER_ASSIGNMENT_DENIED','Only the giver defines the assigned verification contract');store.apply(q.id,'patched',{extensions:{...q.extensions,routerVerification:{...contracts,[step.id]:input.commandID}}},'quest:verification-contract');return {questID:q.id,stepID:step.id,commandID:input.commandID,bound:true}}
       if((contracts[step.id]??step.commandID)!==input.commandID)throw new QuestError('VERIFICATION_CONTRACT_REQUIRED','The giver must project_verify action=bind this configured command to the assigned step before running it')
-      const outcome=await runKnownCommand(command,session.location.directory,join(store.runtime,'command-logs','verify-'+trusted.requestID.replace(/[^a-zA-Z0-9_-]/g,'')+'.log'))
+      const outcome=await runKnownCommand(command,context.directory!,join(store.runtime,'command-logs','verify-'+trusted.requestID.replace(/[^a-zA-Z0-9_-]/g,'')+'.log'))
       const passed=outcome.exitCode===0&&!outcome.timedOut
       store.apply(q.id,'proof-added',{stageID:step.id,proof:{id:'verify:'+trusted.requestID,kind:'command',at:new Date().toISOString(),attempt:step.attempt,result:passed?'passed':'failed',command:input.commandID,artifact:outcome.logFile,verified:true}},'quest:goal-verify')
        return {questID:q.id,stepID:step.id,result:passed?'passed':'failed',log:outcome.logFile,milliseconds:outcome.milliseconds,exitCode:outcome.exitCode,signal:outcome.signal,timedOut:outcome.timedOut,output:outcome.output,outputTruncated:outcome.outputTruncated,logTruncated:outcome.truncated,evidence:'Inspect this returned command output for the assigned check; the log is a durable artifact, not a required external-file read.'}
     },
     async control(input: { action: 'start' | 'status' | 'pause' | 'cancel' | 'resume'; questID?: string; stepIDs?: string[];model?:string }, trusted: { sessionID: string; requestID: string }) {
       const result = await host.get({ sessionID: trusted.sessionID }), session = result?.data ?? result
-      const context = { ...trusted, project: projectIdentity(session.location?.directory), directory:physicalDirectory(session.location?.directory) }
+      const context = giverContext(store,{...session,id:trusted.sessionID},trusted.requestID,input.questID??(input.action==='resume'||input.action==='pause'||input.action==='cancel'?continuation.goalStatus(trusted.sessionID).at(-1)?.questID:undefined))
       const worker = routerWorker(trusted.sessionID)
       if(input.action==='start'||input.action==='resume'){if(trigger!=='live')throw new QuestError('GOAL_TRIGGER_UNAVAILABLE','Live execution subscription is '+trigger+'; open a fresh verified session before pursuit')}
       if (worker.length && input.action === 'start') {

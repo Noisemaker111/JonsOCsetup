@@ -61,7 +61,9 @@
     "quest/tool-schema.mjs",
     "harnesses/opencode-mcp-stdio.mjs",
     "usage/benchmark-evaluation.ts",
-    "quest/worker-observation.mjs"
+    "quest/worker-observation.mjs",
+    "quest/giver-public.ts",
+    "quest/giver-registry.mjs"
   ],
   "_helperComment": "Imported by a listed entrypoint, not loaded directly by the host. claude-code-session and harness-run are started from favorite-router's isolated component list.",
   "helpersOutsideDiscovery": [

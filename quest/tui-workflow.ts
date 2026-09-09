@@ -1,3 +1,6 @@
+import {ensureUserGiver,userGiverID,adoptQuestGiver,giverContext} from './user-giver'
+import {QuestStore as GiverStore} from './store'
+import {questRoot} from './root'
 import { randomUUID } from "node:crypto"
 import { questsAPI } from "./api"
 import { boardProject, resolveBoardProject } from "./board-project"
@@ -28,7 +31,7 @@ export function turnInDisabled(q: Quest): string | undefined {
 
 /** Explicit persisted ownership only; never guess the current chat is the giver. */
 export function giverID(q: Quest): string | undefined {
-  return q.integrationOwner?.startsWith("ses_") ? q.integrationOwner : undefined
+  return userGiverID()??(q.integrationOwner?.startsWith("ses_") ? q.integrationOwner : undefined)
 }
 export async function verifiedGiver(context: any, q: Quest) {
   const id = giverID(q)
@@ -36,7 +39,7 @@ export async function verifiedGiver(context: any, q: Quest) {
   if (q.sessions.some(s => (s.openCodeSessionId ?? s.sessionID) === id)) throw new Error("Recorded giver is a worker session; ownership needs inspection")
   const row = unwrap(await context.client.session.get({ sessionID: id }))
   if (row?.id !== id) throw new Error("The recorded Quest Giver conversation is missing or deleted")
-  if (!q.project || boardProject(row.location?.directory).id !== q.project.id) throw new Error("Giver project cannot be verified; no unrelated conversation was opened")
+  if (userGiverID()!==id && (!q.project || boardProject(row.location?.directory).id !== q.project.id)) throw new Error("Giver project cannot be verified; no unrelated conversation was opened")
   if (row.parentID ?? row.parent_id) throw new Error("Recorded giver is a child conversation; ownership needs inspection")
   return row
 }
@@ -64,26 +67,21 @@ export async function talkToGiver(context: any, q: Quest) {
   context.ui.router.navigate({ type: "session", sessionID: row.id })
 }
 export async function createGiver(context: any, store?: QuestStore, q?: Quest) {
-  const project = await resolveBoardProject(context,activeSessionID(context))
-  if (!project.id || !project.root) throw new Error(project.error ?? "Project location unavailable")
-  if (q && q.project?.id !== project.id) throw new Error("Open the owning project before creating a giver conversation")
-  if (q && await context.ui.dialog.confirm({ title: "Create Quest Giver conversation", message: "Create and explicitly bind a new giver for this Quest? The previous identity and history will be retained.", label: "Create and bind" }) !== true) return
-  const row = unwrap(await context.client.session.create({ title: q ? "Quest Giver · " + q.title : "New Quest · Quest Giver", agent: "quest-giver", location: { directory: project.root } }))
-  if (!row?.id) throw new Error("Host did not confirm a new session; inspect sessions before retrying")
-  const verified = unwrap(await context.client.session.get({ sessionID: row.id }))
-  if (verified?.id !== row.id || boardProject(verified.location?.directory).id !== project.id) throw new Error("New giver project could not be verified; no Quest binding was changed")
-  if (q && store) store.apply(q.id, "patched", { integrationOwner: row.id, extensions: { ...q.extensions, previousGiver: q.integrationOwner ?? null } }, "quest:giver-create", { expectedRevision: q.revision })
+  const ledger=store??new GiverStore(questRoot()),row=await ensureUserGiver(ledger,context.client.session,activeSessionID(context),context.location?.directory??context.state?.path?.directory??process.cwd())
+  if(q)adoptQuestGiver(ledger,q.id)
   rememberReturn(context,q)
-  context.ui.router.navigate({ type: "session", sessionID: row.id })
+  context.ui.dialog?.clear?.()
+  context.ui.router.navigate({type:'session',sessionID:row.id})
 }
+
 export async function workflowAPI(context: any, store: QuestStore, q: Quest) {
   const sessionID = giverID(q) ?? activeSessionID(context)
   if (!sessionID) throw new Error("Create or resume the Quest Giver conversation first")
   const row = await verifiedGiver(context, q)
-  const project = boardProject(row.location?.directory)
-  const current = await resolveBoardProject(context,activeSessionID(context))
-  if (!project.id || !project.root || current.id !== project.id) throw new Error("Open the Quest's owning project to change or start work")
-  return questsAPI(store, { project: { id: project.id, root: project.root }, sessionID, requestID: randomUUID() }, startQuestRun(store, context.client.session, { policyFile: configuredDispatchPolicyFile() }))
+  const trusted=giverContext(store,row,randomUUID(),q.id)
+  if(trusted.giverDirectory)adoptQuestGiver(store,q.id)
+  else {const current=await resolveBoardProject(context,activeSessionID(context));if(current.id!==trusted.project.id)throw new Error("Open the Quest's owning project to change or start work")}
+  return questsAPI(store,trusted,startQuestRun(store,context.client.session,{policyFile:configuredDispatchPolicyFile()}))
 }
 export async function nudgeGiver(context: any, q: Quest) {
   const row = await verifiedGiver(context, q)

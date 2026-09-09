@@ -12,7 +12,7 @@ import type { Quest, QuestStageStatus } from "./types"
 export class QuestError extends Error {
   constructor(public code: string, message: string, public retryable = false, public runID?: string) { super(message) }
 }
-export type QuestContext = { project: ProjectIdentity; /** Internal host-derived location; never tool input. */ directory?: string; sessionID: string; requestID: string }
+export type QuestContext = { project: ProjectIdentity; /** Internal host-derived location; never tool input. */ directory?: string; /** Verified user-giver origin, separate from the selected worker project. */ giverDirectory?: string; sessionID: string; requestID: string }
 export type CreateQuest = { title: string; description: string; steps: { title: string; detail?:string; needs?: string[]; id?: string; commandID?: string }[]; reward?: string }
 export type UpdateQuest = { title?: string; description?: string; reward?: string; steps?: { id: string; state: QuestStageStatus; title?: string; detail?: string; needs?: string[]; note?: string }[]; artifacts?: { name: string; path?: string; uri?: string; label?: string }[]; archive?: { reason?: string; accepted: boolean } | null }
 export type RunQuest = { readOnly?: boolean; stepIDs?: string[]; model?: string; files?: string[] }

@@ -12,6 +12,7 @@ try {
   [Environment]::SetEnvironmentVariable($property.Name,$property.Value,'Process')
  }
  $nativeArgs=@('--standalone')
+ if($plan.giverSessionID -and $HostArguments -notcontains '--session' -and $HostArguments -notcontains '-s'){$nativeArgs+=@('--session',$plan.giverSessionID)}
  for($i=0;$i -lt $HostArguments.Count;$i++){
   if($HostArguments[$i] -eq '--cwd'){$i++;if($i -ge $HostArguments.Count){throw '--cwd needs a directory'}; $nativeArgs+=$HostArguments[$i]}
   else{$nativeArgs+=$HostArguments[$i]}

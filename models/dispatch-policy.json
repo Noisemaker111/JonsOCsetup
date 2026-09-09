@@ -170,7 +170,8 @@
       "projectRoot": "C:/Users/Jk101/Projects/opencode-hub",
       "directory": "C:/Users/Jk101/.config/opencode/.worktrees/jonsocsetup-public",
       "root": "C:/Users/Jk101/.config/opencode/.worktrees/jonsocsetup-public",
-      "scopePrefix": "config"
+      "scopePrefix": "config",
+      "loadedDevRelease": true
     }
   }
 }

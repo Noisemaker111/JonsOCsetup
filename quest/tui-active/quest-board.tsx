@@ -1,3 +1,4 @@
+import {userGiverID} from '../user-giver'
 import { useWorkerObservations } from "./worker-observation"
 import { nudgeGiver } from "../tui-workflow"
 /** @jsxImportSource @opentui/solid */
@@ -429,7 +430,7 @@ function ContractDetail(props: { context: any; store: QuestStore; quest: () => Q
 export function QuestBoard(props: { context: any; initialQuestID?: string; initialFilter?: QuestFilter; initialAllProjects?: boolean; returnRoute?: unknown }) {
   const store = new QuestStore(projectRoot(props.context))
   const [records,setRecords] = createSignal<Quest[]>([])
-  const [allProjects,setAllProjects] = createSignal(props.initialAllProjects===true)
+  const [allProjects,setAllProjects] = createSignal(props.initialAllProjects??Boolean(userGiverID()))
   const [project,setProject] = createSignal(boardProject(props.context?.location?.directory??props.context?.state?.path?.directory))
   const [filter,setFilter] = createSignal<QuestFilter>(props.initialFilter??"all")
   const [query,setQuery] = createSignal("")
