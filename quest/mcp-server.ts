@@ -1,3 +1,4 @@
+import {readContinuations} from './runtime-queues'
 import {existsSync,readFileSync} from 'node:fs'
 import {join} from 'node:path'
 import {questChanges} from './change-view'
@@ -56,7 +57,7 @@ export function questMCP(options:{store?:QuestStore}={}){
          case 'runs':value=q.sessions;break
          case 'artifacts':value=q.evidence;break
          case 'changes':value=questChanges(q,new QuestWorkspaces(store.runtime));break
-         case 'continuation':{const file=join(store.runtime,'continuations.json');value=existsSync(file)?JSON.parse(readFileSync(file,'utf8')).filter((row:{questID:string})=>row.questID===q.id):[];break}
+         case 'continuation':{value=readContinuations(store.runtime).filter((row:{questID:string})=>row.questID===q.id);break}
          default:throw new QuestError('INVALID_INPUT','Unknown inspect section')
         }
         output={id:q.id,project:q.project,...toolSection(value,section,input.inspect.offset,input.inspect.limit)};break

@@ -85,3 +85,9 @@ Direct `quest run` workers retain the giver's original project, agent and model 
 a return address. Once their saved run reaches a terminal state, a durable notice
 starts a giver turn with the actual step notes. Accepted or uncertain admissions
 are never resent after reload; changed giver bindings retain the pending notice.
+
+Dev continuation queues and worker-return notices are scoped to the loaded immutable
+generation. An older open dev session cannot claim a newer generation's queued work.
+Inspection retains all queue histories; a new admission refuses another generation's
+active continuation until it is explicitly cancelled. Cancellation preserves already
+launched workers and their evidence. No queue is silently migrated on reload.

@@ -1,3 +1,4 @@
+import {runtimeQueuePath,devQueueGeneration} from './runtime-queues'
 import {existsSync,mkdirSync,readFileSync,readdirSync,writeFileSync,renameSync} from 'node:fs'
 import {join} from 'node:path'
 import {acquireLock} from './locking'
@@ -9,8 +10,8 @@ import type {QuestHost} from './runtime'
 type Notice={questID:string;runID:string;context:QuestContext;agent?:string;model?:unknown;state:'waiting'|'sending'|'accepted'|'unknown';error?:string}
 /** Direct Quest runs have a return address even when no project_route was used. */
 export class QuestWorkerReturns {
- constructor(readonly store:QuestStore,readonly host:QuestHost){}
- private directory(){return join(this.store.runtime,'worker-returns')}
+ constructor(readonly store:QuestStore,readonly host:QuestHost,readonly generation=devQueueGeneration()){}
+ private directory(){return runtimeQueuePath(this.store.runtime,'worker-returns',this.generation)}
  private save(row:Notice){const path=join(this.directory(),row.runID+'.json');mkdirSync(this.directory(),{recursive:true});const tmp=path+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(row));renameSync(tmp,path)}
  async watch(input:Parameters<StartRun>[0]){
   const parent=await this.host.get({sessionID:input.context.sessionID}),session=parent?.data??parent
