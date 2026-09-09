@@ -1,3 +1,4 @@
+import {QuestWorkerReturns} from './worker-returns'
 import {ensureUserGiver,userGiverID,adoptQuestGiver,giverContext} from './user-giver'
 import {QuestStore as GiverStore} from './store'
 import {questRoot} from './root'
@@ -81,7 +82,8 @@ export async function workflowAPI(context: any, store: QuestStore, q: Quest) {
   const trusted=giverContext(store,row,randomUUID(),q.id)
   if(trusted.giverDirectory)adoptQuestGiver(store,q.id)
   else {const current=await resolveBoardProject(context,activeSessionID(context));if(current.id!==trusted.project.id)throw new Error("Open the Quest's owning project to change or start work")}
-  return questsAPI(store,trusted,startQuestRun(store,context.client.session,{policyFile:configuredDispatchPolicyFile()}))
+  const start=startQuestRun(store,context.client.session,{policyFile:configuredDispatchPolicyFile()}),returns=new QuestWorkerReturns(store,context.client.session)
+  return questsAPI(store,trusted,async input=>{await returns.watch(input);return start(input)})
 }
 export async function nudgeGiver(context: any, q: Quest) {
   const row = await verifiedGiver(context, q)
