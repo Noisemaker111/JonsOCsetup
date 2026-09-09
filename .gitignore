@@ -25,3 +25,4 @@ cliproxyapi/static/
 
 setup/recovery/
 setup/live-checkout-status.txt
+channel-release.json
