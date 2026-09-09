@@ -23,7 +23,7 @@ function envFor(root, name) {
   return env
 }
 async function run(exe,argv,cwd,env){const child=spawn(exe,argv,{cwd,env,stdio:'inherit',windowsHide:true});const code=await new Promise((done,reject)=>{child.once('error',reject);child.once('exit',done)});if(code!==0)throw Error(`${exe} exited ${code}`)}
-if(!['dev','stable'].includes(channel))throw Error('Choose dev or stable: prepare dev --ref <branch> --model <exact-route>; activate dev --candidate <root> --evidence <report>; start dev|stable; status dev|stable')
+if(!['dev','stable'].includes(channel))throw Error('Choose dev or stable: prepare dev --ref <branch> --model <exact-route>; activate dev --candidate <root> --evidence <report>; promote stable --ref <ref>; start dev|stable; status dev|stable')
 if(action==='prepare'){
   if(channel!=='dev')throw Error('Stable preparation requires the separate explicitly authorized dev-to-master promotion')
   const ref=option('--ref'),model=option('--model');if(!ref||!model)throw Error('Preparation requires a committed ref and exact real model route')
@@ -56,10 +56,31 @@ if(action==='prepare'){
   writeFileSync(join(registry,'start.mjs'),"import {readFileSync} from 'node:fs';import {dirname,join} from 'node:path';import {fileURLToPath,pathToFileURL} from 'node:url';const root=JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)),'dev.json'),'utf8')).root;process.argv.splice(2,0,'start');await import(pathToFileURL(join(root,'scripts/runtime-channel.mjs')).href);\n")
   atomic(path,{...release,generation:pointer.activeGeneration,evidence:reportPath,previous,activatedAt:new Date().toISOString()})
   console.log(JSON.stringify({active:true,channel,root,commit:release.commit,existingSessions:'unchanged'},null,2))
+}else if(action==='promote'){
+  // Stable stops being the shared working tree. Promotion pins it to a merged master
+  // revision, exactly as dev is pinned, so a launch never depends on dirty local files.
+  if(channel!=='stable')throw Error('Promotion selects the stable release; dev uses activate')
+  const ref=option('--ref');if(!ref)throw Error('Promotion requires the merged master ref')
+  const commit=git(['rev-parse','--verify',ref+'^{commit}'])
+  git(['fetch','origin','master'])
+  git(['merge-base','--is-ancestor',commit,'origin/master'])
+  if(git(['rev-parse',commit+'^{tree}'])!==git(['rev-parse','origin/master^{tree}']))throw Error('Promote the current merged master tree')
+  const root=join(registry,'releases','stable-'+commit.slice(0,12)+'-'+Date.now())
+  mkdirSync(dirname(root),{recursive:true});git(['worktree','add','--detach',root,commit])
+  await run('bun',['install','--frozen-lockfile'],root,process.env)
+  const pointer=read(join(root,'plugin-activation.json'))
+  if(pointer.evidence?.ok!==true||pointer.evidence.sourceCommit!==commit)throw Error('Stable candidate validation does not match source')
+  const path=join(registry,'stable.json'),previous=existsSync(path)?read(path):undefined
+  atomic(join(root,'channel-release.json'),{schema:1,channel,commit,root,promotedAt:new Date().toISOString()})
+  atomic(path,{schema:1,channel,commit,root,generation:pointer.activeGeneration,previous,activatedAt:new Date().toISOString()})
+  console.log(JSON.stringify({active:true,channel,root,commit,existingSessions:'unchanged'},null,2))
 }else if(action==='status'){
-  console.log(JSON.stringify(channel==='dev'?(existsSync(join(registry,'dev.json'))?read(join(registry,'dev.json')):{active:false}):{channel,root:runtimeHome,activation:read(join(runtimeHome,'plugin-activation.json'))},null,2))
+  const stablePath=join(registry,'stable.json')
+  const stableStatus=existsSync(stablePath)?read(stablePath):{channel:'stable',root:runtimeHome,pinned:false,activation:read(join(runtimeHome,'plugin-activation.json'))}
+  console.log(JSON.stringify(channel==='dev'?(existsSync(join(registry,'dev.json'))?read(join(registry,'dev.json')):{active:false}):stableStatus,null,2))
 }else if(action==='start'){
-  const root=channel==='stable'?runtimeHome:read(join(registry,'dev.json')).root
+  const stableSelected=join(registry,'stable.json')
+  const root=channel==='stable'?(existsSync(stableSelected)?read(stableSelected).root:runtimeHome):read(join(registry,'dev.json')).root
   const env=envFor(root,channel)
   if(channel==='dev'&&!args.includes('--model'))args.push('--model',read(join(registry,'dev.json')).model)
   await run('node',[join(source,'scripts/opencode-runtime.mjs'),'--config-root',root,...args],process.cwd(),env)

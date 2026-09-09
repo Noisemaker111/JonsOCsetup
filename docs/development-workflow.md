@@ -46,6 +46,19 @@ and verify the stable release. Do not serve an unmerged branch as stable. Keep
 the preceding stable release available; rollback selects it for new sessions
 without terminating existing work.
 
+Promotion pins stable to that merged revision with `runtime:channel promote stable
+--ref <merged-master-ref>`. It builds an owned release under `.channels/releases`,
+checks the ref against `origin/master` by tree, and writes `.channels/stable.json`
+with the previous selection retained for rollback. Until a stable release has been
+promoted on a machine, stable still resolves to the repository, so nothing changes
+for an existing setup until the first promotion.
+
+Before that first promotion, stable launches from the shared working tree, which
+means uncommitted and untracked files are part of what runs. Dev has never had that
+property because it resolves through `.channels/dev.json`. A pinned stable closes
+that gap: both channels then launch a reviewed commit, and neither depends on the
+state of anyone's checkout.
+
 ## Channel isolation
 
 Dev has separate host sessions, UI preferences, Quests and telemetry. Existing
