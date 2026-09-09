@@ -71,7 +71,7 @@ export function WorkflowActions(props: { context: any; store: QuestStore; quest:
         if (typeof model !== "string") throw new Error("Host returned an unsupported route input; no worker was started")
         const api = await workflowAPI(props.context, props.store, q)
         const run = await api.run(q.id, typeof model === "string" && model.trim() ? { model: model.trim() } : {})
-        setMessage(`Work ${run.state}. Open Activity for details.`)
+        setMessage(`Work ${run.state}. Check the agent log for live details.`)
       }
       if (id === "archive") {
         if(await props.context.ui.dialog.confirm({title:"Archive Quest",message:"Archive without accepting completion? All work and history are retained.",label:"Archive"})===true)(await workflowAPI(props.context,props.store,q)).update(q.id,{archive:{accepted:false,reason:"User archived from Quest board"}})
@@ -101,7 +101,7 @@ export function WorkflowActions(props: { context: any; store: QuestStore; quest:
       <text fg={busy()?C.muted:C.cyan} attributes={TextAttributes.BOLD} onMouseUp={(e:any)=>activate(e,()=>void perform(primary().id))}>[{primary().key}] {primary().title}</text>
       <text fg={C.cyan} onMouseUp={(e:any)=>activate(e,()=>void more())}>[m] More</text>
       <text fg={C.muted} onMouseUp={(e:any)=>activate(e,()=>void perform("archive"))}>[z] Archive Quest</text>
-      <text fg={C.green} onMouseUp={(e:any)=>activate(e,()=>void perform("turn"))}>[t] {props.quest().archive?"Reopen":"Turn in Quest"}</text>
+      <Show when={primary().id!=="turn"}><text fg={C.green} onMouseUp={(e:any)=>activate(e,()=>void perform("turn"))}>[t] {props.quest().archive?"Reopen":"Turn in Quest"}</text></Show>
     </box>
     <Show when={busy() || message()}><text fg={C.orange} wrapMode="word">{busy()?"Waiting for host…":message()}</text></Show>
   </box>

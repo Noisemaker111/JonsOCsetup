@@ -31,7 +31,7 @@ try {
   const run=async(id:string)=>{assert(commands.has(id),"Missing command "+id);await commands.get(id).run();return frame()}
   try {
    let text=await frame();assert(text.includes("Search quests"));assert(text.includes("invoice reminders"));assert(!text.includes("unavailable"))
-   if(width===80){assert(!text.includes("DELIVERABLE"));text=await run("quests.open");assert(text.includes("Back to Quests"));assert(text.includes("QUEST STEPS"));assert(text.includes("Turn in Quest"));await run("quests.close");assert(!navigated)}
+   if(width===80){assert(!text.includes("DELIVERABLE"));text=await run("quests.open");assert(text.includes("Back to Quests"));assert(text.includes("QUEST STEPS"));assert(text.includes("Review and accept"));await run("quests.close");assert(!navigated)}
    chosen=first.id;text=await run("quests.choose");assert(text.includes("Unique description 1"));assert(!text.includes("Detail for task 11"))
    const lines=text.split("\n");const titleRow=lines.findIndex(l=>l.includes("Fix duplicate invoice"));assert(titleRow>=0)
    await run("quests.detail-down");chosen=second.id;text=await run("quests.choose");assert(text.includes("Unique description 2"),"New selection must reset detail scroll")
@@ -39,7 +39,7 @@ try {
    chosen="invoice";text=await run("quests.search");assert(text.includes("1 matching"));assert(text.includes("invoice reminders"))
    if(width===80)assert(!text.includes("Unique description 1"))
    text=await run("quests.clear-search");assert(text.includes("3 matching"))
-   chosen=ready.id;text=await run("quests.choose");assert(text.includes("Turn in Quest"));assert(!text.includes("Detail for task 11"))
+   chosen=ready.id;text=await run("quests.choose");assert(text.includes("Review and accept"));assert.equal((text.match(/\[t\]/g)??[]).length,1);assert(!text.includes("Detail for task 11"))
    if(width===80)await run("quests.close")
    await run("quests.close");assert.deepEqual(navigated,{type:"home"})
   } finally {setup.renderer.destroy()}
