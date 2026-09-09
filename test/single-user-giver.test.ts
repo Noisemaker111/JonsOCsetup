@@ -3,7 +3,7 @@ import {mkdtempSync,mkdirSync,rmSync} from 'node:fs'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {QuestStore} from '../quest/store'
-import {bindUserGiver,ensureUserGiver,selectUserGiverProject,userGiverID,verifyGiverBinding} from '../quest/user-giver'
+import {installUserGiverContext,bindUserGiver,ensureUserGiver,selectUserGiverProject,userGiverID,verifyGiverBinding} from '../quest/user-giver'
 import {typedQuestTool} from '../quest/typed-tool'
 
 test('one verified giver owns different projects without moving the conversation or creating givers',async()=>{
@@ -50,4 +50,10 @@ test('a different returned session or a worker cannot claim the user giver',asyn
   await expect(bindUserGiver(store,{get:async()=>({id:'ses_child',parentID:'ses_parent',agent:'quest-giver',location:{directory:root}})},'ses_child')).rejects.toThrow('never an execution worker')
   expect(userGiverID(store)).toBeUndefined()
  }finally{rmSync(root,{recursive:true,force:true})}
+})
+
+test('first native discussion registers the giver before any Quest exists and rejects a second giver turn',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'one-giver-discussion-')),store=new QuestStore(root);let context:any,creates=0
+ const host={hook:async(_name:string,fn:any)=>context=fn,get:async({sessionID}:any)=>({id:sessionID,agent:'quest-giver',location:{directory:root}}),create:async()=>{creates++}}
+ try{await installUserGiverContext(store,host);await context({agent:'general',sessionID:'ses_general'});expect(userGiverID(store)).toBeUndefined();await context({agent:'quest-giver',sessionID:'ses_user'});expect(userGiverID(new QuestStore(root))).toBe('ses_user');await expect(context({agent:'quest-giver',sessionID:'ses_other'})).rejects.toThrow('existing Quest Giver');expect(creates).toBe(0)}finally{rmSync(root,{recursive:true,force:true})}
 })
