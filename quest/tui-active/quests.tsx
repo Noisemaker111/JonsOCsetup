@@ -114,6 +114,8 @@ function Commands(props: { context: any }) {
   createEffect(() => {
     const route=props.context.ui.router.current()
     if(route?.type!=="home")return
+    // Let the native composer create the first session and retain its focus/model.
+    if(!userGiverID()&&!quests(projectRoot(props.context)).some(q=>q.integrationOwner?.startsWith("ses_")))return
     let cancelled=false
     onCleanup(()=>{cancelled=true})
     void ensureUserGiver(new QuestStore(questRoot()),props.context.client.session,undefined,props.context.location?.directory??props.context.state?.path?.directory??process.cwd()).then(row=>{

@@ -45,3 +45,12 @@ export function verifyGiverBinding(store:QuestStore,context:QuestContext,session
  if(userGiverID(store)!==context.sessionID||session?.id!==context.sessionID||physicalDirectory(session.location.directory)!==physicalDirectory(context.giverDirectory))throw new QuestError('GIVER_BINDING_CHANGED','The user giver changed; inspect before dispatch')
  eligible(store,session);verifySourceBinding(context,context.directory!)
 }
+
+/** Register the native first conversation even when its first turn is only discussion. */
+export async function installUserGiverContext(store:QuestStore,host:any){
+ await host.hook?.('context',async(event:any)=>{
+  if(event.agent!=='quest-giver'||worker(store,event.sessionID))return
+  const row=await ensureUserGiver(store,host,event.sessionID)
+  if(row.id!==event.sessionID)throw new QuestError('SINGLE_GIVER_REQUIRED','Continue in your existing Quest Giver: '+row.id)
+ })
+}

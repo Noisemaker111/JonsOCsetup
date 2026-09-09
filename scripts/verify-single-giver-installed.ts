@@ -39,12 +39,14 @@ const fixture=mkdtempSync(join(tmpdir(),'quest-giver-projects-'));report.project
  try{
   await wait('plugin load',()=>{const e=events.find(e=>e.type==='launched');if(!e||!existsSync(e.receipt))return false;row.loads=readFileSync(e.receipt,'utf8').trim().split('\n').map(s=>JSON.parse(s));return row.loads.some((l:any)=>l.component==='tui:quests'&&l.sourceCommit===sourceCommit)})
   await wait('composer',async()=>(await frame()).includes('Quests'));await sleep(1000)
-  await wait('giver persisted',()=>{if(!existsSync(database))return false;db??=new Database(database,{readonly:true});const found:any=db.query("select id from session_v2 where agent='quest-giver' and parent_id is null order by time_created asc").get();report.giverSessionID=found?.id;return !!report.giverSessionID})
+  await sleep(2500);await capture('giver-before-prompt')
   for(number=1;number<=2;number++){
    if(holds().length)throw Error('Existing account ownership; no duplicate worker')
    dir=join(output,'run-'+number);mkdirSync(dir,{recursive:true});row={number,sessionID:report.giverSessionID,ok:false,screenshots:[]}
    const directory=join(fixture,'project-'+number);mkdirSync(directory);writeFileSync(join(directory,'AGENTS.md'),'This is installed verification project '+number+'. Read only this instruction file and report the project number honestly. Do not edit files or run shell commands.\n');report.projects.push(directory)
    await command(`Select project ${directory.replaceAll('\\','/')} with project_select action select. Create exactly one Quest titled Installed single giver project ${number}, description: Read only AGENTS.md in the assigned directory, save INSTALLED_QUEST_WORKER_VERIFIED plus the actual project number and one instruction in assigned step note with quest update.steps state done, then quest get to verify. Create one step id inspect, title Read AGENTS.md and save verified result. Run that newly created Quest exactly once with run {stepIDs:["inspect"],model:"${workerModel}",readOnly:true}. Do not retry, substitute models, create another giver, or release account holds. Report the admission and finish without polling. When an automatic Quest worker update arrives, get the saved Quest, report its actual saved finding and outcome, and finish without dispatch.`)
+   await capture('submitted-request')
+   await wait('giver persisted',()=>{if(!existsSync(database))return false;db??=new Database(database,{readonly:true});const found:any=db.query("select id from session_v2 where agent='quest-giver' and parent_id is null order by time_created asc").get();report.giverSessionID??=found?.id;row.sessionID=report.giverSessionID;return !!row.sessionID})
    let q:any
    await wait('Quest created',()=>{q=readAllQuests(store.projectRoot).find(r=>r.quest?.title==='Installed single giver project '+number)?.quest;return !!q})
   await wait('worker bound',()=>!!store.read(q.id)?.sessions[0]?.sessionID)
