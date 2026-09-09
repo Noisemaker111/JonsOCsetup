@@ -12,6 +12,7 @@ import {RouteReservations} from '../models/route-reservations'
 test('unfinished transcript and old outcome do not imply running or completion',()=>{
  const session={time:{updated:20,idle:10},outcome:'succeeded',model:{providerID:'p',id:'m',variant:'medium'}}
  expect(observeWorker(session).state).toBe('unknown')
+ expect(observeWorker({...session,time:{updated:20,idle:30}},{messages:[{time:{created:40}}]}).state).toBe('unknown')
  expect(observeWorker(session,{active:true}).state).toBe('running')
  expect(observeWorker(session,{active:true,permissions:[{}]}).state).toBe('blocked')
  expect(observeWorker({...session,time:{updated:20,idle:30}},{active:false}).state).toBe('completed')

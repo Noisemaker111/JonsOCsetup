@@ -202,7 +202,7 @@ export async function openWorkerSession(context: any, session: QuestSession) {
   const id = session.openCodeSessionId ?? session.sessionID
   const message = session.runtime === "claude-code" || session.harness
     ? `${id ?? "This worker"} ran on an external ${session.harness ?? "harness"} process, not a native OpenCode session — there is no transcript to open.`
-    : `Could not open a live session for ${id ?? "this worker"}. It may have finished and been pruned from the host.`
+    : `Could not verify the recorded session for ${id ?? "this worker"} on this host. Check the owning host connection and the worker status. A missing, external or pruned session does not prove the worker completed; ownership is retained.`
   try { await dialog.alert({ title: "Can't open session", message: `${message} ${workerLabel(session)} · ${session.task ?? session.taskDescription ?? "delegated work"}` }) } catch {}
 }
 

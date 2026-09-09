@@ -45,7 +45,7 @@ test("giver navigation uses recorded owner, verifies project and preserves board
     const context={ui:{router:{current:()=>board,navigate:(r:any)=>navigated.push(r)}},client:{session:{get:async()=>({id:"ses_giver",location:{directory:f.root}})}}}
     expect(f.q().integrationOwner).toBe("ses_giver")
     await talkToGiver(context,f.q());expect(navigated[0]).toEqual({type:"session",sessionID:"ses_giver"})
-    returnToQuest(context);expect(navigated[1]).toEqual({...board,data:{...board.data,allProjects:true}})
+    returnToQuest(context);expect(navigated[1]).toEqual(board)
     await expect(talkToGiver(context,{...f.q(),integrationOwner:undefined})).rejects.toThrow("No Quest Giver")
     await expect(talkToGiver(context,{...f.q(),project:{id:"other",root:f.root}})).rejects.toThrow("project")
     expect(navigated).toHaveLength(2)

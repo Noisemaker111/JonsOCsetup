@@ -5,7 +5,7 @@ export function observeWorker(session, { active, messages = [], permissions = []
   const base = { checkedAt: new Date(now).toISOString(), lastActivityAt: updated ? new Date(updated).toISOString() : undefined, provider: session?.model?.providerID, model: session?.model?.id, reasoning: session?.model?.variant ?? 'unknown' }
   if (permissions.length) return { ...base, state: 'blocked', reason: 'Waiting for a host permission response' }
   if (active === true) return { ...base, state: 'running', reason: 'Owning host confirms an active execution' }
-  if (session?.outcome && time(session.time?.idle) >= time(session.time?.updated)) return { ...base, state: { succeeded: 'completed', failed: 'failed', interrupted: 'interrupted' }[session.outcome] ?? 'unknown', outcome: session.outcome, completedAt: new Date(time(session.time.idle)).toISOString(), reason: 'Persisted host execution outcome; step completion is separate' }
+  if (session?.outcome && time(session.time?.idle) >= updated) return { ...base, state: { succeeded: 'completed', failed: 'failed', interrupted: 'interrupted' }[session.outcome] ?? 'unknown', outcome: session.outcome, completedAt: new Date(time(session.time.idle)).toISOString(), reason: 'Persisted host execution outcome; step completion is separate' }
   return { ...base, state: 'unknown', reason: active === false ? 'Host has no active execution or terminal outcome; inspect the session before retrying' : 'Session exists; live execution is not confirmed' }
 }
 export function observationFailure(error, now = Date.now()) {

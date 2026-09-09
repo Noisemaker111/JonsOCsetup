@@ -47,3 +47,19 @@ test("configured fallback is admitted atomically and recorded on the reservation
 })
 
 test("duplicate settlement retains first completion boundary",()=>{const dir=mkdtempSync(join(tmpdir(),"settle-once-"));try{const file=join(dir,"holds.json");writeFileSync(file,JSON.stringify({version:1,reservations:[{runID:"r",routeID:"r",accountID:"a",windows:{},state:"active",reason:"fixture"}]}));const ledger=new RouteReservations(file);ledger.settle("r",{state:"settled",completedAt:"2026-09-06T10:00:00Z"});ledger.settle("r",{state:"settled",completedAt:"2026-09-06T10:01:00Z"});expect(ledger.get("r")?.completedAt).toBe("2026-09-06T10:00:00Z")}finally{rmSync(dir,{recursive:true,force:true})}})
+
+ test('uncalibrated hold needs a terminal outcome and a newer quota observation',()=>{
+ const root=mkdtempSync(join(tmpdir(),'route-uncalibrated-'))
+ try{
+  const input=structuredClone(fixture) as PlannerInput,route=input.routes[0],account=input.accounts.find(a=>a.id===route.accountID)!
+  input.request.allowedRouteIDs=[route.id];input.request.explicitRouteID=route.id;route.admission='configured-choice';route.quotaPerTask={};account.windows.forEach(w=>w.remaining=80)
+  const ledger=new RouteReservations(join(root,'reservations.json'))
+  expect(ledger.reserve('existing',input).reservation?.exclusive).toBe(true)
+  expect(ledger.reserve('next',input).decision?.excluded.flatMap(r=>r.reasons).join(' ')).toContain('outcome active')
+  ledger.settle('existing',{state:'settled',completedAt:input.request.now})
+  expect(ledger.reserve('next',input).decision?.excluded.flatMap(r=>r.reasons).join(' ')).toContain('terminal outcome confirmed')
+  account.observedAt=new Date(Date.parse(input.request.now)+1000).toISOString();input.request.now=account.observedAt
+  expect(ledger.reserve('next',input).reservation?.runID).toBe('next')
+  expect(ledger.reserve('next',input).decision).toBeNull()
+ }finally{rmSync(root,{recursive:true,force:true})}
+ })

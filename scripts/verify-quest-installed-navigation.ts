@@ -16,13 +16,14 @@ mkdirSync(output,{recursive:true})
 const sourceDB=join(root,'.visual-e2e','preparation','host.db'),source=new Database(sourceDB,{readonly:true})
 const actual:any=source.query('select id,directory,model,time_idle,idle_outcome from session_v2 order by time_created desc limit 1').get();source.close()
 if(actual?.idle_outcome!=='succeeded')throw Error('Real model readiness transcript must have a persisted successful outcome')
+const project=projectIdentity(root)
 const model=JSON.parse(actual.model),sourceCommit=JSON.parse(readFileSync(join(root,'plugin-activation.json'),'utf8')).evidence.sourceCommit
 const report:any={ok:false,scope:'Installed native session navigation with real readiness transcript; Quest dispatch acceptance remains separate',root,sourceCommit,model,runs:[]}
 const sleep=(ms:number)=>new Promise(r=>setTimeout(r,ms))
 for(const width of [160,80]){
  const dir=join(output,'width-'+width);mkdirSync(dir,{recursive:true});const dbPath=join(dir,'host.db');copyFileSync(sourceDB,dbPath)
  for(const suffix of ['-wal','-shm'])if(existsSync(sourceDB+suffix))copyFileSync(sourceDB+suffix,dbPath+suffix)
- const store=new QuestStore(join(dir,'ledger')),q=store.create({id:'01j00000000000000000000977',title:'Verify installed Quest session navigation',objective:'Open the actual recorded readiness session and return',description:'Navigation check against the real configured model readiness transcript. This does not claim a successful Quest worker dispatch.',contractVersion:2,project:projectIdentity(root),stages:[{id:'navigate',title:'Check keyboard and mouse navigation',status:'pending',needs:[]}],reward:'Installed captures and saved verification result'})
+ const store=new QuestStore(join(dir,'ledger')),q=store.create({id:'01j00000000000000000000977',title:'Verify installed Quest session navigation',objective:'Open the actual recorded readiness session and return',description:'Navigation check against the real configured model readiness transcript. This does not claim a successful Quest worker dispatch.',contractVersion:2,project,stages:[{id:'navigate',title:'Check keyboard and mouse navigation',status:'pending',needs:[]}],reward:'Installed captures and saved verification result'})
  store.apply(q.id,'session-planned',{callID:'navigation-evidence',role:'worker',model:model.providerID+'/'+model.id,deliverables:[]},'verification')
  store.apply(q.id,'session-claimed',{callID:'navigation-evidence',sessionID:actual.id,providerID:model.providerID,modelID:model.id,reasoningEffort:model.variant,runtime:'native',scope:{worktree:actual.directory},task:'Real model readiness transcript (navigation reference)'},'verification')
  store.apply(q.id,'session-state',{callID:'navigation-evidence',state:'completed',result:'Host persisted succeeded during model readiness'},'verification')
@@ -37,11 +38,11 @@ for(const width of [160,80]){
  async function wait(label:string,check:()=>any){const end=Date.now()+45000;while(Date.now()<end){if(await check())return;if(exited)throw Error(label+': host exited '+errors);await sleep(200)}throw Error(label+': timed out')}
  async function capture(name:string){await setup.renderOnce();const path=join(dir,name+'.png');writeFileSync(path,new Resvg(frameToSvg(setup.captureSpans(),name,HOST_PALETTE),{font:{loadSystemFonts:true}}).render().asPng());writeFileSync(join(dir,name+'.txt'),await frame());result.screenshots.push(path)}
  async function key(name:string,sequence:string){send(Buffer.from(terminal.encodeKey(new KeyEvent({name,sequence,raw:sequence,ctrl:false,meta:false,shift:false,option:false,number:false,eventType:'press',source:'raw'}))).toString());await sleep(350)}
- async function command(value:string){send(Buffer.from(terminal.encodePaste(new TextEncoder().encode(value))).toString());await sleep(350);await key('return','\r')}
+ async function command(value:string){send(Buffer.from(terminal.encodePaste(new TextEncoder().encode(value))).toString());await sleep(1000);await key('return','\r')}
  try{
   await wait('plugin load',()=>{const launch=events.find(e=>e.type==='launched');if(!launch||!existsSync(launch.receipt))return false;result.loads=readFileSync(launch.receipt,'utf8').trim().split('\n').map(s=>JSON.parse(s));return result.loads.some((l:any)=>l.component==='tui:quests'&&l.sourceCommit===sourceCommit)})
   await wait('home',async()=>(await frame()).includes('Quests'))
-  await command('/quest');await wait('board',async()=>(await frame()).includes('Search quests'))
+  await sleep(1000);await command('/quests');await wait('board',async()=>(await frame()).includes('Search quests'))
   if(width<100)await key('return','\r')
   await wait('details',async()=>(await frame()).includes('QUEST STEPS'));await capture('board')
   await key('w','w');await wait('actual native session',async()=>(await frame()).includes('CHANNEL_REAL_MODEL_READY'));await capture('worker-keyboard')

@@ -145,7 +145,7 @@ const TOOLS = [
   },
   {
     name: "session_status",
-    description: "Runtime poll only (running/completed). Not quest check-in.",
+    description: "Inspect owning-host execution, permissions and activity. Unreachable or unknown is not running or completed; Quest step completion is separate.",
     inputSchema: {
       type: "object",
       properties: {
@@ -185,6 +185,7 @@ export function discoverService() {
  const read=path=>{try{return JSON.parse(readFileSync(path,'utf8'))}catch{return undefined}}
  const explicit=process.env.OPENCODE_SERVICE_FILE
  if(explicit){const value=read(explicit);if(!value?.url)throw new Error('Explicit supporting-host registration has no endpoint. Reconnect its owning host; no fallback was attempted.');return {url:value.url,password:value.password||process.env.OPENCODE_PASSWORD||''}}
+ if(process.env.OPENCODE_RELEASE_CHANNEL==='dev'&&!process.env.XDG_STATE_HOME)throw new Error('Owning dev host endpoint unavailable: no scoped XDG_STATE_HOME. Use native Quest inspection; no stable host fallback was attempted.')
  const state=join(process.env.XDG_STATE_HOME||join(homedir(),'.local','state'),'opencode','service.json')
  const registered=read(state)
  if(registered?.url)return {url:registered.url,password:registered.password||''}
@@ -717,8 +718,7 @@ function agentForQuest(cwd, questID) {
 }
 
 /** Messages come back newest-first, so the freshest assistant turn is the first hit. */
-async function latestAssistant(sessionID) {
-  const call = api()
+async function latestAssistant(sessionID, call = api()) {
   const messages = await call("GET", `/session/${sessionID}/message`)
   const items = Array.isArray(messages?.data) ? messages.data : Array.isArray(messages) ? messages : []
   const latestUser = items.findIndex((message) => message?.type === "user" || message?.info?.role === "user")
@@ -813,9 +813,11 @@ export async function taskStatus(input) {
  let result
  try {
   const call=api(),session=await call('GET','/session/'+sessionID)
-  const active=await call('GET','/session/active')
-  const {items}=await latestAssistant(sessionID)
-  result={sessionID,title:session.title,...observeWorker(session,{active:Object.hasOwn(active??{},sessionID),messages:items})}
+  let active
+  try{active=await call('GET','/session/active')}catch(error){if(error.status!==404)throw error}
+  const permissions=await call('GET','/session/'+sessionID+'/permission').catch(error=>{if(error.status===404)return [];throw error})
+  const {items}=await latestAssistant(sessionID,call)
+  result={sessionID,title:session.title,...observeWorker(session,{active:active===undefined?undefined:Object.hasOwn(active,sessionID),messages:items,permissions})}
  }catch(error){result={sessionID,...observationFailure(error),reason:error.message+' '+observationFailure(error).reason}}
  return {structuredContent:result,content:[{type:'text',text:JSON.stringify(result)}]}
 }
@@ -984,7 +986,8 @@ let inFlight = 0
 let stdinClosed = false
 // A tool call outlives the line that started it, so only exit once both the
 // pipe is closed and nothing is still in flight.
-const exitWhenIdle = () => { if (stdinClosed && inFlight === 0) process.exit(0) }
+// Let pending stdout and HTTP handles drain; forced exit crashes Node/libuv on Windows.
+const exitWhenIdle = () => { if (stdinClosed && inFlight === 0) process.exitCode = 0 }
 
 rl.on("line", async (line) => {
   if (!line.trim()) return

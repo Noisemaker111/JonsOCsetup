@@ -404,3 +404,17 @@ test("desk move rejection or wrong reported directory never sends a prompt", asy
     } finally { server.stop(true) }
   }
 })
+
+
+test('dev discovery without scoped state never selects the stable registration',async()=>{
+ const keys=['OPENCODE_SERVER_URL','OPENCODE_SERVICE_FILE','XDG_STATE_HOME','OPENCODE_RELEASE_CHANNEL'],saved=keys.map(k=>process.env[k])
+ try{for(const key of keys)delete process.env[key];process.env.OPENCODE_RELEASE_CHANNEL='dev';const {discoverService}=await import('../harnesses/opencode-mcp-stdio.mjs');expect(()=>discoverService()).toThrow('no scoped XDG_STATE_HOME')}
+ finally{keys.forEach((k,i)=>{if(saved[i]===undefined)delete process.env[k];else process.env[k]=saved[i]})}
+})
+
+test('unsupported activity endpoint retains an existing session as unknown, and permissions show blocked',async()=>{
+ let permissions:any[]=[]
+ const server=Bun.serve({port:0,fetch(request){const path=new URL(request.url).pathname;if(path.endsWith('/session/ses_inspected'))return Response.json({data:{id:'ses_inspected',time:{updated:10}}});if(path.endsWith('/message'))return Response.json({data:[]});if(path.endsWith('/permission'))return Response.json({data:permissions});return new Response('',{status:404})}})
+ try{const call=()=>callDeskTool(server.port,'session_status',{sessionID:'ses_inspected'});expect(JSON.stringify(await call())).toContain('"state":"unknown"');permissions=[{id:'permission'}];expect(JSON.stringify(await call())).toContain('"state":"blocked"')}
+ finally{server.stop(true)}
+})
