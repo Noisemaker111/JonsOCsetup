@@ -334,6 +334,8 @@ export class QuestTracker {
       this.indexedAt = 0
       return "identified"
     }
+    // Shutdown is a resumable ownership handoff, not a terminal worker outcome.
+    if(type==="session.execution.interrupted"&&data.reason==="shutdown")return
     const terminal = HOST_TERMINAL[type]
     if (terminal && typeof data.sessionID === "string") {
       if(deferGoalTerminal(this.store.runtime,data.sessionID,()=>this.onHostEvent(event),String((event as any).id??data.executionID??'')))return
@@ -347,7 +349,7 @@ export class QuestTracker {
       if (ref.session.runID) {
         try { const workspaces=new QuestWorkspaces(this.store.runtime);if(workspaces.get(ref.session.runID)){workspaces.collect(ref.session.runID);workspaces.releaseShared(ref.session.runID,this.store,"Observed host terminal outcome")} } catch(error) { console.error("[quests] Could not collect completed worker changes",error) }
         const file=dispatchReservationFile(this.store.runtime)
-        if(existsSync(file))try{const ledger=new RouteReservations(file),reservation=ledger.get(ref.session.runID),requests=readRequests().records.filter(r=>r.sessionID===data.sessionID);const currency=reservation?.cash?.currency;const cash=currency&&requests.length&&requests.every(r=>r.completedAt!==undefined&&r.actualCharge?.currency===currency&&Number.isFinite(r.actualCharge.value)&&r.actualCharge.value>=0)?{currency,value:aggregateTelemetry(requests).actualCharges[currency]}:undefined;ledger.settle(ref.session.runID,{state:"settled",completedAt:new Date().toISOString(),cash})}catch(error){console.error("[quests] Could not settle route reservation",error)}
+        if(existsSync(file))try{const ledger=new RouteReservations(file),reservation=ledger.get(ref.session.runID),requests=readRequests().records.filter(r=>r.sessionID===data.sessionID);const currency=reservation?.cash?.currency;const cash=currency&&requests.length&&requests.every(r=>r.completedAt!==undefined&&r.actualCharge?.currency===currency&&Number.isFinite(r.actualCharge.value)&&r.actualCharge.value>=0)?{currency,value:aggregateTelemetry(requests).actualCharges[currency]}:undefined;ledger.settle(ref.session.runID,{state:"settled",completedAt:typeof data.observedAt==="string"?data.observedAt:new Date().toISOString(),cash})}catch(error){console.error("[quests] Could not settle route reservation",error)}
       }
       this.indexedAt = 0
       return "settled"

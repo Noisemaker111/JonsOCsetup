@@ -1,3 +1,4 @@
+import { reconcileWorkers, inspectWorker } from "./worker-inspection"
 import {configureLearning,trackedStart,collectWorkflowOutcomes} from "./outcome-tracking"
 import {workspaceSettings,setWorkspaceMode} from "./workspace-settings"
 import { prepareWorkspaceLater } from "./workspace-pool"
@@ -20,10 +21,13 @@ export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFi
  const returns=new QuestWorkerReturns(store,host)
  const start=trackedStart(store,async input=>{await returns.watch(input);return baseStart(input)},options.settingsFile)
  const continuation=new QuestContinuation(store,start,{verifyContext:async(context)=>{const result=await host.get({sessionID:context.sessionID});verifySourceBinding(context,(result?.data??result)?.location?.directory)}})
- const timer=setInterval(()=>void continuation.tick().then(()=>returns.tick()).then(()=>collectWorkflowOutcomes(store)).catch(error=>console.error('[quests] continuation failed',error)),5000);timer.unref()
+ let polling=false
+ const tick=async()=>{if(polling)return;polling=true;try{await reconcileWorkers(store,host);await continuation.tick();await returns.tick();collectWorkflowOutcomes(store)}catch(error){console.error('[quests] inspection/continuation failed',error)}finally{polling=false}}
+ const timer=setInterval(()=>void tick(),5000);timer.unref()
  const workspaces=new QuestWorkspaces(store.runtime)
  const enrich=(view:any)=>({...view,workspaceSettings:workspaceSettings(options.settingsFile),workspacePreparation:workspaces.preparationStatus(view.project.id),continuation:continuation.status(view.id),changes:questChanges(store.read(view.id)!,workspaces)})
- return {name:"quest",output:{type:"object",additionalProperties:true},description:"Durable project work: list, get, create, update, run. Steps drive progress. For independent dependency-ready steps use run.continue with maxConcurrent (1-16, isolated worktrees); stepModels pins exact per-step routes and taskTags labels learning. Run manages worker workspace, route selection and dispatch internally. Set run.readOnly=true for bounded source research, including non-Git hubs; it permits inspection and assigned-step notes, without shell commands or file writes. Use update.workspaceMode (worktree/shared) for the global future-run setting; run.files reserves relative paths in shared mode. Use update for actual step results, artifacts and reward. Failures throw with a recovery reason; inspect an uncertain run before retrying.",input:QUEST_TOOL_INPUT,execute:async(input:any,context:any)=>{
+ return {name:"quest",output:{type:"object",additionalProperties:true},description:"Durable project work: list, get, create, update, run. Steps drive progress. For independent dependency-ready steps use run.continue with maxConcurrent (1-16, isolated worktrees); stepModels pins exact per-step routes and taskTags labels learning. Run manages worker workspace, route selection and dispatch internally. Set run.readOnly=true for bounded source research, including non-Git hubs; it permits inspection and assigned-step notes, without shell commands or file writes. Use update.workspaceMode (worktree/shared) for the global future-run setting; run.files reserves relative paths in shared mode. Use update for actual step results, artifacts and reward. For live progress use get with inspect.section runs: host observations are separate from saved run states. Failures throw with a recovery reason; inspect an uncertain run before retrying.",input:QUEST_TOOL_INPUT,execute:async(input:any,context:any)=>{
+  if(["get","run"].includes(input.action))await reconcileWorkers(store,host)
   const requestID=context?.id??context?.callID
   if(!context?.sessionID||!requestID)throw new QuestError("HOST_CONTEXT_REQUIRED","Host must supply a session and tool call identity")
   const session=await host.get({sessionID:context.sessionID}),directory=(session?.data??session)?.location?.directory
@@ -51,7 +55,7 @@ export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFi
    if(input.action==='list')result={diagnostics:result.diagnostics.slice(0,10),items:result.items.map((item:any)=>toolSummary(store.read(item.id)!)),nextOffset:result.nextOffset,detail:'Use get with inspect.section for bounded full evidence'}
    if(['get','update'].includes(input.action)){
     const q=store.read(input.id)!
-    if(input.inspect){const section=input.inspect.section;const values:any={description:q.description,reward:q.reward,steps:q.stages,runs:q.sessions,artifacts:q.evidence,changes:result.changes,continuation:result.continuation};if(!(section in values))throw new QuestError('INVALID_INPUT','Unknown inspect section');result={id:q.id,project:q.project,...toolSection(values[section],section,input.inspect.offset,input.inspect.limit)}}
+    if(input.inspect){const section=input.inspect.section;const values:any={description:q.description,reward:q.reward,steps:q.stages,runs:await Promise.all(q.sessions.map(async run=>({...run,observation:await inspectWorker(host,run)}))),artifacts:q.evidence,changes:result.changes,continuation:result.continuation};if(!(section in values))throw new QuestError('INVALID_INPUT','Unknown inspect section');result={id:q.id,project:q.project,...toolSection(values[section],section,input.inspect.offset,input.inspect.limit)}}
     else result=toolDetail(q)
    }
    collectWorkflowOutcomes(store)

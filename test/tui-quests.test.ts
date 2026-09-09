@@ -86,11 +86,11 @@ test("workerStatusLine renders '<emoji> <State> — <short title> — <model>[, 
   expect(code).toMatch(/FOOTER_MAX_LINES/)
 })
 
-test("Footer teleports live worker lines from the ledger into the chat footer slot — one source, no giver-typed status — and each line is 1:1 clickable to its own Quest", () => {
-  expect(src).toMatch(/liveWorkerLines\(all\(\), footerWidth\(props\.context\)\)/)
-  // Each row is a click target to the one Quest it came from, same activate()/openBoard convention as the count line above it.
-  expect(src).toMatch(/onMouseUp=\{\(event: any\) => activate\(event, \(\) => openBoard\(props\.context, row\.questID\)\)\}/)
-  expect(src).toMatch(/<For each=\{lines\(\)\}>/)
+test("Footer observes workers through the host and opens the actual session",()=>{
+ expect(src).toContain('useWorkerObservations(props.context')
+ expect(src).toContain('openWorkerSession(props.context,row.session)')
+ expect(src).toContain('observation(row.session).state')
+ expect(src).not.toContain('liveWorkerLines(all(), footerWidth(props.context))')
 })
 
 test("back returns to the route that was live before the board opened, not always a new chat", () => {

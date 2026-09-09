@@ -149,20 +149,18 @@ export function installQuestEvents(ctx: { event?: { subscribe?: Function } }, qu
   state[HOST_EVENTS] = { installed: true, controller }
   const handle = (event: unknown) => { try { quests.onHostEvent(event) } catch (error) { console.error("[quests] host event error:", error) } }
   queueMicrotask(async () => {
-    try {
-      const stream = await subscribe({ signal: controller.signal })
-      if (stream && typeof stream[Symbol.asyncIterator] === "function") {
-        for await (const event of stream) handle(event)
-      } else if (stream && typeof stream.next === "function") {
-        for (;;) { const res = await stream.next(); if (res.done) break; handle(res.value) }
-      } else {
-        console.error("[quests] unsupported host event stream shape")
-      }
-    } catch (error) {
-      console.error("[quests] host event subscription failed:", error)
-    } finally {
-      if (state[HOST_EVENTS]?.controller === controller) state[HOST_EVENTS] = { installed: false, controller }
+    let delay=1000
+    while(!controller.signal.aborted){
+      try {
+        const stream=await subscribe({signal:controller.signal})
+        if(!stream||typeof stream[Symbol.asyncIterator]!=="function")throw new Error("Unsupported host event stream shape")
+        for await(const event of stream){if(controller.signal.aborted)break;handle(event);delay=1000}
+      }catch(error){if(!controller.signal.aborted)console.error("[quests] host event connection lost; reconnecting and polling persisted outcomes:",error)}
+      if(controller.signal.aborted)break
+      await new Promise<void>(done=>{const finish=()=>{clearTimeout(timer);controller.signal.removeEventListener('abort',finish);done()};const timer=setTimeout(finish,delay);timer.unref();controller.signal.addEventListener('abort',finish,{once:true})})
+      delay=Math.min(delay*2,30000)
     }
+    if(state[HOST_EVENTS]?.controller===controller)state[HOST_EVENTS]={installed:false,controller}
   })
 }
 

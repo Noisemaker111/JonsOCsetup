@@ -34,7 +34,7 @@ export class RouteReservations {
         if (reservation.state !== "settled" || !(Date.parse(account.observedAt) > Date.parse(reservation.completedAt ?? ""))) account.concurrentWorkers = (account.concurrentWorkers ?? 0) + 1
         if (reservation.exclusive) {
           // This is a concurrency hold, not an attributed consumption estimate.
-          if (reservation.state !== "settled" || !(Date.parse(account.observedAt) > Date.parse(reservation.completedAt ?? ""))) account.dispatchHold = "Uncalibrated worker hold: " + reservation.runID + "; await its terminal outcome and a fresh quota observation"
+          if (reservation.state !== "settled" || !(Date.parse(account.observedAt) > Date.parse(reservation.completedAt ?? ""))) account.dispatchHold = "Uncalibrated worker hold: " + reservation.runID + (reservation.state === "settled" ? "; terminal outcome confirmed at " + reservation.completedAt + "; await a newer quota observation (latest " + account.observedAt + ")" : "; outcome " + reservation.state + "; await its terminal outcome and a fresh quota observation")
           continue
         }
         // A finished worker does not by itself refresh the provider's balance.

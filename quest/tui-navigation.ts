@@ -1,3 +1,4 @@
+import { rememberReturn } from "./tui-workflow"
 import { nativeSessionNavigation, type WorkerIdentity } from "../orchestration/dispatch"
 import type { QuestSession } from "./types"
 import { resolve } from "node:path"
@@ -42,6 +43,8 @@ export async function navigateQuestSession(context: any, session: QuestSession):
     ? { type: "session" as const, sessionID: row.id }
     : identity ? nativeSessionNavigation(identity, { id: row?.id, parentID: row?.parentID ?? row?.parent_id }) : undefined
   if (!route || typeof context?.ui?.router?.navigate !== "function") return false
+  rememberReturn(context)
+  context.ui.dialog?.clear?.()
   context.ui.router.navigate(route)
   return true
 }

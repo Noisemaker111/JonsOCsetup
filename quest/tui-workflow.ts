@@ -51,7 +51,7 @@ export function rememberBoardView(context:object,data:{questID?:string;filter:st
 const [returnVersion, setReturnVersion] = createSignal(0)
 export function returnToQuest(context: any) { const r = returnRoutes.get(context); if (r) context.ui.router.navigate(r) }
 export function hasQuestReturn(context: any) { returnVersion(); return returnRoutes.has(context) }
-function rememberReturn(context:any,q?:Quest) {
+export function rememberReturn(context:any,q?:Quest) {
   const route=snapshotRoute(context)
   if(q && route.type==="plugin" && route.name==="quests") route.data={...route.data,...(boardViews.get(context)??{allProjects:q.project?.id!==boardProject(context?.location?.directory??context?.state?.path?.directory).id}),questID:q.id,...(q.archive?{filter:"archived"}:{})}
   returnRoutes.set(context,route)
