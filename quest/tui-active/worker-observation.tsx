@@ -1,6 +1,8 @@
+/** @jsxImportSource @opentui/solid */
+// Keep reactive hooks in the host-transformed TUI module graph.
 import { createSignal, createEffect, onCleanup } from 'solid-js'
-import { observeWorker, observationFailure, boundedInspection } from './worker-observation.mjs'
-import type { QuestSession } from './types'
+import { observeWorker, observationFailure, boundedInspection } from '../worker-observation.mjs'
+import type { QuestSession } from '../types'
 const unwrap=(v:any)=>v?.data??v
 export function useWorkerObservations(context:any,runs:()=>QuestSession[]) {
  const [observations,setObservations]=createSignal<Record<string,any>>({})

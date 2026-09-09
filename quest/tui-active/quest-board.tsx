@@ -1,4 +1,4 @@
-import { useWorkerObservations } from "../tui-worker-observation"
+import { useWorkerObservations } from "./worker-observation"
 import { nudgeGiver } from "../tui-workflow"
 /** @jsxImportSource @opentui/solid */
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"

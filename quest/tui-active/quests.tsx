@@ -1,4 +1,4 @@
-import { useWorkerObservations } from "../tui-worker-observation"
+import { useWorkerObservations } from "./worker-observation"
 /** @jsxImportSource @opentui/solid */
 import {workspaceSettings,setWorkspaceMode} from "../workspace-settings"
 import { Plugin } from "../../tui-legacy"
