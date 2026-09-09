@@ -16,7 +16,7 @@ const holds=()=>JSON.parse(readFileSync(reservations,'utf8')).reservations.filte
 if(holds().length)throw Error('Existing uncertain account ownership blocks this successful dispatch check; inspect it first')
 const project=projectIdentity(root),model='cliproxyapi/gpt-5.6-luna#medium',workerModel=route.providerID+'/'+route.modelID+'#'+route.reasoning
 const sourceCommit=JSON.parse(readFileSync(join(root,'plugin-activation.json'),'utf8')).evidence.sourceCommit
-mkdirSync(output,{recursive:true});const report:any={ok:false,scope:'Real configured worker dispatch, persisted step and terminal outcome, automatic giver return, native worker navigation',sourceCommit,model,workerModel,runs:[]}
+mkdirSync(output,{recursive:true});const report:any={ok:false,scope:'Real configured worker dispatch, persisted step and terminal outcome, automatic giver return, native worker navigation',root,sourceCommit,model,workerModel,runs:[]}
 const sleep=(ms:number)=>new Promise(r=>setTimeout(r,ms))
 for(let number=1;number<=2;number++){
  if(holds().length)throw Error('An account worker is still active or unknown; no duplicate launch')
