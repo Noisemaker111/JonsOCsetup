@@ -25,3 +25,15 @@ test('unknown direct return admission never duplicates',async()=>{
  const context={project,directory:dir,sessionID:'giver',requestID:'request'},host={get:async()=>({location:{directory:dir}}),create:async()=>null,prompt:async()=>{calls++;throw Error('transport lost')}}
  try{const q=store.create({id:'01j00000000000000000000981',title:'Failure',objective:'Report',project,stages:[]});store.apply(q.id,'session-planned',{callID:runID,runID,parentID:'giver',role:'worker',deliverables:[]},'test');const returns=new QuestWorkerReturns(store,host);await returns.watch({quest:q,runID,stepIDs:[],context});store.apply(q.id,'session-state',{callID:runID,state:'failed',result:'Actual failure'},'test');await returns.tick();await new QuestWorkerReturns(store,host).tick();expect(calls).toBe(1)}finally{rmSync(dir,{recursive:true,force:true})}
 },30000)
+
+test('dev worker returns stay with their loaded generation while older hosts remain alive',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'quest-return-generations-')),store=new QuestStore(join(dir,'ledger')),project=projectIdentity(dir),runID='32345678901234567890123456',prompts:any[]=[]
+ const context={project,directory:dir,sessionID:'giver',requestID:'request'},host={get:async()=>({location:{directory:dir}}),create:async()=>null,prompt:async(value:any)=>{prompts.push(value)}}
+ try{
+  const q=store.create({id:'01j00000000000000000000982',title:'Generation-owned return',objective:'Verify',project,stages:[]})
+  store.apply(q.id,'session-planned',{callID:runID,runID,parentID:'giver',role:'worker',deliverables:[]},'test')
+  const current=new QuestWorkerReturns(store,host,'gen-current');await current.watch({quest:q,runID,stepIDs:[],context});store.apply(q.id,'session-state',{callID:runID,state:'completed',result:'Verified actual result'},'test')
+  await new QuestWorkerReturns(store,host,'').tick();await new QuestWorkerReturns(store,host,'gen-other').tick();expect(prompts).toHaveLength(0)
+  await current.tick();await new QuestWorkerReturns(store,host,'gen-current').tick();expect(prompts).toHaveLength(1)
+ }finally{rmSync(dir,{recursive:true,force:true})}
+})

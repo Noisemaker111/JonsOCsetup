@@ -30,3 +30,28 @@ test('a restarted continuation preserves research mode for subsequent steps',asy
   await expect(restarted.run(f.q.id,{readOnly:false,model},f.context)).rejects.toThrow('different work')
  }finally{f.clean()}
 })
+test('legacy and different dev generations cannot claim another generation queue',async()=>{
+ const f=fixture();try{
+  let legacyLaunches=0,otherLaunches=0
+  const current=new QuestContinuation(f.store,f.start,{...f.options,runtimeGeneration:'gen-current'})
+  const legacy=new QuestContinuation(f.store,async()=>{legacyLaunches++;throw Error('Old host claimed new work')},{...f.options,runtimeGeneration:''})
+  const other=new QuestContinuation(f.store,async()=>{otherLaunches++;throw Error('Different generation claimed work')},{...f.options,runtimeGeneration:'gen-other'})
+  await current.run(f.q.id,{model,maxConcurrent:1},f.context)
+  const first=f.store.read(f.q.id)!.sessions[0];f.store.apply(f.q.id,'stage-state',{stageID:'a',status:'done'},'test');f.store.apply(f.q.id,'session-state',{callID:first.callID,state:'completed'},'test')
+  await Promise.all([legacy.tick(),other.tick()]);expect(legacyLaunches+otherLaunches).toBe(0);expect(f.counts().launches).toBe(1)
+  const resumed=new QuestContinuation(f.store,f.start,{...f.options,runtimeGeneration:'gen-current'});await Promise.all([current.tick(),resumed.tick()]);expect(f.counts().launches).toBe(2)
+  expect(legacy.status(f.q.id)).toHaveLength(1)
+ }finally{f.clean()}
+})
+
+test('foreign continuation blocks replacement until explicit cancellation, preserving live workers',async()=>{
+ const f=fixture();try{
+  const legacy=new QuestContinuation(f.store,f.start,{...f.options,runtimeGeneration:''}),current=new QuestContinuation(f.store,f.start,{...f.options,runtimeGeneration:'gen-current'})
+  await legacy.run(f.q.id,{model,maxConcurrent:1},f.context)
+  await expect(current.run(f.q.id,{model,stepIDs:['b'],maxConcurrent:1},{...f.context,requestID:'new'})).rejects.toThrow('existing continuation')
+  expect(current.status(f.q.id)).toHaveLength(1)
+  current.cancel(f.q.id,f.context);expect(legacy.status(f.q.id)[0].state).toBe('stopped')
+  expect(f.store.read(f.q.id)!.sessions[0].state).toBe('executing')
+  await Promise.all([legacy.tick(),current.tick()]);expect(f.counts().launches).toBe(1)
+ }finally{f.clean()}
+})
