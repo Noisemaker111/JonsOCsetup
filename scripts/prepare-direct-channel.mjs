@@ -1,5 +1,5 @@
 /** Prepare channel environment only. Never own or proxy a terminal. */
-import {readFileSync,writeFileSync,mkdirSync,readdirSync,symlinkSync,copyFileSync} from 'node:fs'
+import {existsSync,readFileSync,writeFileSync,mkdirSync,readdirSync,symlinkSync,copyFileSync} from 'node:fs'
 import {join} from 'node:path'
 import {homedir} from 'node:os'
 import {pathToFileURL} from 'node:url'
@@ -13,7 +13,12 @@ const selectedDev=read(join(registry,'dev.json'))
 const candidate=channel==='dev'?process.env.OPENCODE_DEV_CANDIDATE:undefined
 const dev=candidate?read(join(candidate,'channel-release.json')):selectedDev
 if(candidate&&(dev.channel!=='dev'||dev.root!==candidate))throw Error('Invalid explicit dev candidate')
-const root=channel==='dev'?dev.root:repository
+// Stable resolves to its selected release the same way dev does. Until a stable release is
+// promoted, it falls back to the repository so existing machines keep working unchanged.
+const stablePath=join(registry,'stable.json')
+const stable=channel==='stable'&&existsSync(stablePath)?read(stablePath):undefined
+if(stable&&(stable.channel!=='stable'||!existsSync(stable.root)))throw Error('Selected stable release is missing')
+const root=channel==='dev'?dev.root:(stable?stable.root:repository)
 // Use the selected reviewed helper code, never dirty shared source.
 const {generationRoot,reviewedAgentConfig}=await import(pathToFileURL(join(dev.root,'scripts/runtime-contract.mjs')))
 const {inspectHostExecutable}=await import(pathToFileURL(join(dev.root,'project-router/executable.mjs')))
