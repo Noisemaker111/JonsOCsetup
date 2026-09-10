@@ -11,6 +11,7 @@
   "animations": true,
   "plugins": [
     "./tui-bootstrap/usage",
-    "./tui-bootstrap/quests"
+    "./tui-bootstrap/quests",
+    "./tui-bootstrap/composer"
   ]
 }
