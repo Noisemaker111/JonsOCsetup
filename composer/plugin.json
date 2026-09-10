@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "name": "opencode-composer",
+  "description": "Windows Terminal composer key handling",
+  "tui": "composer/tui-active/composer.tsx"
+}
