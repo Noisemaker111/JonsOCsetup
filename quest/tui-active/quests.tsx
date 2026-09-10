@@ -96,8 +96,7 @@ async function openSessionPicker(context: any, allProjects = Boolean(userGiverID
       title: task,
       category: quest.title,
       searchText: `${id ?? ""} ${workerLabel(session)} ${task}`,
-      description: workerLabel(session),
-      details: live.reason,
+      details: [workerLabel(session), live.reason],
       footer: live.state.toUpperCase(),
     }
   }))
