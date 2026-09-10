@@ -394,6 +394,13 @@ function LegacyDetail(props: { context: any; store: QuestStore; quest: () => Que
   </box>
 }
 
+async function openQuestWorkers(context:any,quest:Quest,observation:(run:QuestSession)=>any) {
+ const rows=quest.sessions
+ if(!rows.length){await context.ui.dialog.alert({title:'Quest worker sessions',message:'No worker session has been recorded for this Quest.'});return}
+ const key=rows.length===1?rows[0].callID:await context.ui.dialog.select({title:'Quest worker sessions',placeholder:'Search assigned step or model',options:rows.map(s=>({value:s.callID,title:workerTask(quest,s),searchText:workerTask(quest,s)+' '+workerLabel(s),details:[workerLabel(s),observation(s).reason],footer:observation(s).state.toUpperCase()}))})
+ const run=rows.find(s=>s.callID===key)
+ if(run)await openWorkerSession(context,run)
+}
 function ContractDetail(props: { context: any; store: QuestStore; quest: () => Quest; refresh: () => void; observation:(run:QuestSession)=>any; width:()=>number }) {
  const view=createMemo(()=>questView(props.quest()))
  const observation=props.observation
@@ -404,13 +411,12 @@ function ContractDetail(props: { context: any; store: QuestStore; quest: () => Q
  const sessions=()=>props.quest().sessions
  const links=()=>view().artifacts.filter(a=>/https:\/\/[^/]+\/[^/]+\/[^/]+\/pull\/\d+/.test(a.uri??''))
  const rewards=()=>artifactChain(view().artifacts.filter(a=>!links().includes(a)))
- const open=async()=>{const rows=sessions();const key=rows.length===1?rows[0].callID:await props.context.ui.dialog.select({title:'Quest worker sessions',placeholder:'Search assigned step or model',options:rows.map(s=>({value:s.callID,title:workerTask(props.quest(),s),searchText:workerTask(props.quest(),s)+' '+workerLabel(s),details:[workerLabel(s),observation(s).reason],footer:observation(s).state.toUpperCase()}))});const run=rows.find(s=>s.callID===key);if(run)await openWorkerSession(props.context,run)}
+ const open=()=>openQuestWorkers(props.context,props.quest(),observation)
  const expandedWorker=()=>expandedRun()??sessions().at(-1)?.callID
  const toggleWorker=()=>{const run=sessions().at(-1);if(run)setExpandedRun(expandedWorker()===run.callID?'':run.callID)}
  const checks=()=>props.context.ui.dialog.alert({title:'Recorded checks',message:props.quest().evidence.tests.length?props.quest().evidence.tests.map(test=>redact(typeof test==='string'?test:JSON.stringify(test),2000)).join('\n\n'):'No verification checks recorded. Step notes and worker results remain available in the Quest.'})
 
  props.context?.keymap?.layer?.(()=>({mode:'global',commands:[
-  {id:'quests.worker',title:'Open worker session',bind:'w',run:()=>void open()},
   {id:'quests.worker-evidence',title:'Toggle worker evidence',bind:'i',run:toggleWorker},
   {id:'quests.checks',title:'View recorded checks',bind:'v',run:()=>void checks()},
   {id:'quests.description',title:'Expand description',bind:'d',run:()=>setDescriptionOpen(!descriptionOpen())},
@@ -549,6 +555,7 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
     {id:"quests.up",title:"Previous Quest",bind:"up",run:()=>move(-1)},
     {id:"quests.down",title:"Next Quest",bind:"down",run:()=>move(1)},
     {id:"quests.open",title:"Open selected Quest",bind:"return",run:()=>setDetail(true)},
+    {id:"quests.worker",title:"Open worker session",bind:"w",run:()=>{const q=selected();if(q)void openQuestWorkers(props.context,q,observation).catch(error=>setFailure(String(error)))}},
     {id:"quests.scope",title:"Toggle project scope",bind:"a",run:()=>{setAllProjects(!allProjects());setDetail(false)}},
     {id:"quests.create",title:"Start Quest",bind:"+",run:newQuest},
     {id:"quests.compose",title:"Message your Quest Giver",bind:"n",run:compose},
@@ -596,6 +603,6 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
       <text fg={C.text} wrapMode="none" truncate>❯ Message your Quest Giver… <span fg={C.muted}>[n] Compose</span></text>
       <text fg={C.yellow} wrapMode="none" truncate>Quest Giver <span fg={C.dim}>· Recorded {giverLabel()}</span></text>
     </box>
-    <text fg={C.muted} paddingLeft={1} backgroundColor={C.panel} flexShrink={0} wrapMode="none" truncate>↑↓ Select  Enter Open  / Search  f Filter  q Picker  w Worker  PgUp/PgDn Scroll</text>
+    <text fg={C.muted} paddingLeft={1} backgroundColor={C.panel} flexShrink={0} wrapMode="none" truncate>{narrow()&&!detail()?"↑↓ Select  Enter Open  w Worker  / Search  f Filter  q Picker":selected()?.contractVersion===2?"w Worker  s Start  m Actions  PgUp/PgDn Scroll  Esc Back":"↑↓ Select  Enter Open  w Worker  / Search  f Filter  q Picker"}</text>
   </box>
 }
