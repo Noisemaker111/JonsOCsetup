@@ -93,10 +93,11 @@ async function openSessionPicker(context: any, allProjects = Boolean(userGiverID
     const task = session.deliverables.map(id=>quest.stages.find(step=>step.id===id)?.title??id).join(" · ") || session.task || session.taskDescription || "delegated work"
     return {
       value: key,
-      title: `${workerLabel(session)} · ${task}`,
+      title: task,
       category: quest.title,
       searchText: `${id ?? ""} ${workerLabel(session)} ${task}`,
-      description: live.reason,
+      description: workerLabel(session),
+      details: live.reason,
       footer: live.state.toUpperCase(),
     }
   }))
