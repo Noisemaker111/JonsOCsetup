@@ -430,6 +430,7 @@ function ContractDetail(props: { context: any; store: QuestStore; quest: () => Q
 export function QuestBoard(props: { context: any; initialQuestID?: string; initialFilter?: QuestFilter; initialAllProjects?: boolean; initialProjectDirectory?: string; returnRoute?: unknown }) {
   const store = new QuestStore(projectRoot(props.context))
   const [records,setRecords] = createSignal<Quest[]>([])
+  const [loaded,setLoaded] = createSignal(false)
   const [allProjects,setAllProjects] = createSignal(props.initialAllProjects??Boolean(userGiverID()))
   const [project,setProject] = createSignal(boardProject(props.initialProjectDirectory??props.context?.location?.directory??props.context?.state?.path?.directory))
   const [filter,setFilter] = createSignal<QuestFilter>(props.initialFilter??"all")
@@ -445,9 +446,9 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
   const rows = createMemo(()=>filterQuests(scoped(),filter()).filter(q=>!query() || (q.title+" "+q.description).toLowerCase().includes(query().toLowerCase()))
     .sort((a,b)=>questStatus(a).rank-questStatus(b).rank || b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)))
   const selected = createMemo(()=>rows().find(q=>q.id===selectedID()))
-  const refresh = () => { try {setRecords(quests(store.projectRoot))} catch {} }
+  const refresh = () => { try {setRecords(quests(store.projectRoot));setLoaded(true)} catch {} }
   const reveal = () => { if(selectedID()) listScroll?.scrollChildIntoView("quest-row-"+selectedID()) }
-  createEffect(()=>{if(!rows().some(q=>q.id===selectedID()))setSelectedID(rows()[0]?.id)})
+  createEffect(()=>{if(loaded()&&!rows().some(q=>q.id===selectedID()))setSelectedID(rows()[0]?.id)})
   createEffect(()=>rememberBoardView(props.context,{questID:selectedID(),filter:filter(),allProjects:allProjects(),projectDirectory:project().root}))
   onMount(()=>{
     refresh(); const stop=watchQuests(store.projectRoot,refresh);onCleanup(stop)

@@ -22,6 +22,11 @@ try {
   return q
  }
  const first=make(1,"Fix duplicate invoice reminders after reconnect"),second=make(2,"Restore keyboard focus after dialogs"),ready=make(3,"Keep cancelled work available for review",true)
+ for(const width of [80,160]) {
+  const context={renderer:Object.assign(new EventEmitter(),{width,height:30}),location:{directory:process.cwd()},keymap:{layer:()=>{}},ui:{router:{navigate:()=>{}},dialog:{}}}
+  const returned=await testRender(()=><QuestBoard context={context} initialQuestID={second.id} initialAllProjects={true}/>,{width,height:30})
+  try {await returned.renderOnce();await Bun.sleep(80);await returned.renderOnce();assert(returned.captureCharFrame().includes("Unique description 2"),"Returning to a selected Quest must survive the initial empty record load at width "+width)}finally{returned.renderer.destroy()}
+ }
  for(const width of [80,120]) {
   const commands=new Map<string,any>();let chosen:any;let navigated:any
   const size=Object.assign(new EventEmitter(),{width,height:30})
