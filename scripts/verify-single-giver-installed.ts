@@ -40,6 +40,16 @@ const fixture=mkdtempSync(join(tmpdir(),'quest-giver-projects-'));report.project
   await wait('plugin load',()=>{const e=events.find(e=>e.type==='launched');if(!e||!existsSync(e.receipt))return false;row.loads=readFileSync(e.receipt,'utf8').trim().split('\n').map(s=>JSON.parse(s));return row.loads.some((l:any)=>l.component==='tui:quests'&&l.sourceCommit===sourceCommit)})
   await wait('composer',async()=>(await frame()).includes('Quests'));await sleep(1000)
   await sleep(2500);await capture('giver-before-prompt')
+  await command('Reply exactly SINGLE_GIVER_READY. This is conversation only. Do not call tools, create Quests, dispatch, or change files.')
+  await wait('first discussion registered',()=>{
+    if(!existsSync(database))return false;db??=new Database(database,{readonly:true})
+    const giver:any=db.query("select id,idle_outcome from session_v2 where agent='quest-giver' and parent_id is null order by time_created asc").get()
+    if(giver?.idle_outcome!=='succeeded')return false
+    const file=join(store.runtime,'user-giver.json');if(!existsSync(file))return false
+    const binding=JSON.parse(readFileSync(file,'utf8'));report.giverSessionID=giver.id;report.firstDiscussion=binding.state==='bound'&&binding.sessionID===giver.id&&readAllQuests(store.projectRoot).length===0
+    return report.firstDiscussion
+  })
+  await capture('registered-discussion')
   for(number=1;number<=2;number++){
    if(holds().length)throw Error('Existing account ownership; no duplicate worker')
    dir=join(output,'run-'+number);mkdirSync(dir,{recursive:true});row={number,sessionID:report.giverSessionID,ok:false,screenshots:[]}
@@ -63,4 +73,4 @@ const fixture=mkdtempSync(join(tmpdir(),'quest-giver-projects-'));report.project
  finally{db?.close();terminal.onData=undefined;if(!exited)child.stdin.write(JSON.stringify({type:'stop'})+'\n');await sleep(1500);terminal.destroy();setup.renderer.destroy();row.events=events;row.errors=errors;if(!report.runs.includes(row))report.runs.push(row);writeFileSync(join(output,'report.json'),JSON.stringify(report,null,2))}
  console.log(JSON.stringify({number,ok:row.ok,error:row.error,output:dir}))
 }
-report.ok=report.runs.length===2&&report.runs.every((r:any)=>r.ok);writeFileSync(join(output,'report.json'),JSON.stringify(report,null,2));console.log(join(output,'report.json'));process.exitCode=report.ok?0:1
+report.ok=report.firstDiscussion&&report.runs.length===2&&report.runs.every((r:any)=>r.ok);writeFileSync(join(output,'report.json'),JSON.stringify(report,null,2));console.log(join(output,'report.json'));process.exitCode=report.ok?0:1
