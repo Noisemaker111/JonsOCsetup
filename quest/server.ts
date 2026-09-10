@@ -1,3 +1,4 @@
+import {installWorkerCapabilities} from './worker-capabilities'
 import {installUserGiverContext} from './user-giver'
 import {guidanceTool,outcomeTool,workSupplyTool} from "./adaptive-tools"
 import {nativeWorkspaceTool} from "./native-workspace-tool"
@@ -302,6 +303,7 @@ export default define({
       ["watchdog", () => installWatchdog(ctx)],
       ["host-events", () => installQuestEvents(ctx, quests)],
       ["completion-evidence", () => installQuestCompletionEvidence(quests, api)],
+      ["worker-capabilities", () => installWorkerCapabilities(ctx,api.store)],
       ["user-giver", () => installUserGiverContext(api.store,ctx.session)],
       ["tools", () => installQuestTools(ctx, api)],
       ["shared-workspace-guard", () => installSharedWorkspaceGuard(ctx,api.store)],
