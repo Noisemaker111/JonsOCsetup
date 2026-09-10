@@ -2,7 +2,7 @@
 param([Parameter(Position=0,Mandatory=$true)][ValidateSet('dev','stable')][string]$Channel,
       [Parameter(ValueFromRemainingArguments=$true)][string[]]$HostArguments)
 $ErrorActionPreference='Stop'
-$planText=& node (Join-Path $PSScriptRoot 'prepare-direct-channel.mjs') $Channel
+$planText=& node (Join-Path $PSScriptRoot 'prepare-direct-channel.mjs') $Channel --owner-pid $PID
 if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
 $plan=$planText | ConvertFrom-Json
 $saved=@{}
@@ -20,6 +20,7 @@ try {
  & $plan.host.executable @nativeArgs
  $hostExit=$LASTEXITCODE
 } finally {
+ if($plan.releaseLease){ & node $plan.retirementScript release $plan.releaseLease | Out-Null }
  foreach($name in $saved.Keys){[Environment]::SetEnvironmentVariable($name,$saved[$name],'Process')}
 }
 exit $hostExit

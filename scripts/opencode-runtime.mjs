@@ -1,3 +1,5 @@
+import {git as cleanupGit} from '../quest/cleanup-git.mjs'
+import {useRelease,releaseUse,retireReleases} from './release-retirement.mjs'
 import { inspectHostExecutable } from '../project-router/executable.mjs'
 /** Managed OpenCode2 terminal. Only this supervisor's exact standalone child is stopped. */
 import JSON5 from "json5"
@@ -13,6 +15,7 @@ const option = (name) => { const at = process.argv.indexOf(name); return at < 0 
 const root = resolve(option("--config-root") ?? (basename(dirname(sourceRoot)) === "generations" ? resolve(sourceRoot,"../..") : sourceRoot))
 const json = process.argv.includes("--json")
 const cwd = resolve(option("--cwd") ?? process.cwd())
+const releaseLease=useRelease(root)
 const control = join(root, "run", "runtime", `launch-${Date.now()}-${process.pid}`)
 mkdirSync(control, { recursive: true })
 const token = randomBytes(24).toString("hex")
@@ -95,6 +98,7 @@ async function finish(code = 0) {
   clearInterval(watcher)
   try { await stopChild() } catch (error) { emit({ type: "error", message: String(error) }); code = 1 }
   if (!json && process.stdin.isTTY) process.stdin.setRawMode(false)
+  if(!terminal){releaseUse(releaseLease);try{const repository=dirname(resolve(root,cleanupGit(root,['rev-parse','--git-common-dir'])));retireReleases(repository)}catch(error){emit({type:'cleanup-retained',reason:String(error)})}}
   process.exit(code)
 }
 const watcher = setInterval(async () => {

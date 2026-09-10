@@ -1,3 +1,4 @@
+import {cleanupQuests,cleanupStatus,installQuestCleanup} from "./cleanup"
 import {bindUserGiver,userGiverID,giverContext,adoptQuestGiver,verifyGiverBinding} from './user-giver'
 import { reconcileWorkers, inspectWorker } from "./worker-inspection"
 import {configureLearning,collectWorkflowOutcomes} from "./outcome-tracking"
@@ -22,6 +23,7 @@ export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFi
  const continuation=new QuestContinuation(store,start,{verifyContext:async(context)=>{const result=await host.get({sessionID:context.sessionID});verifyGiverBinding(store,context,result?.data??result)}})
  let polling=false
  const tick=async()=>{if(polling)return;polling=true;try{await reconcileWorkers(store,host);await continuation.tick();await returns.tick();collectWorkflowOutcomes(store)}catch(error){console.error('[quests] inspection/continuation failed',error)}finally{polling=false}}
+ installQuestCleanup(store,host)
  const timer=setInterval(()=>void tick(),5000);timer.unref()
  const workspaces=new QuestWorkspaces(store.runtime)
  const enrich=(view:any)=>({...view,workspaceSettings:workspaceSettings(options.settingsFile),workspacePreparation:workspaces.preparationStatus(view.project.id),continuation:continuation.status(view.id),changes:questChanges(store.read(view.id)!,workspaces)})
@@ -52,13 +54,14 @@ export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFi
   if(input.action==='update'&&input.update?.cancelContinuation===true){continuation.cancel(input.id,trusted);input={...input,update:{...input.update}};delete input.update.cancelContinuation}
   const api=questsAPI(store,trusted,start)
   let result:any
-   switch(input.action){case "list":result=api.list({...(trusted.giverDirectory?{allProjects:true}:{}),...input.query});break;case "get":result=api.get(input.id);break;case "create":result=api.create(input.create);if(trusted.giverDirectory){const q=store.read(result.id)!;store.apply(q.id,'patched',{extensions:{...q.extensions,giverSourceDirectory:trusted.directory}},'quest:user-giver-source')}break;case "update":result=api.update(input.id,input.update);break;case "run":result=await api.run(input.id,input.run?{readOnly:input.run.readOnly,model:input.run.model,stepIDs:input.run.stepIDs,files:input.run.files}:undefined);break;default:throw new QuestError("INVALID_OPERATION","Use list, get, create, update or run")}
+   switch(input.action){case "list":result=api.list({...(trusted.giverDirectory?{allProjects:true}:{}),...input.query});break;case "get":result=api.get(input.id);break;case "create":result=api.create(input.create);if(trusted.giverDirectory){const q=store.read(result.id)!;store.apply(q.id,'patched',{extensions:{...q.extensions,giverSourceDirectory:trusted.directory}},'quest:user-giver-source')}break;case "update":result=api.update(input.id,input.update);await cleanupQuests(store,host,input.id);break;case "run":result=await api.run(input.id,input.run?{readOnly:input.run.readOnly,model:input.run.model,stepIDs:input.run.stepIDs,files:input.run.files}:undefined);break;default:throw new QuestError("INVALID_OPERATION","Use list, get, create, update or run")}
    if(['get','update'].includes(input.action)&&['changes','continuation'].includes(input.inspect?.section))result=enrich(result)
    if(input.action==='list')result={diagnostics:result.diagnostics.slice(0,10),items:result.items.map((item:any)=>toolSummary(store.read(item.id)!)),nextOffset:result.nextOffset,detail:'Use get with inspect.section for bounded full evidence'}
    if(['get','update'].includes(input.action)){
     const q=store.read(input.id)!
-    if(input.inspect){const section=input.inspect.section;const values:any={description:q.description,reward:q.reward,steps:q.stages,runs:await Promise.all(q.sessions.map(async run=>({...run,observation:await inspectWorker(host,run)}))),artifacts:q.evidence,changes:result.changes,continuation:result.continuation};if(!(section in values))throw new QuestError('INVALID_INPUT','Unknown inspect section');result={id:q.id,project:q.project,...toolSection(values[section],section,input.inspect.offset,input.inspect.limit)}}
-    else result=toolDetail(q)
+    if(input.inspect?.section==='cleanup')await cleanupQuests(store,host,input.id)
+    if(input.inspect){const section=input.inspect.section;const values:any={cleanup:cleanupStatus(store,q),description:q.description,reward:q.reward,steps:q.stages,runs:await Promise.all(q.sessions.map(async run=>({...run,observation:await inspectWorker(host,run)}))),artifacts:q.evidence,changes:result.changes,continuation:result.continuation};if(!(section in values))throw new QuestError('INVALID_INPUT','Unknown inspect section');result={id:q.id,project:q.project,...toolSection(values[section],section,input.inspect.offset,input.inspect.limit)}}
+    else result={...toolDetail(q),cleanup:cleanupStatus(store,q)}
    }
    collectWorkflowOutcomes(store)
    const content=JSON.stringify(result)
