@@ -24,6 +24,11 @@ Separate source, merge, activation and process-load status in the report. Record
 the installed host identity separately from the plugin release. Never report a
 candidate as active because it was saved or because a test used source imports.
 
+The user has one persistent Quest Giver across all projects in this runtime. Project
+selection changes worker destinations, never the giver conversation. New Quest and
+native New Session return to that giver; missing or uncertain ownership blocks a
+replacement. Original conversation histories remain accessible.
+
 ## History and ownership
 
 Save each coherent behavior change in a focused commit and PR. Keep the PR title
@@ -72,7 +77,7 @@ The managed runtime remains an explicit automation harness, not an interactive s
 The non-Git OpenCode hub keeps its existing Quest ledger identity. The reviewed
 `models/dispatch-policy.json` binds its `config` scope to the clean public
 JonsOCsetup checkout. Dispatch validates physical checkout paths and requires a
-clean source, then creates an owned repository worktree and translates
+clean source. Dev resolves the loaded immutable release and verifies its source receipt, release identity and Git revision before creating an owned repository worktree and translates
 `config/docs` to `docs`. It never follows the hub's old config junction to choose
 a source. A worker can update the hub Quest only from its verified owned workspace.
 

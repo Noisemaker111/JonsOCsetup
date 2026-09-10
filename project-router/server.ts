@@ -1,9 +1,9 @@
+import {singleUserGiver,selectGiverProject} from '../quest/giver-public'
 import { define } from '@opencode-ai/plugin/v2/promise'
 import { routerQuestInventory, routerWorker, routerReturnSources } from '../quest/router-public'
 import { createGoalFacade } from '../quest/goal-public'
 import { DiscoveryHost, RouterError, redact } from './host'
 import { emptySelection, resolveTargets, verifyTarget, revalidate, instructions, targetKey, type Selection, type Target } from './resolution'
-import { DestinationRouter } from './routing'
 import { RouteReturns } from './returns'
 import { Onboarding } from './onboarding'
 import { routeFeedback } from '../quest/route-public'
@@ -20,7 +20,6 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
   const save = (id: string, selection: Selection) => ctx.storage.set('selection/' + id, selection)
   const worker = (id: string) => routerWorker(id).length > 0
   const returns=new RouteReturns(ctx.storage,ctx.session,id=>discovery.messages(id))
-  const router = new DestinationRouter(ctx.storage, ctx.session, worker, async id => (await state(id)).revision,undefined,returns)
   const goals = createGoalFacade(ctx.session)
   const known = ()=>memory.known()
   const register = (targets:Target[])=>memory.register(targets)
@@ -53,6 +52,8 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
     }) },
     { name: 'project_select', description: 'Explicitly select/pin/correct a project or multiple targets; register an alias or forget selection/alias. Invalidates old route revisions. Does not start work.', input: schema({ action: { enum: ['select', 'pin', 'correct', 'alias', 'forget'] }, selectors, alias: { type: 'string', minLength: 1, maxLength: 80 } }, ['action']), execute: async (input, context) => memory.selectionChange(context.sessionID,async()=>{
       if (worker(context.sessionID)) throw new RouterError('WORKER_DELEGATION_DENIED', 'Workers retain their assigned destination')
+      const giver=await singleUserGiver(ctx.session,context.sessionID)
+      if(giver.id!==context.sessionID)throw new RouterError('SINGLE_GIVER_REQUIRED','Continue in your existing Quest Giver: '+giver.id)
       const selection = await state(context.sessionID)
       if (input.action === 'forget') { if (input.alias) {delete selection.aliases[input.alias.toLowerCase()];await memory.alias(input.alias)} else { selection.targets = []; delete selection.pin } }
       else {
@@ -66,20 +67,21 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
         } else { selection.targets = targets; delete selection.pin; if (input.action === 'pin') { if (targets.length !== 1) throw new RouterError('INVALID_PIN', 'Pin one target'); selection.pin = targets[0] } }
         await register(targets)
       }
-      selection.revision++; selection.asked = false; await save(context.sessionID, selection)
+      selection.revision++; selection.asked = false; await save(context.sessionID, selection);selectGiverProject(context.sessionID,selection.targets,selection.revision)
       return { ...selection, note: 'Previously delivered work is not cancelled by correction. Inspect its receipt before rerouting.' }
     }) },
-    { name: 'project_route', description: 'Use the exact revision returned by project_select (never guess 0). Deliver the original authorized user request once per explicit selected destination in real destination-bound giver sessions; preserve hub. Use one stable requestKey for retries. Unknown delivery is never automatically retried. Quest operations execute there.', input: schema({ revision: { type: 'integer', minimum: 0 }, requestKey: { type: 'string', minLength: 1, maxLength: 150 }, text: { type: 'string', minLength: 1, maxLength: 16000 } }, ['revision', 'requestKey', 'text']), execute: async (input, context) => {
+    { name: 'project_route', description: 'Confirm the selected project revision for work in your one persistent Quest Giver. Never creates a destination conversation. Create or run each Quest here; workers execute in their verified project.', input: schema({ revision: { type: 'integer', minimum: 0 }, requestKey: { type: 'string', minLength: 1, maxLength: 150 }, text: { type: 'string', minLength: 1, maxLength: 16000 } }, ['revision', 'requestKey', 'text']), execute: async (input, context) => {
       const selection = await state(context.sessionID)
       if (!selection.targets.length) throw new RouterError('TARGET_REQUIRED', 'Use project_select with the explicit destination before routing')
-      const receipts = []
-      for (const target of selection.targets) receipts.push(await router.route({ ...input, target, authorizedTargets:selection.targets.map(targetKey),hubSessionID: context.sessionID }))
-      return { receipts, hubSessionID: context.sessionID }
+      const giver=await singleUserGiver(ctx.session,context.sessionID)
+      if(giver.id!==context.sessionID)throw new RouterError('SINGLE_GIVER_REQUIRED','Continue in your existing Quest Giver: '+giver.id)
+      if(selection.revision!==input.revision)throw new RouterError('SELECTION_CHANGED','Use the exact current project_select revision')
+      const targets=selection.targets.map(revalidate);selectGiverProject(giver.id,targets,selection.revision)
+      return {giverSessionID:giver.id,targets,revision:selection.revision,createdSessions:0,next:'Create and run Quests in this same conversation. Project selection changes worker location, never the user giver.'}
     } },
-    { name: 'project_result',description:'Read bounded recent result excerpts from the current selected destination conversations back into this hub. No session IDs or directory changes required; unknown delivery remains explicit.',input:schema({}),execute:async(_input,context)=>{
-      const selection=await state(context.sessionID),results=[]
-      for(const target of selection.targets){const bound=await router.destination(context.sessionID,target);results.push({target,state:bound.state,sessionID:bound.sessionID,...(bound.sessionID?{messages:await discovery.messages(bound.sessionID)}:{})})}
-      return {results,hubSessionID:context.sessionID,returns:await returns.status(context.sessionID)}
+    { name: 'project_result',description:'List Quest results and worker references for your selected projects in the one user giver. Use quest get for authoritative progress.',input:schema({}),execute:async(_input,context)=>{
+      const giver=await singleUserGiver(ctx.session,context.sessionID),selection=await state(giver.id)
+      return {giverSessionID:giver.id,quests:routerQuestInventory().filter(q=>!selection.targets.length||selection.targets.some(t=>t.id===q.project?.id||t.directory===q.project?.root)),next:'Inspect each Quest with quest get; all results return to this giver.'}
     } },
     { name: 'project_clone', description: 'Explicitly authorized safe repo-link onboarding. Reuses verified matching clones; preserves collisions/partial work; no repository scripts. URLs must be credential-free HTTPS/SSH.', input: schema({ url: string, authorized: { type: 'boolean' }, requestKey: string, retry: { type: 'boolean' } }, ['url', 'authorized', 'requestKey']), execute: async (input, context) => {
       if (worker(context.sessionID)) throw new RouterError('WORKER_DELEGATION_DENIED', 'Repo onboarding belongs to the giver')
@@ -90,7 +92,7 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
     } },
     { name: 'project_route_status', description: 'Compact exact-model route and account diagnostics. Distinguishes unavailable authorization, missing reasoning, ambiguous account/service, stale quota and account hold. Does not reserve or launch.', input: schema({ model: string }), execute: async input => ({ ...await routeFeedback(input.model), loadedModule: import.meta.url, hostVersion: ctx.app?.version ?? 'unknown', sourceVersusLoaded: 'This receipt identifies this loaded module only; existing sessions may retain an older generation. Open a fresh verified session after parent promotion.' }) },
     { name: 'project_verify', description: 'Giver binds a configured verification command to an assigned step with action=bind; action=run executes that exact contract in the actual destination/assigned workspace and attaches actual proof. Workers cannot change contracts.', input: schema({questID:string,stepID:string,commandID:string,action:{enum:['bind','run']}},['questID','stepID','commandID']),execute:async(input,context)=>goals.verify(input,{sessionID:context.sessionID,requestID:context.id??context.callID}) },
-    { name: 'project_goal', description: 'Explicit canonical Quest goal start/status/pause/cancel/resume in the owning destination-bound giver or assigned worker session. Requires authorized step IDs. Restart requires explicit verified resume; never pursue historical backlog.', input: schema({ action: { enum: ['start', 'status', 'pause', 'cancel', 'resume'] }, questID: string, stepIDs: selectors,model:string }, ['action']), execute: async (input, context) => goals.control(input, { sessionID: context.sessionID, requestID: context.id ?? context.callID }) },
+    { name: 'project_goal', description: 'Explicit canonical Quest goal start/status/pause/cancel/resume in your persistent giver or assigned worker session. Requires authorized step IDs. Restart requires explicit verified resume; never pursue historical backlog.', input: schema({ action: { enum: ['start', 'status', 'pause', 'cancel', 'resume'] }, questID: string, stepIDs: selectors,model:string }, ['action']), execute: async (input, context) => goals.control(input, { sessionID: context.sessionID, requestID: context.id ?? context.callID }) },
   ]
   await ctx.tool.transform((editor: any) => { for (const operation of operations) editor.add({ ...operation, output: { type: 'object', additionalProperties: true }, execute: async (input: any, context: any) => {
     if (!context?.sessionID || !(context.id ?? context.callID)) throw new RouterError('HOST_CONTEXT_REQUIRED', 'Trusted host session and tool call identity required')
@@ -100,7 +102,7 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
   } }) })
   await ctx.session.hook?.('context', (event: any) => {
     if (!['build', 'quest-giver', 'general', 'astra'].includes(event.agent) || worker(event.sessionID)) return
-    event.system.push(systemPart('Project-router: for cross-project work discover on demand, resolve explicit user paths/names/aliases, select then route the original request. Explicit choice/correction wins; recency only supports candidates. Ask one ambiguity question without launching. Keep explicit multiple targets separate. General discussion needs no Quest. PROJECT_MISMATCH: discover the owning root, project_select, then project_route; perform Quest operations only in the real destination session. Never supply synthetic host context. A saved goal is not a live worker; inspect receipts. Unknown launch: stop and reconcile.'))
+    event.system.push(systemPart('One persistent Quest Giver owns all user conversations about Quests. For cross-project work discover on demand, resolve explicit user paths/names/aliases and project_select the worker project. Continue creating and managing Quests here; never create a destination giver. Explicit choice/correction wins; recency only supports candidates. Ask one ambiguity question without launching. Keep explicit multiple targets separate. General discussion needs no Quest. Existing Quests retain their recorded project; get/update/run work from this same giver without relocating it. New Quests use the explicitly selected project. Never supply synthetic host context. A saved goal is not a live worker; inspect receipts. Unknown launch: stop and reconcile.'))
   })
   await ctx.command?.transform((editor: any) => editor.add({ name: 'goal', description: 'Canonical Quest goal: start <quest> <step...>, status, pause, cancel, resume', execute: async ({ sessionID, prompt }: any) => {
     const [action, questID, ...stepIDs] = (prompt.text ?? '').trim().split(/\s+/)

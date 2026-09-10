@@ -1,3 +1,4 @@
+import {userGiverID} from '../user-giver'
 import { useWorkerObservations } from "./worker-observation"
 import { nudgeGiver } from "../tui-workflow"
 /** @jsxImportSource @opentui/solid */
@@ -422,15 +423,15 @@ function ContractDetail(props: { context: any; store: QuestStore; quest: () => Q
   <Rule/>
   <WorkflowActions context={props.context} store={props.store} quest={props.quest} refresh={props.refresh}/>
   <Show when={failure()}><text fg={C.red} wrapMode="word">{failure()}</text></Show>
-  <box border borderColor={C.line} paddingLeft={1} flexShrink={0} onMouseUp={(e:any)=>activate(e,compose)}><text fg={C.muted} wrapMode="word">› [n] Message this Quest's giver…</text></box>
+  <box border borderColor={C.line} paddingLeft={1} flexShrink={0} onMouseUp={(e:any)=>activate(e,compose)}><text fg={C.muted} wrapMode="word">› [n] Message your Quest Giver…</text></box>
  </box>
 }
 
-export function QuestBoard(props: { context: any; initialQuestID?: string; initialFilter?: QuestFilter; initialAllProjects?: boolean; returnRoute?: unknown }) {
+export function QuestBoard(props: { context: any; initialQuestID?: string; initialFilter?: QuestFilter; initialAllProjects?: boolean; initialProjectDirectory?: string; returnRoute?: unknown }) {
   const store = new QuestStore(projectRoot(props.context))
   const [records,setRecords] = createSignal<Quest[]>([])
-  const [allProjects,setAllProjects] = createSignal(props.initialAllProjects===true)
-  const [project,setProject] = createSignal(boardProject(props.context?.location?.directory??props.context?.state?.path?.directory))
+  const [allProjects,setAllProjects] = createSignal(props.initialAllProjects??Boolean(userGiverID()))
+  const [project,setProject] = createSignal(boardProject(props.initialProjectDirectory??props.context?.location?.directory??props.context?.state?.path?.directory))
   const [filter,setFilter] = createSignal<QuestFilter>(props.initialFilter??"all")
   const [query,setQuery] = createSignal("")
   const [collapsed,setCollapsed]=createSignal<Record<string,boolean>>({})
@@ -447,13 +448,13 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
   const refresh = () => { try {setRecords(quests(store.projectRoot))} catch {} }
   const reveal = () => { if(selectedID()) listScroll?.scrollChildIntoView("quest-row-"+selectedID()) }
   createEffect(()=>{if(!rows().some(q=>q.id===selectedID()))setSelectedID(rows()[0]?.id)})
-  createEffect(()=>rememberBoardView(props.context,{questID:selectedID(),filter:filter(),allProjects:allProjects()}))
+  createEffect(()=>rememberBoardView(props.context,{questID:selectedID(),filter:filter(),allProjects:allProjects(),projectDirectory:project().root}))
   onMount(()=>{
     refresh(); const stop=watchQuests(store.projectRoot,refresh);onCleanup(stop)
     const renderer=props.context?.renderer
     const resize=()=>setWidth(renderer?.width??120)
     renderer?.on?.("resize",resize);onCleanup(()=>renderer?.off?.("resize",resize))
-    void resolveBoardProject(props.context,activeSessionID(props.context)??(props.returnRoute as any)?.sessionID).then(p=>{setProject(p);refresh()})
+    void resolveBoardProject(props.context,activeSessionID(props.context)??(props.returnRoute as any)?.sessionID,props.initialProjectDirectory).then(p=>{setProject(p);refresh()})
   })
   const select = (id:string, open=false) => {const q=rows().find(q=>q.id===id);if(q)setCollapsed({...collapsed(),[group(q)]:false});setSelectedID(id);if(open)setDetail(true);reveal()}
   const back = () => {if(narrow()&&detail()){setDetail(false);queueMicrotask(reveal)}else props.context?.ui?.router?.navigate?.(props.returnRoute??{type:"home"})}

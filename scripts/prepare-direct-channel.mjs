@@ -35,6 +35,9 @@ if(channel==='dev'){
  const state=join(registry,'state','dev');mkdirSync(state,{recursive:true})
  Object.assign(env,{XDG_STATE_HOME:join(state,'xdg'),OPENCODE_DB:join(state,'host.db'),OPENCODE_QUEST_ROOT:join(state,'quests'),OPENCODE_ORCHESTRATION_LEDGER:join(state,'orchestration.jsonl'),OPENCODE_TELEMETRY_FILE:join(state,'requests.jsonl')})
 }
-const plan={channel,host:inspectHostExecutable(),generation,sourceCommit:pointer.evidence.sourceCommit,env}
+const {readUserGiver}=await import(pathToFileURL(join(dev.root,'quest/giver-registry.mjs')))
+const giver=readUserGiver(join(env.OPENCODE_QUEST_ROOT??homedir(),'.opencode','.quest-runtime'))
+if(giver&&giver.state!=='bound')throw Error('Your giver creation is uncertain; inspect it before opening another conversation')
+const plan={channel,host:inspectHostExecutable(),generation,sourceCommit:pointer.evidence.sourceCommit,env,...(giver?.sessionID?{giverSessionID:giver.sessionID}:{})}
 writeFileSync(join(control,'launch.json'),JSON.stringify(plan,null,2))
 console.log(JSON.stringify(plan))

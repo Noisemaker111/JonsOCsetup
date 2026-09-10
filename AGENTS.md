@@ -58,8 +58,7 @@ conflict.
 
 ## Standing decisions
 
-Shared tree by default; a worktree only for deliberate variant work (2026-09; this reverses the
-2026-07 always-worktree rule). No default model — choose on task, usage, speed and correctness; an
+For OpenCode2 changes, follow the isolated dev workflow in the hub AGENTS.md and opencode-dev-workflow skill. No default model — choose on task, usage, speed and correctness; an
 explicit choice is final; report an unavailable route instead of substituting, and apply a ban to
 reviewers, fallbacks and resumes too. No patched fork of OpenCode: changes go upstream as
 contributions, never into a private run-fork, and never into the T3 upstream fork.

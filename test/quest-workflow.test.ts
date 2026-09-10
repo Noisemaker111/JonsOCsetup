@@ -51,14 +51,15 @@ test("giver navigation uses recorded owner, verifies project and preserves board
     expect(navigated).toHaveLength(2)
   } finally {f.close()}
 })
-test("dismissed giver binding confirmation neither creates a session nor rewrites ownership",async()=>{
+test("opening a new Quest reuses the recorded user giver without another creation",async()=>{
   const f=fixture()
   try {
-    let created=0
-    const context={location:{directory:f.root},ui:{dialog:{confirm:async()=>false}},client:{session:{create:async()=>{created++;return {id:"ses_new"}}}}}
-    await createGiver(context,f.store,f.q());expect(created).toBe(0);expect(f.q().integrationOwner).toBe("ses_giver")
-  } finally {f.close()}
+    let created=0;const routes:any[]=[]
+    const context={location:{directory:f.root},ui:{router:{navigate:(r:any)=>routes.push(r)}},client:{session:{get:async()=>({id:'ses_giver',agent:'quest-giver',location:{directory:f.root}}),create:async()=>{created++;return {id:'ses_new'}}}}}
+    await createGiver(context,f.store,f.q());await createGiver(context,f.store,f.q());expect(created).toBe(0);expect(f.q().integrationOwner).toBe('ses_giver');expect(routes).toEqual([{type:'session',sessionID:'ses_giver'},{type:'session',sessionID:'ses_giver'}])
+  }finally{f.close()}
 })
+
 test("historical attempt identity is retained without entering workspace namespace",()=>{
   const f=fixture()
   try {
@@ -93,4 +94,8 @@ test("v2 root worker sessions open only with exact stored ID and worktree bindin
     context.client.session.get=async()=>({id:"ses_other",location:{directory:f.root}})
     expect(await navigateQuestSession(context,s)).toBe(false)
   } finally {f.close()}
+})
+
+test('returning from a different worker project preserves the verified board project',async()=>{
+ const f=fixture();try{const {resolveBoardProject}=await import('../quest/board-project');let reads=0;const restored=await resolveBoardProject({client:{session:{get:async()=>{reads++;throw Error('Worker source differs')}}}},'ses_worker',f.root);expect(restored.id).toBe(projectIdentity(f.root).id);expect(reads).toBe(0)}finally{f.close()}
 })

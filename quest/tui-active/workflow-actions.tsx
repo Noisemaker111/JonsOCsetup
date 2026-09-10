@@ -46,10 +46,10 @@ export function WorkflowActions(props: { context: any; store: QuestStore; quest:
   const [message, setMessage] = createSignal("")
   const actions = () => [
     { id: "giver", key: "g", title: "Continue in chat", reason: props.quest().project ? undefined : "Project ownership unresolved" },
-    { id: "create", key: "c", title: "Create giver session", reason: props.quest().project ? undefined : "Project ownership unresolved" },
+    { id: "create", key: "c", title: "Open your Quest Giver", reason: props.quest().project ? undefined : "Project ownership unresolved" },
     { id: "start", key: "s", title: "Start worker session", reason: startDisabled(props.quest()) },
     { id: "progress", key: "p", title: "Check progress / agent log" },
-    { id: "nudge", key: "n", title: "Nudge giver", reason: giverID(props.quest()) ? undefined : "Create a giver conversation first" },
+    { id: "nudge", key: "n", title: "Nudge giver", reason: giverID(props.quest()) ? undefined : "Open your Quest Giver first" },
     { id:"archive", key:"z", title:"Archive Quest", reason:uncertainRuns(props.quest()).length?"Reconcile active or uncertain workers before archiving":undefined },
     { id: "turn", key: "t", title: props.quest().archive ? "Reopen Quest" : "Review and accept", reason: props.quest().archive ? undefined : turnInDisabled(props.quest()) },
   ]

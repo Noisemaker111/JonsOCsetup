@@ -1,3 +1,6 @@
+import { ensureUserGiver, userGiverID } from "../user-giver"
+import { QuestStore } from "../store"
+import { questRoot } from "../root"
 import { useWorkerObservations } from "./worker-observation"
 /** @jsxImportSource @opentui/solid */
 import {workspaceSettings,setWorkspaceMode} from "../workspace-settings"
@@ -76,7 +79,7 @@ function sessionKey(quest: Quest, session: QuestSession): string {
   return `${quest.id}:${session.callID}`
 }
 
-async function openSessionPicker(context: any, allProjects = false) {
+async function openSessionPicker(context: any, allProjects = Boolean(userGiverID())) {
   const dialog = context?.ui?.dialog
   if (typeof dialog?.select !== "function") return
   const project=await resolveBoardProject(context,activeSessionID(context))
@@ -107,13 +110,25 @@ async function chooseWorkspaceMode(context:any) {
  if(choice==="worktree"||choice==="shared")setWorkspaceMode(choice)
 }
 function Commands(props: { context: any }) {
+  // Native New Session returns home. Reuse the one giver before a new prompt can create another.
+  createEffect(() => {
+    const route=props.context.ui.router.current()
+    if(route?.type!=="home")return
+    // Let the native composer create the first session and retain its focus/model.
+    if(!userGiverID()&&!quests(projectRoot(props.context)).some(q=>q.integrationOwner?.startsWith("ses_")))return
+    let cancelled=false
+    onCleanup(()=>{cancelled=true})
+    void ensureUserGiver(new QuestStore(questRoot()),props.context.client.session,undefined,props.context.location?.directory??props.context.state?.path?.directory??process.cwd()).then(row=>{
+      if(!cancelled&&props.context.ui.router.current()?.type==="home")props.context.ui.router.navigate({type:"session",sessionID:row.id})
+    }).catch(error=>{if(!cancelled)void props.context.ui.dialog.alert({title:"Your Quest Giver",message:String(error)})})
+  })
   props.context.keymap.layer(() => ({
     mode: "global",
     commands: [
       { id: "quests.workspace-mode", title: "Quest workspace mode (global)", group: "System", palette: true, slash: { name: "quest-workspace" }, run: () => chooseWorkspaceMode(props.context).catch(error=>props.context.ui.dialog.alert({title:"Quest workspace mode",message:String(error)})) },
       { id: "quests.open", title: "Open Quest board", group: "System", palette: true, suggested: true, slash: { name: "quests", aliases: ["quest", "board"] }, run: () => openBoard(props.context) },
       { id: "quests.session", title: "Jump to worker session", group: "System", palette: true, suggested: false, slash: { name: "session", aliases: ["jump"] }, run: () => openSessionPicker(props.context) },
-      { id: "quests.new", title: "Start Quest · new giver conversation", group: "Quests", palette: true, slash: { name: "quest-new" }, run: () => createGiver(props.context).catch(error => props.context.ui.dialog.alert({title:"Start Quest",message:String(error)})) },
+      { id: "quests.new", title: "Plan a Quest with your giver", group: "Quests", palette: true, slash: { name: "quest-new" }, run: () => createGiver(props.context).catch(error => props.context.ui.dialog.alert({title:"Start Quest",message:String(error)})) },
       { id: "quests.return", title: "Return to Quest", group: "Quests", palette: true, slash: { name: "quest-back" }, bind:"ctrl+alt+q", run: () => returnToQuest(props.context) },
     ],
   }))
@@ -126,7 +141,7 @@ function useQuests(context: any) {
   const [error,setError]=createSignal<string>()
   let project = boardProject(context?.location?.directory ?? context?.state?.path?.directory)
   let request=0
-  const refresh = () => { try { setAll(projectQuests(quests(root), project.id)) } catch {} }
+  const refresh = () => { try { setAll(projectQuests(quests(root), project.id,Boolean(userGiverID()))) } catch {} }
   createEffect(()=>{const sessionID=activeSessionID(context),version=++request;project=boardProject(undefined);setAll([]);setError("Checking current project");void resolveBoardProject(context,sessionID).then(p=>{if(version===request){project=p;setError(p.error);refresh()}})})
   onMount(() => { const stop = watchQuests(root, refresh); onCleanup(stop) })
   onCleanup(()=>{request++})
@@ -152,14 +167,14 @@ export function Footer(props: { context: any }) {
   const observation=useWorkerObservations(props.context,()=>all().flatMap(q=>q.sessions))
   const lines=()=>all().flatMap(quest=>quest.sessions.map(session=>({quest,session}))).sort((a,b)=>b.session.updatedAt.localeCompare(a.session.updatedAt)).slice(0,2)
   const counts = async () => {
-    const picked=await props.context.ui.dialog.select({title:all.error()??"Quest counts · current project",options:QUEST_FILTERS.filter(f=>f.id!=="all").map(f=>({value:f.id,title:`${filterQuests(all(),f.id).length} ${f.label}`}))})
+    const picked=await props.context.ui.dialog.select({title:all.error()??"Quest counts · all projects",options:QUEST_FILTERS.filter(f=>f.id!=="all").map(f=>({value:f.id,title:`${filterQuests(all(),f.id).length} ${f.label}`}))})
     if(picked)openBoard(props.context,undefined,picked)
   }
   return <box flexDirection="column" flexShrink={0}>
     <box flexDirection="row" flexWrap="no-wrap" gap={1} flexShrink={0}>
       <Show when={hasQuestReturn(props.context)}><text fg={C.cyan} flexShrink={0} onMouseUp={(event:any)=>activate(event,()=>returnToQuest(props.context))}>↩ Return to Quest</text></Show>
-      <Show when={(props.context?.renderer?.width ?? 80)>=150&&!all.error()} fallback={<text fg={C.yellow} flexShrink={0} onMouseUp={(event:any)=>activate(event,()=>void counts())}>Quests · project {all.error()?"?":filterQuests(all(),"open").length} ▾</text>}>
-        <text fg={C.yellow} flexShrink={0} onMouseUp={(event:any)=>activate(event,()=>openBoard(props.context))}>Quests · project</text>
+      <Show when={(props.context?.renderer?.width ?? 80)>=150&&!all.error()} fallback={<text fg={C.yellow} flexShrink={0} onMouseUp={(event:any)=>activate(event,()=>void counts())}>Quests · all projects {all.error()?"?":filterQuests(all(),"open").length} ▾</text>}>
+        <text fg={C.yellow} flexShrink={0} onMouseUp={(event:any)=>activate(event,()=>openBoard(props.context))}>Quests · all projects</text>
         <For each={QUEST_FILTERS.filter(f=>!["open","all","archived"].includes(f.id))}>{f=><text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>openBoard(props.context,undefined,f.id))}>{filterQuests(all(),f.id).length} {f.label.toLowerCase()}</text>}</For>
       </Show>
     </box>
@@ -179,7 +194,7 @@ export function Sidebar(props: { context: any }) {
   const all = useQuests(props.context)
   const active = () => all().filter((q) => q.state !== "Archived").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 12)
   return <box flexDirection="column" flexShrink={0}>
-    <text fg={C.yellow} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context))}>Quests · current project · open board</text>
+    <text fg={C.yellow} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context))}>Quests · all projects · open board</text>
     <Show when={all.error()}>{message=><text fg={C.orange} wrapMode="word">{message()}</text>}</Show>
     <text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>void createGiver(props.context).catch(error=>props.context.ui.dialog.alert({title:"Start Quest",message:String(error)})))}>+ Start Quest</text>
     <Show when={active().length > 0} fallback={<text fg={C.dim} wrapMode="word">None yet. Tell the Quest Giver what you want done.</text>}>
@@ -194,7 +209,7 @@ export function Sidebar(props: { context: any }) {
 export default Plugin.define({
   id: "quests",
   setup(context) {
-    context.ui.router.register({ name: "quests", render: (route: any) => <QuestBoard context={context} initialQuestID={route.data?.questID} initialFilter={route.data?.filter} initialAllProjects={route.data?.allProjects} returnRoute={route.data?.returnRoute} /> })
+    context.ui.router.register({ name: "quests", render: (route: any) => <QuestBoard context={context} initialQuestID={route.data?.questID} initialFilter={route.data?.filter} initialAllProjects={route.data?.allProjects} initialProjectDirectory={route.data?.projectDirectory} returnRoute={route.data?.returnRoute} /> })
     context.ui.slot({ append: "app", render: () => <Commands context={context} /> })
     context.ui.slot({ append: "prompt.footer", render: () => <Footer context={context} /> })
     // One worker face: the host's own background chip already carries the live
