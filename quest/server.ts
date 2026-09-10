@@ -1,3 +1,4 @@
+import {cleanupQuests} from "./cleanup"
 import {connectHostObservation,disconnectHostObservation,recordHostObservation,registerHostObservation} from "./host-observation"
 import {installWorkerCapabilities} from './worker-capabilities'
 import {installUserGiverContext} from './user-giver'
@@ -154,7 +155,7 @@ export function installQuestEvents(ctx: { event?: { subscribe?: Function }; sess
   }
   const controller = new AbortController()
   connections.set(owner, { controller })
-  const handle = (event: unknown) => { try { if(ctx.session)recordHostObservation(ctx.session,event);quests.onHostEvent(event) } catch (error) { console.error("[quests] host event error:", error) } }
+  const handle = (event: unknown) => { try { if(ctx.session)recordHostObservation(ctx.session,event);quests.onHostEvent(event);if(ctx.session&&/^session\.execution\.(succeeded|failed|interrupted)$/.test((event as any)?.type))void cleanupQuests(quests.store,ctx.session).catch(error=>console.error('[quests] cleanup',error)) } catch (error) { console.error("[quests] host event error:", error) } }
   queueMicrotask(async () => {
     let delay=1000
     while(!controller.signal.aborted){

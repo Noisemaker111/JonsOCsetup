@@ -205,3 +205,40 @@ Quest tool, board and goal admissions share quest/dispatch.ts: workflow measurem
 and the persistent giver return are registered before the existing worker launcher
 runs. The Quest tool owns reconciliation and return polling for all three paths;
 goal-specific continuation and worker pause/resume retain their existing owner.
+
+
+## Worktree retirement
+
+Turn-in is the cleanup request. The Quest service reacts to archive writes,
+worker execution endings, repository ref changes and host startup. There is no
+cleanup timer. `quest get` with `inspect.section=cleanup` retries and reports each
+retained reason. A resumed worker cannot edit a retired or archived assignment.
+Reopen the Quest and create a new run to continue work.
+
+Removal requires a guarded worker, confirmed idle host, terminal runs, no pending
+continuation or editor reservation, a clean checkout and commits included in the
+configured integration ref. Recorded workspace artifacts are copied to the Quest
+asset store, checked by digest, and their saved links updated before disposable
+copies are removed. Other untracked/ignored files are preserved. Branches, saved
+Quest records and session history are never deleted. Squash merges without ancestry
+proof stay retained for review.
+
+This repository uses `git config quest.integrationRef refs/remotes/origin/agents`.
+Other repositories use their explicit setting or their selected checkout's upstream;
+the main checkout's HEAD is not an integration target.
+
+After merging and verifying a development task, leave its checkout and run the
+selected release's `worktree:cleanup finish --repo <main checkout> --worktree
+<finished checkout>`. The command asserts that the owner and its child processes
+have finished. It records the exact head and retries immediately. Activation and
+direct session exit retry pending tasks; `worktree:cleanup retry --repo <main
+checkout>` is the manual retry. Keep evidence outside task checkouts before finish.
+Unknown ignored files, nested worktrees, changes and unintegrated commits block
+removal with a saved reason. Never infer completion from file age.
+
+New dev releases record process lifetime leases. Activation and launch exit can
+retire unselected, integrated releases only after every recorded process acknowledges
+exit. The selected release and immediate rollback release remain pinned. Run captures
+are retained outside the release under the channel registry before removal. Old
+releases without lifetime records and crashed/unacknowledged launches remain intact
+for explicit ownership review. Stable releases are never retired by this mechanism.

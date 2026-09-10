@@ -1,3 +1,4 @@
+import {cleanupQuests} from "./cleanup"
 #!/usr/bin/env bun
 import { QuestStore } from "./store"
 import { questRoot } from "./root"
@@ -55,6 +56,7 @@ else if (cmd === "mappings" || cmd === "map" || cmd === "claims") {
   const api = (await import("./agent-api")).createQuestAgentAPI(root)
   printCompact(api.mappings(args[0] ? { questID: args[0] } : {}))
 }
+else if (cmd === "cleanup") print(await cleanupQuests(store,undefined,args[0]))
 else if (cmd === "index") console.log(generateQuestIndex(root))
 else if (cmd === "migrate-preview") print(previewMigration(root))
 else if (cmd === "migrate-apply") print(applyMigration(root))

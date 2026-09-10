@@ -1,3 +1,5 @@
+import {git as cleanupGit} from '../quest/cleanup-git.mjs'
+import {useRelease,releaseUse,retireReleases} from './release-retirement.mjs'
 import { inspectHostExecutable } from '../project-router/executable.mjs'
 /** Managed OpenCode2 terminal. Only this supervisor's exact standalone child is stopped. */
 import JSON5 from "json5"
@@ -13,6 +15,7 @@ const option = (name) => { const at = process.argv.indexOf(name); return at < 0 
 const root = resolve(option("--config-root") ?? (basename(dirname(sourceRoot)) === "generations" ? resolve(sourceRoot,"../..") : sourceRoot))
 const json = process.argv.includes("--json")
 const cwd = resolve(option("--cwd") ?? process.cwd())
+const releaseLease=useRelease(root)
 const control = join(root, "run", "runtime", `launch-${Date.now()}-${process.pid}`)
 mkdirSync(control, { recursive: true })
 const token = randomBytes(24).toString("hex")
@@ -70,7 +73,7 @@ function launch(pointer) {
   const env = Object.fromEntries(Object.entries({ ...process.env, OPENCODE_CONFIG_DIR: launchRoot, OPENCODE_CONFIG_CONTENT: JSON.stringify(reviewed), OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_PLUGIN_GENERATION: generation, OPENCODE_RUNTIME_CONTROL: control, OPENCODE_RUNTIME_TOKEN: token, OPENCODE_RUNTIME_RECEIPT: receipt }).filter(([, value]) => typeof value === "string"))
   const child = pty.spawn(exe, args, { name: "xterm-256color", cols: Number(option("--cols") ?? process.stdout.columns ?? 120), rows: Number(option("--rows") ?? process.stdout.rows ?? 40), cwd, env })
   terminal = child
-  writeFileSync(join(control, "owner.json"), JSON.stringify({ pid: process.pid, childPID: child.pid || undefined, generation, sessionID, cwd, sequence }))
+  writeFileSync(join(control, "owner.json"), JSON.stringify({ releaseLease, pid: process.pid, childPID: child.pid || undefined, generation, sessionID, cwd, sequence }))
   emit({ type: "launched", configRoot: launchRoot, host: hostIdentity, generation, sourceCommit: pointer.evidence.sourceCommit, pid: child.pid || undefined, sessionID, sequence, receipt, control })
   child.onData((data) => emit({ type: "data", data: Buffer.from(data).toString("base64") }))
   child.onExit(({ exitCode }) => {
@@ -95,6 +98,7 @@ async function finish(code = 0) {
   clearInterval(watcher)
   try { await stopChild() } catch (error) { emit({ type: "error", message: String(error) }); code = 1 }
   if (!json && process.stdin.isTTY) process.stdin.setRawMode(false)
+  if(!terminal){releaseUse(releaseLease);try{const repository=dirname(resolve(root,cleanupGit(root,['rev-parse','--git-common-dir'])));retireReleases(repository)}catch(error){emit({type:'cleanup-retained',reason:String(error)})}}
   process.exit(code)
 }
 const watcher = setInterval(async () => {
