@@ -1,5 +1,5 @@
 /** Shared filesystem boundary for Quest and development checkout retirement. */
-import {existsSync,realpathSync,readdirSync,lstatSync} from 'node:fs'
+import {existsSync,realpathSync,readdirSync,lstatSync,unlinkSync,rmdirSync} from 'node:fs'
 import {resolve,relative,isAbsolute,join} from 'node:path'
 import {spawnSync} from 'node:child_process'
 export const pathKey=p=>resolve(p).replaceAll('\\','/').toLowerCase()
@@ -14,6 +14,16 @@ export function integrationRef(root,source=root){
 }
 export function registeredWorktrees(root){return git(root,['worktree','list','--porcelain','-z']).split('\0\0').filter(Boolean).map(block=>Object.fromEntries(block.split('\0').filter(Boolean).map(field=>{const i=field.indexOf(' ');return i<0?[field,true]:[field.slice(0,i),field.slice(i+1)]})))}
 function bytes(root){let total=0;for(const e of readdirSync(root,{withFileTypes:true})){const p=join(root,e.name);if(e.isSymbolicLink())continue;if(e.isDirectory())total+=bytes(p);else total+=lstatSync(p).size}return total}
+/** Git for Windows can leave only empty directories and dangling launch junctions.
+ * Remove links themselves, never follow their targets; any ordinary file stops recovery. */
+export function removeEmptyWorktreeShell(root){
+ const plan=[]
+ const inspect=directory=>{for(const e of readdirSync(directory,{withFileTypes:true})){const path=join(directory,e.name);if(!within(root,path))throw Error('Leftover path escapes retired checkout');const stat=lstatSync(path);if(stat.isSymbolicLink())plan.push({path,link:true});else if(stat.isDirectory()){inspect(path);plan.push({path,link:false})}else throw Error('Ordinary file remains after Git removal; preserved: '+path)}}
+ if(pathKey(realpathSync(root))!==pathKey(root))throw Error('Retired checkout changed identity')
+ inspect(root)
+ for(const item of plan){const stat=lstatSync(item.path);if(item.link){if(!stat.isSymbolicLink())throw Error('Leftover link changed; preserved');unlinkSync(item.path)}else{if(!stat.isDirectory()||stat.isSymbolicLink())throw Error('Leftover directory changed; preserved');rmdirSync(item.path)}}
+ rmdirSync(root)
+}
 export function removeIntegratedWorktree({root,path,ref,head,branch,allowedIgnored=['node_modules/'],beforeRemove=()=>{}}){
  const retained=reason=>({removed:false,reason})
  if(!isAbsolute(root)||!isAbsolute(path)||pathKey(root)===pathKey(path))return retained('The main checkout is never removed')
@@ -34,6 +44,7 @@ export function removeIntegratedWorktree({root,path,ref,head,branch,allowedIgnor
  if(git(path,['rev-parse','HEAD'])!==entry.HEAD||git(path,['status','--porcelain','--untracked-files=all']))return retained('Workspace changed during cleanup')
  const logicalBytes=bytes(path)
  git(root,['worktree','remove',path])
+ if(existsSync(path))removeEmptyWorktreeShell(path)
  if(existsSync(path)||registeredWorktrees(root).some(r=>pathKey(r.worktree)===pathKey(path)))throw Error('Worktree removal did not complete')
  return {removed:true,reason:'Integrated checkout removed; branch and history retained',logicalBytes,workerHead:entry.HEAD,projectHead:target,ref}
 }
