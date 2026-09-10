@@ -7,6 +7,7 @@ import * as pty from "node-pty"
 import { randomBytes } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync, appendFileSync, readdirSync, symlinkSync, copyFileSync } from "node:fs"
 import { basename, dirname, join, resolve } from "node:path"
+import { homedir } from "node:os"
 import { fileURLToPath } from "node:url"
 import { generationRoot, reviewedAgentConfig } from "./runtime-contract.mjs"
 
@@ -70,7 +71,22 @@ function launch(pointer) {
   }
   const fullConfig = { ...JSON5.parse(readFileSync(join(generationRoot(root, generation), "opencode.jsonc"), "utf8")), ...reviewed }
   writeFileSync(join(launchRoot, "opencode.jsonc"), JSON.stringify(fullConfig))
-  const env = Object.fromEntries(Object.entries({ ...process.env, OPENCODE_CONFIG_DIR: launchRoot, OPENCODE_CONFIG_CONTENT: JSON.stringify(reviewed), OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_PLUGIN_GENERATION: generation, OPENCODE_RUNTIME_CONTROL: control, OPENCODE_RUNTIME_TOKEN: token, OPENCODE_RUNTIME_RECEIPT: receipt }).filter(([, value]) => typeof value === "string"))
+  // An isolated runtime starts with an empty credential store, so a launched host cannot
+  // reach any provider it must authenticate: every prompt is dropped with no error and only
+  // free or locally proxied models appear to work. Supply the keys the user already authorized.
+  const authorizedKeys = () => {
+    const variables = { "opencode-go": "OPENCODE_API_KEY", openrouter: "OPENROUTER_API_KEY" }
+    const supplied = {}
+    try {
+      const auth = JSON.parse(readFileSync(join(process.env.OPENCODE_DATA ?? join(homedir(), ".local", "share", "opencode"), "auth.json"), "utf8"))
+      for (const [provider, variable] of Object.entries(variables)) {
+        const entry = auth[provider]
+        if (entry?.type === "api" && typeof entry.key === "string" && entry.key && !process.env[variable]) supplied[variable] = entry.key
+      }
+    } catch {}
+    return supplied
+  }
+  const env = Object.fromEntries(Object.entries({ ...process.env, OPENCODE_CONFIG_DIR: launchRoot, OPENCODE_CONFIG_CONTENT: JSON.stringify(reviewed), OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_PLUGIN_GENERATION: generation, OPENCODE_RUNTIME_CONTROL: control, OPENCODE_RUNTIME_TOKEN: token, OPENCODE_RUNTIME_RECEIPT: receipt, ...authorizedKeys() }).filter(([, value]) => typeof value === "string"))
   const child = pty.spawn(exe, args, { name: "xterm-256color", cols: Number(option("--cols") ?? process.stdout.columns ?? 120), rows: Number(option("--rows") ?? process.stdout.rows ?? 40), cwd, env })
   terminal = child
   writeFileSync(join(control, "owner.json"), JSON.stringify({ releaseLease, pid: process.pid, childPID: child.pid || undefined, generation, sessionID, cwd, sequence }))
