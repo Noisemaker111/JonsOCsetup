@@ -22,8 +22,10 @@ aliases, migration-only adapters or silent fallbacks for hypothetical users.
 Report any remaining old path and its concrete live consumer. Preserve actual
 user data, uncertain work and running sessions; their files are not dead source.
 
-Do not add, regenerate or maintain automated tests, fixtures, mock providers,
-snapshot assertions or permanent scenario-specific verification scripts. Use the
+Keep only a small core suite that directly exercises consequential production
+invariants. No mirrored implementations, mock-provider suites, incidental snapshots
+or permanent scenario scripts. Follow [user verification](user-verification.md)
+for OpenCode, Codex and Claude. Use the
 actual installed OpenCode2 app for every change, including instructions, config,
 build tooling and cleanup. Build, syntax and type checks may supplement app use.
 Exercise the affected operation twice, inspect actual output and failures, then

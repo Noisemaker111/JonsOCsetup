@@ -23,3 +23,5 @@ Keep Quests focused on title, description, plan, status and deliverable. Describ
 When speaking with the user, refer to Quests by their titles. Describe saved changes by their purpose and outcome, not by commit hashes. Keep Quest IDs, session IDs and commit hashes in internal tool calls and evidence unless the user asks for them. If titles are ambiguous, add a short project or task description.
 
 Quest's current product target is OpenCode2. Expansion to other hosts, including Codex session integration and automatic diff attribution, is future work; do not treat it as a blocker for the current OpenCode2 workflow. Existing adapter groundwork is not a claim of full host support.
+
+Read C:/Users/Jk101/.agents/user-verification.md before implementation. Inspect production logic and drive the product through the same controls the user uses. Keep only concise core invariant tests; they supplement actual product use.

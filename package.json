@@ -25,6 +25,8 @@
     "ui:lab:paper": "bun ui-lab/paper.ts",
     "runtime:channel": "node scripts/runtime-channel.mjs",
     "setup:plan": "node scripts/install-setup.mjs",
-    "setup:install": "node scripts/install-setup.mjs --apply"
+    "setup:install": "node scripts/install-setup.mjs --apply",
+    "runtime:drive": "bun scripts/drive-opencode.ts",
+    "check:core": "bun test test/quest-worker-identity.test.ts test/quest-artifact-preview.test.ts"
   }
 }

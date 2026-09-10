@@ -5,7 +5,7 @@
     {
       "source": "setup/files/Projects/opencode-hub/AGENTS.md",
       "target": "Projects/opencode-hub/AGENTS.md",
-      "sha256": "f884248aaf4e9565c2dadebcdc10fbb6e363cacb57cb50cfede813aed61a488e",
+      "sha256": "6d06ca3c914ff36978e859df15c1c74b56bc361b4bd810e14a8bb81cbf3b54ca",
       "importedFrom": "Projects/opencode-hub/AGENTS.md"
     },
     {
@@ -35,7 +35,7 @@
     {
       "source": "setup/files/.codex/AGENTS.md",
       "target": ".codex/AGENTS.md",
-      "sha256": "2c7ccda9a2e6dbc6e48539e0271b565db1b0b0a150b2b6520611acf59ea5da1c",
+      "sha256": "ea99bf405fb69daa92bc88ec228af2d08f3a1052ae4756f9285f04bf8041c581",
       "importedFrom": ".codex/AGENTS.md"
     },
     {
@@ -89,7 +89,7 @@
     {
       "source": "setup/files/.agents/skills/opencode-dev-workflow/SKILL.md",
       "target": ".agents/skills/opencode-dev-workflow/SKILL.md",
-      "sha256": "05f38bf414786242c269f6ae23e9bc35ccafae86641831d13eca4e8e04d33e89",
+      "sha256": "e87bb5c7d53c812a6bd2c1171620669089f3d9f0f3e97c66eb2d881cc4e6e23d",
       "importedFrom": ".agents/skills/opencode-dev-workflow/SKILL.md"
     },
     {
@@ -827,8 +827,18 @@
     {
       "source": "setup/files/Projects/opencode-hub/MEMORY.md",
       "target": "Projects/opencode-hub/MEMORY.md",
-      "sha256": "fd287f90646385ef0101a012ca04d0e49b3026bfd7fe7516342a156605ef621c",
+      "sha256": "764cc3e414d60113df65d651243893233e05db31035ca4d4e67df92ea261288b",
       "importedFrom": "Projects/opencode-hub/MEMORY.md"
+    },
+    {
+      "source": "docs/user-verification.md",
+      "target": ".agents/user-verification.md",
+      "sha256": "3cddf22347e67df60aad2e04eda8afa9bbb488724a35ed2d192131fa3335cc54"
+    },
+    {
+      "source": "setup/files/.claude/CLAUDE.md",
+      "target": ".claude/CLAUDE.md",
+      "sha256": "fd00063e9e0d08f4a3f911e7e1793d1a4dbfc89136e5a7ce29e54ca5afd49cc4"
     }
   ],
   "dependencies": [

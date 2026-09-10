@@ -7,7 +7,6 @@ import { emptySelection, resolveTargets, verifyTarget, revalidate, instructions,
 import { RouteReturns } from './returns'
 import { Onboarding } from './onboarding'
 import { routeFeedback } from '../quest/route-public'
-import { systemPart } from '../models/model-routing'
 import {RouterMemory} from './memory'
 
 const string = { type: 'string', minLength: 1, maxLength: 2000 }
@@ -100,10 +99,6 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
     try { const result = await operation.execute(input, context); const output = Array.isArray(result) ? { items: result } : result; return { output, content: JSON.stringify(output) } }
     catch (error) { const output = { code: (error as any)?.code ?? 'ROUTER_FAILED', message: redact(error instanceof Error ? error.message : 'Router failed'), action: 'Inspect this bounded result; do not retry unknown launches or substitute routes' }; return { output, content: JSON.stringify(output) } }
   } }) })
-  await ctx.session.hook?.('context', (event: any) => {
-    if (!['build', 'quest-giver', 'general', 'astra'].includes(event.agent) || worker(event.sessionID)) return
-    event.system.push(systemPart('One persistent Quest Giver owns all user conversations about Quests. For cross-project work discover on demand, resolve explicit user paths/names/aliases and project_select the worker project. Continue creating and managing Quests here; never create a destination giver. Explicit choice/correction wins; recency only supports candidates. Ask one ambiguity question without launching. Keep explicit multiple targets separate. General discussion needs no Quest. Existing Quests retain their recorded project; get/update/run work from this same giver without relocating it. New Quests use the explicitly selected project. Never supply synthetic host context. A saved goal is not a live worker; inspect receipts. Unknown launch: stop and reconcile.'))
-  })
   await ctx.command?.transform((editor: any) => editor.add({ name: 'goal', description: 'Canonical Quest goal: start <quest> <step...>, status, pause, cancel, resume', execute: async ({ sessionID, prompt }: any) => {
     const [action, questID, ...stepIDs] = (prompt.text ?? '').trim().split(/\s+/)
     if (!['start', 'status', 'pause', 'cancel', 'resume'].includes(action)) throw new RouterError('INVALID_GOAL', 'Use /goal start <quest> <step...>, status, pause, cancel or resume')

@@ -1,3 +1,5 @@
+> Historical evidence: scenario scripts named below have been removed. They are not current verification instructions. Use [the actual product](user-verification.md) and the small production-logic core suite.
+
 # Adaptive Quest work
 
 This implementation builds on the portfolio pacing change. Existing one-worker continuations keep their behavior. New independent work can use the existing Quest operation:
@@ -41,6 +43,6 @@ The export embeds no external scripts or network dependencies. Its numbers come 
 
 ## Verification boundaries
 
-Run the repository suite and smoke gate. `scripts/verify-session-guidance.ts` exercises installed native stable queue/steer receipt, ordering, deduplication and acknowledgement on an anonymous local provider. `scripts/verify-parallel-worker-host.ts` exercises independent worker outputs, dependency inheritance and a combined result on isolated synthetic accounts. `scripts/verify-model-worker-host.ts --paced` separately verifies real host admission through the account pacing controller. All these fixtures use isolated state; they do not establish production account throughput or model quality.
+Use the real app to queue/steer ongoing work, observe actual worker completion and saved outcomes, then repeat and reopen. Follow [user verification](user-verification.md); keep only concise core invariant checks.
 
 Merge and activation are separate release steps. Existing processes keep their loaded generation; this change does not restart sessions or extend an expired target.

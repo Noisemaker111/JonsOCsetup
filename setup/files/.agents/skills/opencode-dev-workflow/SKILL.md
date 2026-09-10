@@ -33,7 +33,7 @@ rely only on the destination's final prose. Report source saved, PR merged,
 release selected and process loaded as separate observed facts.
 
 For JonsOCsetup changes, follow `docs/development-workflow.md`: use the actual
-installed app for every change, keep no automated tests or obsolete compatibility
+installed app for every change, retain concise core tests of production logic, remove obsolete compatibility
 paths, and search for and remove superseded code and instructions before finishing.
 Read the project-root MEMORY.md at the start and after context loss; maintain
 concise durable decisions and verified lessons there using ordinary file tools.

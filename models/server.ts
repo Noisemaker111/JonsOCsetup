@@ -9,7 +9,7 @@ import { installAdaptiveContext } from "./context-plugin"
  * What it owns:
  *  - rewriting Task spawns away from a capped or forbidden provider
  *  - refusing to change a live worker's pinned model
- *  - injecting the live cap / quota / usage lines into the orchestrator's turn
+ *  - delivering observed provider failures once; usage remains in tools and HUD
  *
  * What it must never own: the Claude Code harness intercept, the orchestration
  * ledger, task display labels, tool-output truncation, or the shell guard —
@@ -18,32 +18,17 @@ import { installAdaptiveContext } from "./context-plugin"
  */
 import { installAccessGuard, assertConfiguredModel } from "./access-policy"
 import { define } from "@opencode-ai/plugin/v2/promise"
-import { readFileSync } from "node:fs"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
 import {
   enforceSessionModelChange,
   drainFailoverNotices,
   forceUsageCollectOnCap,
-  quotaLaneNotice,
   rememberFailoverNotice,
   systemPart,
   type UsageCacheLike,
 } from "./model-routing"
-import {
-  USAGE_STALE_MS,
-  kickUsageCollector,
-  quotaSummaryLine,
-  usageAgeMs,
-  usageCache,
-  capacitySnapshot,
-  getAccountUsage,
-  routeAccountCapacity,
-} from "../usage/usage-lib"
+import { kickUsageCollector } from "../usage/usage-lib"
 import { detectProviderFailure, failureMessage } from "../usage/usage-reached"
-import { discoverModelsText, isClaudeCodeModel } from "./model-catalog"
 
-const CONFIG_FILE = join(dirname(fileURLToPath(import.meta.url)), "..", "opencode.jsonc")
 
 /** Attach a tool hook without letting one bad registration disable the rest. */
 async function safeToolHook(hook: Function, name: string, fn: Function, rethrow = false) {
@@ -84,20 +69,9 @@ export async function installSessionModelGuard(ctx: { tool?: { hook?: Function }
 }
 
 /**
- * The one-liners the orchestrator needs on its next turn: a live cap, any
- * failover that just happened, and the current quota/usage summary. Pushed as
- * SystemPart objects — a raw string fails opencode2 schema validation.
+ * Observed provider errors remain visible. Routine quota and usage information
+ * is available through usage_status and the HUD, without a per-turn summary.
  */
-export function quotaLines(): string[] {
-  const usage = usageCache()
-  if (usageAgeMs(usage) >= USAGE_STALE_MS) kickUsageCollector()
-  const notice = quotaLaneNotice(usage)
-  return [
-    ...(notice ? [notice] : []),
-    ...drainFailoverNotices(),
-    quotaSummaryLine(usage),
-  ].filter((line) => typeof line === "string" && line.trim().length > 0)
-}
 
 function failureBlob(event: unknown, output?: unknown): string {
   try { return JSON.stringify([output, event]).slice(0, 4000) }
@@ -117,15 +91,13 @@ export async function installUsageFailureHook(ctx: { tool?: { hook?: Function } 
   })
 }
 
-export async function installQuotaContext(ctx: { session?: { hook?: Function } }) {
+export async function installFailureContext(ctx: { session?: { hook?: Function } }) {
   const hook = ctx?.session?.hook
   if (typeof hook !== "function") return
   await hook("context", (event: { system?: Array<{ type: "text"; text: string }> }) => {
     if (!Array.isArray(event.system)) return
-    // Built here rather than passed through, so it is visible at the call site
-    // that every push is a SystemPart object. A raw string fails opencode2
-    // schema validation, and the smoke gate checks this line specifically.
-    for (const line of quotaLines()) event.system.push(systemPart(line))
+    // Only actual queued failures add context. Normal turns add no usage prose.
+    for (const line of drainFailoverNotices()) event.system.push(systemPart(line))
   })
 }
 
@@ -136,7 +108,7 @@ export default define({
     for (const [name, install] of [
       ["spawn-guard", () => installSpawnGuard(ctx)],
       ["session-model-guard", () => installSessionModelGuard(ctx)],
-      ["quota-context", () => installQuotaContext(ctx)],
+      ["failure-notices", () => installFailureContext(ctx)],
       ["adaptive-context", () => installAdaptiveContext(ctx)],
       ["usage-failure", () => installUsageFailureHook(ctx)],
     ] as const) {

@@ -1,3 +1,5 @@
+> Historical evidence: scenario scripts named below have been removed. They are not current verification instructions. Use [the actual product](user-verification.md) and the small production-logic core suite.
+
 # Central router runtime scout
 
 2026-09-09 UTC. Assigned step: `central-runtime-scout`, in **Build project-router: one conversational entry point for all projects**. Investigation only; no runtime implementation or activation.
@@ -71,7 +73,7 @@ Integrator acceptance, in order:
 2. Reproduce missing catalog under the old rules in one isolated current-host process. Apply only explicit project grants; observe agent update under the same PID. On the next turn of the same fixture session, capture actual provider-facing Code Mode catalog and successfully execute bounded `project_discover`. No replacement session counts as this check.
 3. After authorized live configuration repair, repeat the next-turn `project_discover` check in the **existing central conversation**, then `project_route_status` for the exact route. Record same session/process and actual loaded module; do not infer these from the pointer. If unavailable, distinguish denied grant, stale overlay, absent registration and reload failure.
 4. With isolated destinations, select an explicit project, route once, verify destination physical/native Windows path and instructions, preserve hub identity, exercise destination-owned Quest get/update plus configured harmless command receipt, and retrieve results at the hub. Repeat request keys must not duplicate launch. Wrong-project Quest access must remain rejected. Check correction and unknown-delivery handling.
-5. Reuse `scripts/verify-project-router.ts` with the current executable override and reviewed configuration; historical beta-19242 results remain historical. Run relevant host/path/runtime focused checks. Full `bun test` and `pwsh -NoProfile -File ./smoke-test.ps1` remain implementation/integration gates. Exact Astra worker dispatch, goal lifecycle and any TUI change have their own existing acceptance; this documentation scout supplies no new completion claim for them.
+5. Exercise project selection and dispatch through the actual installed app with the configured real model. Inspect saved worker outcomes and return messages; repeat and reopen. Follow [user verification](user-verification.md).
 
 ### Scout checks and result
 

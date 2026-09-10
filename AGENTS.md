@@ -1,6 +1,6 @@
 Follow the current project's AGENTS.md for its commands, conventions and release rules. Load a skill only when its description matches the task. Follow explicit user instructions over any skill.
 
-Run local tests, typechecks and headless checks without asking. Get explicit authorization before you push, open a PR, publish, merge, release or do anything destructive. Treat authorization given once as still valid; do not ask again. Never kill OpenCode or terminal processes.
+Run small core checks, typechecks, builds and isolated actual-product verification without asking. Get explicit authorization before you push, open a PR, publish, merge, release or do anything destructive. Treat authorization given once as still valid; do not ask again. Never kill OpenCode or terminal processes.
 
 Use the exact model the user chose. If that route is unavailable, say so instead of substituting. For quotas and resets call `usage_status` with `{"format":"json"}`. When you describe a worker, give its recorded provider, model and reasoning level, say fast only when actually selected, and give the session link rather than a raw ses_ ID.
 
@@ -64,9 +64,11 @@ reviewers, fallbacks and resumes too. No patched fork of OpenCode: changes go up
 contributions, never into a private run-fork, and never into the T3 upstream fork.
 
 For JonsOCsetup changes, follow `docs/development-workflow.md`: use the actual
-installed app for every change, keep no automated tests or obsolete compatibility
+installed app for every change, retain concise core tests of production logic, remove obsolete compatibility
 paths, and search for and remove superseded code and instructions before finishing.
 Read the project-root MEMORY.md at the start and after context loss; maintain
 concise durable decisions and verified lessons there using ordinary file tools.
 For hub work, use C:/Users/Jk101/Projects/opencode-hub/MEMORY.md. Quests own task
 progress. These project-specific verification rules do not govern other projects.
+
+Read C:/Users/Jk101/.agents/user-verification.md before implementation. Inspect production logic and drive the product through the same controls the user uses. Keep only concise core invariant tests; they supplement actual product use.
