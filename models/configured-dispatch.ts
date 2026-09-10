@@ -6,7 +6,7 @@ export function policyFromConfiguredWorkers(config:any,snapshot:AccountSnapshot,
  const routes:DispatchPolicy["routes"]=[]
  for(const agent of input.agents){
   const worker=config.agents?.[agent],identity=worker?.model
-  if(worker?.mode!=="subagent"||typeof identity!=="string")throw new Error("Configured worker has no exact model: "+agent)
+  if(!["subagent","all"].includes(worker?.mode)||typeof identity!=="string")throw new Error("Configured worker has no exact model: "+agent)
   const slash=identity.indexOf("/"),providerID=identity.slice(0,slash),modelID=identity.slice(slash+1),model=config.providers?.[providerID]?.models?.[modelID]
   if(slash<1||!model)throw new Error("Configured worker model is absent from the provider catalog: "+agent)
   const accounts=accountsForRoute(snapshot,providerID,modelID)

@@ -33,7 +33,8 @@ function currentRoute(context: any): unknown {
 
 /**
  * The host composer IS the Quest Giver conversation: quest-giver is the
- * default agent, so every session Jk types in has the normal slash commands
+ * default agent for intake. Worker sessions retain their assigned native agent;
+ * the giver has the normal slash commands
  * and one context for every Quest. The board is a view: `/quests`, the footer
  * count, or a sidebar row opens it; Esc returns to the chat. It never opens
  * itself at startup and never carries its own chat.
@@ -128,6 +129,7 @@ function Commands(props: { context: any }) {
       { id: "quests.workspace-mode", title: "Quest workspace mode (global)", group: "System", palette: true, slash: { name: "quest-workspace" }, run: () => chooseWorkspaceMode(props.context).catch(error=>props.context.ui.dialog.alert({title:"Quest workspace mode",message:String(error)})) },
       { id: "quests.open", title: "Open Quest board", group: "System", palette: true, suggested: true, slash: { name: "quests", aliases: ["quest", "board"] }, run: () => openBoard(props.context) },
       { id: "quests.session", title: "Jump to worker session", group: "System", palette: true, suggested: false, slash: { name: "session", aliases: ["jump"] }, run: () => openSessionPicker(props.context) },
+      { id: "quests.giver", title: "Go to your Quest Giver", group: "Quests", palette: true, suggested: true, slash: { name: "giver" }, bind: "ctrl+alt+g", run: () => createGiver(props.context).catch(error => props.context.ui.dialog.alert({title:"Quest Giver unavailable",message:String(error)})) },
       { id: "quests.new", title: "Plan a Quest with your giver", group: "Quests", palette: true, slash: { name: "quest-new" }, run: () => createGiver(props.context).catch(error => props.context.ui.dialog.alert({title:"Start Quest",message:String(error)})) },
       { id: "quests.return", title: "Return to Quest", group: "Quests", palette: true, slash: { name: "quest-back" }, bind:"ctrl+alt+q", run: () => returnToQuest(props.context) },
     ],
@@ -182,6 +184,34 @@ export function Footer(props: { context: any }) {
   </box>
 }
 
+/** Role comes from the bound giver and worker receipts, never the selected composer agent. */
+function SessionRole(props: { context: any; sessionID: string }) {
+  const all = useQuests(props.context)
+  const assignment = () => all().flatMap(quest => quest.sessions.map(session => ({quest,session}))).find(row => (row.session.openCodeSessionId ?? row.session.sessionID) === props.sessionID)
+  const observation = useWorkerObservations(props.context, () => assignment() ? [assignment()!.session] : [])
+  const giver = () => userGiverID() === props.sessionID
+  const go = () => void createGiver(props.context).catch(error => props.context.ui.dialog.alert({title:"Quest Giver unavailable",message:String(error)}))
+  const native = () => props.context.data?.session?.get(props.sessionID)
+  createEffect(() => {
+    const row = native(), role = giver() ? 'Quest Giver' : assignment() ? 'Worker' : undefined
+    if (!row || !role || !props.context.client.session.rename) return
+    const title = role === 'Quest Giver' ? 'Quest Giver' : 'Worker · ' + assignment()!.quest.title
+    if (row.title === title) return
+    void props.context.client.session.rename({sessionID:props.sessionID,title}).then(() => props.context.data.session.sync(props.sessionID)).catch(error => console.error('[quests] session role title:',String(error)))
+  })
+  return <box flexDirection="column" flexShrink={0} paddingLeft={1} paddingRight={1} backgroundColor={giver()?"#262416":"#18262e"}>
+    <box flexDirection="row" gap={2}>
+      <text fg={giver()?C.yellow:C.cyan} flexShrink={0}>{giver()?"◆ YOUR QUEST GIVER":assignment()?"↳ QUEST WORKER":"SESSION HISTORY"}</text>
+      <Show when={!giver()}><text fg={C.yellow} onMouseUp={(event:any)=>activate(event,go)}>◆ Go to giver · /giver</text></Show>
+    </box>
+    <Show when={assignment()}>{row => <>
+      <text fg={C.text} wrapMode="none" truncate>{row().quest.title} · {observation(row().session).state}</text>
+      <text fg={C.muted} wrapMode="none" truncate>{workerLabel(row().session)} · {observation(row().session).lastActivityAt ? 'Last activity '+new Date(observation(row().session).lastActivityAt).toLocaleTimeString() : 'Activity unconfirmed'}</text>
+    </>}</Show>
+    <Show when={giver()}><text fg={C.muted} wrapMode="none" truncate>Your one conversation across all projects · Workers report here</text></Show>
+  </box>
+}
+
 function laneColor(q: Quest): string {
   if (q.state === "Working") return C.green
   if (q.state === "Needs attention") return C.red
@@ -194,6 +224,7 @@ export function Sidebar(props: { context: any }) {
   const all = useQuests(props.context)
   const active = () => all().filter((q) => q.state !== "Archived").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 12)
   return <box flexDirection="column" flexShrink={0}>
+    <text fg={C.yellow} onMouseUp={(event:any)=>activate(event,()=>void createGiver(props.context).catch(error=>props.context.ui.dialog.alert({title:"Quest Giver unavailable",message:String(error)})))}>◆ Your Quest Giver · /giver</text>
     <text fg={C.yellow} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context))}>Quests · all projects · open board</text>
     <Show when={all.error()}>{message=><text fg={C.orange} wrapMode="word">{message()}</text>}</Show>
     <text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>void createGiver(props.context).catch(error=>props.context.ui.dialog.alert({title:"Start Quest",message:String(error)})))}>+ Start Quest</text>
@@ -211,6 +242,7 @@ export default Plugin.define({
   setup(context) {
     context.ui.router.register({ name: "quests", render: (route: any) => <QuestBoard context={context} initialQuestID={route.data?.questID} initialFilter={route.data?.filter} initialAllProjects={route.data?.allProjects} initialProjectDirectory={route.data?.projectDirectory} returnRoute={route.data?.returnRoute} /> })
     context.ui.slot({ append: "app", render: () => <Commands context={context} /> })
+    context.ui.slot({ append: "session.composer.top", render: (input:any) => <SessionRole context={context} sessionID={input.sessionID} /> })
     context.ui.slot({ append: "prompt.footer", render: () => <Footer context={context} /> })
     // One worker face: the host's own background chip already carries the live
     // line (dispatch descriptions are set to the chip format), so the sidebar

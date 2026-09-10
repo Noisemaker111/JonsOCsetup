@@ -6,7 +6,7 @@ that service on every turn was redundant and has been removed.
 
 | Owner | Trigger | Effect on model context |
 |---|---|---|
-| models/server.ts | context | Adds only queued observed provider failure notices, drained once. Normal turns add no quota summary. |
+| models/server.ts | model HTTP response and context | Reports actual failed model HTTP responses only to the originating session; successful responses clear pending notices. Tool inputs, source files and quoted errors are never inferred to be live provider failures. |
 | models/context-plugin.ts | context | Adds a recoverable task checkpoint only when one has been explicitly prepared; separate from durable MEMORY.md. |
 | quest/worker-capabilities.ts | worker context and outgoing request | Enforces exact worker identity, filters read-only tools, records capability names, and adds assigned-Quest save guidance to the execute description. |
 | quest/user-giver.ts | giver context | Registers/checks the persistent giver identity; no system prose. |

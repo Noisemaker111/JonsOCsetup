@@ -241,3 +241,12 @@ PTY driver may operate and capture the real app; do not hand-draw expected frame
 4. Add `scrollbox` with `contentHeight` + `DIALOG_INNER` minWidth and `UsageSkeleton` fallback.
 5. Switch list UIs from manual `<box>` lists to `dialog.select` with `category` + `searchText`.
 6. Add `sidebar.content` panel if you only had `prompt.footer` count — users can't see quests from inside session without it (see `tui-slots.test.ts:quests mount the count on composer footer AND in sidebar`).
+
+## Session roles
+
+The bound user giver has the persistent title Quest Giver, yellow role chrome and
+a /giver (Ctrl+Alt+G) entry from any session. Worker sessions have Worker titles
+and cyan role chrome based on Quest receipts. Native worker agents are mode all
+and visible so the host composer can restore their actual persisted identity;
+hidden subagent-only agents caused the composer to fall back to the giver.
+Worker permissions and exact agent/model/reasoning guards still apply.

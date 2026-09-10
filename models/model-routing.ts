@@ -790,7 +790,6 @@ export function spawnFailoverBefore(event: unknown, cache?: UsageCache, keys?: r
   const id = String(ev.id ?? ev.callID ?? "failover")
   const sessionID = String(ev.sessionID ?? "unknown")
   const note = (lane: string, agent: string, reason: string) => {
-    rememberFailoverNotice(reason)
     taskState(id, sessionID, id, lane, "executing", reason)
   }
   if (isForbiddenXai(blob)) {
@@ -836,23 +835,6 @@ export function capResetAt(providerID: string, cache?: UsageCache): string | und
 
 export function systemPart(text: string): { type: "text"; text: string } {
   return { type: "text", text }
-}
-
-const failoverNotices: string[] = []
-
-export function rememberFailoverNotice(text: string) {
-  const trimmed = String(text ?? "").trim()
-  if (trimmed) failoverNotices.push(trimmed)
-}
-
-export function drainFailoverNotices(): string[] {
-  const out = failoverNotices.slice()
-  failoverNotices.length = 0
-  return out
-}
-
-export function failoverSystemParts(): { type: "text"; text: string }[] {
-  return drainFailoverNotices().map(systemPart)
 }
 
 /**

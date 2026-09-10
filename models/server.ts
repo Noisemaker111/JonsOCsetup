@@ -20,14 +20,8 @@ import { installAccessGuard, assertConfiguredModel } from "./access-policy"
 import { define } from "@opencode-ai/plugin/v2/promise"
 import {
   enforceSessionModelChange,
-  drainFailoverNotices,
-  forceUsageCollectOnCap,
-  rememberFailoverNotice,
-  systemPart,
   type UsageCacheLike,
 } from "./model-routing"
-import { kickUsageCollector } from "../usage/usage-lib"
-import { detectProviderFailure, failureMessage } from "../usage/usage-reached"
 
 
 /** Attach a tool hook without letting one bad registration disable the rest. */
@@ -68,37 +62,17 @@ export async function installSessionModelGuard(ctx: { tool?: { hook?: Function }
   await safeToolHook(hook, "execute.before", (event: unknown) => enforceSessionModelChange(event), true)
 }
 
-/**
- * Observed provider errors remain visible. Routine quota and usage information
- * is available through usage_status and the HUD, without a per-turn summary.
- */
-
-function failureBlob(event: unknown, output?: unknown): string {
-  try { return JSON.stringify([output, event]).slice(0, 4000) }
-  catch { return String(output ?? event).slice(0, 4000) }
-}
-
-/** Live 429/402/quota errors become a next-turn quota line, not a silent fail. */
-export async function installUsageFailureHook(ctx: { tool?: { hook?: Function } }) {
-  const hook = ctx?.tool?.hook
-  if (typeof hook !== "function") return
-  await safeToolHook(hook, "execute.after", (event: unknown, output?: unknown) => {
-    const failure = detectProviderFailure(failureBlob(event, output))
-    if (!failure) return
-    rememberFailoverNotice(failureMessage(failure))
-    if (failure.kind === "usage" && failure.providerID === "opencode-go") forceUsageCollectOnCap(failure.detail)
-    else kickUsageCollector()
-  })
-}
-
-export async function installFailureContext(ctx: { session?: { hook?: Function } }) {
-  const hook = ctx?.session?.hook
-  if (typeof hook !== "function") return
-  await hook("context", (event: { system?: Array<{ type: "text"; text: string }> }) => {
-    if (!Array.isArray(event.system)) return
-    // Only actual queued failures add context. Normal turns add no usage prose.
-    for (const line of drainFailoverNotices()) event.system.push(systemPart(line))
-  })
+/** Observe actual model HTTP failures, scoped to the session that made the request. */
+export async function installProviderFailureObservation(ctx:any) {
+ const notices=new Map<string,string>()
+ await ctx.session.hook('http.response',(event:any)=>{
+  const status=event.response.status
+  if(status<400){notices.delete(event.sessionID);return}
+  const target=event.model.providerID+'/'+event.model.id
+  const kind=status===429?'rate limited':status===401?'authentication failed':status===403?'access denied':status===402?'payment or credit requirement':'request failed'
+  notices.set(event.sessionID,'Observed provider request: '+target+' — '+kind+' (HTTP '+status+'). This response alone does not establish subscription exhaustion or authorize a fallback. Inspect the actual error and retry guidance before recovery.')
+ })
+ await ctx.session.hook('context',(event:any)=>{const note=notices.get(event.sessionID);if(note&&Array.isArray(event.system)){event.system.push({type:'text',text:note});notices.delete(event.sessionID)}})
 }
 
 export default define({
@@ -108,9 +82,8 @@ export default define({
     for (const [name, install] of [
       ["spawn-guard", () => installSpawnGuard(ctx)],
       ["session-model-guard", () => installSessionModelGuard(ctx)],
-      ["failure-notices", () => installFailureContext(ctx)],
+      ["provider-failures", () => installProviderFailureObservation(ctx)],
       ["adaptive-context", () => installAdaptiveContext(ctx)],
-      ["usage-failure", () => installUsageFailureHook(ctx)],
     ] as const) {
       try { await install() } catch (error) {
         console.error(`[models] ${name} disabled:`, error)

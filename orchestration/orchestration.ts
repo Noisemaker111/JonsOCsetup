@@ -25,7 +25,7 @@ import { ledgerLockStatus, claimCompletionDelivery, suppressCompletionDelivery, 
 import { injectCompletion } from "./watchdog-inject"
 import { detectProviderFailure, failureMessage, type ProviderFailure } from "../usage/usage-reached"
 import { blockLane } from "../models/capacity-registry"
-import { capResetAt, nextHealthyFallback, quotaLaneNotice, rememberFailoverNotice, spawnLane, forceUsageCollectOnCap } from "../models/model-routing"
+import { capResetAt, nextHealthyFallback, quotaLaneNotice, spawnLane, forceUsageCollectOnCap } from "../models/model-routing"
 import { usageCache } from "../usage/usage-lib"
 
 /**
@@ -259,7 +259,6 @@ function renderFailure(failure: ProviderFailure): string {
       const resetAt = capResetAt(from, usageCache()) ?? new Date(Date.now() + USAGE_LANE_BLOCK_MS).toISOString()
       blockLane(from, text, resetAt, failure.detail)
     }
-    rememberFailoverNotice(text)
   }
   return text
 }
