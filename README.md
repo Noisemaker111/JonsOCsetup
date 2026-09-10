@@ -24,7 +24,7 @@ After channel preparation, **`ocd`** starts dev and **`ocs`** starts stable in t
 ## Development acceptance
 
 This pre-user project uses the installed app to verify every change. It maintains
-no automated test suites or backward-compatibility layers. Search for and remove
+a small core invariant suite and no backward-compatibility layers. Search for and remove
 superseded implementations and instructions before completion. Durable project
 knowledge lives in root MEMORY.md; Quests hold task progress. See
 [the development workflow](docs/development-workflow.md).
@@ -34,11 +34,11 @@ knowledge lives in root MEMORY.md; Quests hold task progress. See
 These standalone MIT-licensed skills also work outside this personal OpenCode setup. Install one without installing the runtime:
 
 ```sh
-npx skills add Noisemaker111/JonsOCsetup --skill ship-fast
+npx skills add https://github.com/Noisemaker111/JonsOCsetup/tree/agents --skill agents-and-main
 npx skills add Noisemaker111/JonsOCsetup --skill skill-maker
 ```
 
-- **[Ship Fast](https://skills.sh/noisemaker111/jonsocsetup/ship-fast)**: verified agent auto-merges into agents, isolated development environments, and human-approved batches into stable. Ask: "Use ship-fast to set up dev and stable for this project." [Source](skills/ship-fast/SKILL.md).
+- **[Agents and Main](skills/agents-and-main/SKILL.md)**: verified agent auto-merges into agents, isolated development environments, and human-only stable merges initiated by the user. Ask: "Use agents-and-main to set up agents and stable for this project." [Source](skills/agents-and-main/SKILL.md).
 - **[Skill Maker](https://skills.sh/noisemaker111/jonsocsetup/skill-maker)**: create, check, publish, install and confirm a skill's public listing in one continuous workflow. Ask: "Use skill-maker to make and publish this skill." [Source](skills/skill-maker/SKILL.md).
 
 Installing a skill supplies agent instructions; the agent still needs the project's authorization and actual CI/deployment configuration to carry out changes.

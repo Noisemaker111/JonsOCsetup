@@ -25,7 +25,7 @@ function envFor(root, name) {
 async function run(exe,argv,cwd,env){const child=spawn(exe,argv,{cwd,env,stdio:'inherit',windowsHide:true});const code=await new Promise((done,reject)=>{child.once('error',reject);child.once('exit',done)});if(code!==0)throw Error(`${exe} exited ${code}`)}
 if(!['dev','stable'].includes(channel))throw Error('Choose dev or stable: prepare dev --ref <branch> --model <exact-route>; activate dev --candidate <root> --evidence <report>; start dev|stable; status dev|stable')
 if(action==='prepare'){
-  if(channel!=='dev')throw Error('Stable preparation requires the separate explicitly authorized agents-to-master promotion')
+  if(channel!=='dev')throw Error('Stable preparation requires the separate human-merged agents-to-master release')
   const ref=option('--ref'),model=option('--model');if(!ref||!model)throw Error('Preparation requires a committed ref and exact real model route')
   const commit=git(['rev-parse','--verify',ref+'^{commit}']),root=join(registry,'releases','dev-'+commit.slice(0,12)+'-'+Date.now())
   mkdirSync(dirname(root),{recursive:true});git(['worktree','add','--detach',root,commit])

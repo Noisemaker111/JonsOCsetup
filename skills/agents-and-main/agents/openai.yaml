@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agents and Main"
+  short_description: "Automatic dev integration, deliberate stable releases"
+  default_prompt: "Use $agents-and-main to set up verified agents-branch auto-merges and human-only main merges with CI and patch notes for this project."

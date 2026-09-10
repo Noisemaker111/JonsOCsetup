@@ -35,7 +35,7 @@
     {
       "source": "setup/files/.codex/AGENTS.md",
       "target": ".codex/AGENTS.md",
-      "sha256": "ea99bf405fb69daa92bc88ec228af2d08f3a1052ae4756f9285f04bf8041c581",
+      "sha256": "310a829aff08402775d30b35ed7a498b6b5ca1515e029beb53ab75d7900403e2",
       "importedFrom": ".codex/AGENTS.md"
     },
     {
@@ -89,7 +89,7 @@
     {
       "source": "setup/files/.agents/skills/opencode-dev-workflow/SKILL.md",
       "target": ".agents/skills/opencode-dev-workflow/SKILL.md",
-      "sha256": "e87bb5c7d53c812a6bd2c1171620669089f3d9f0f3e97c66eb2d881cc4e6e23d",
+      "sha256": "217f368d10a1eeb56de2bd0bc15189aacbd2841f9b91caae6951d92863038100",
       "importedFrom": ".agents/skills/opencode-dev-workflow/SKILL.md"
     },
     {
@@ -827,7 +827,7 @@
     {
       "source": "setup/files/Projects/opencode-hub/MEMORY.md",
       "target": "Projects/opencode-hub/MEMORY.md",
-      "sha256": "764cc3e414d60113df65d651243893233e05db31035ca4d4e67df92ea261288b",
+      "sha256": "554567aaf578dab78f2f077887f6c2868886e14989ed880abd0717d3b816c04b",
       "importedFrom": "Projects/opencode-hub/MEMORY.md"
     },
     {

@@ -1,6 +1,6 @@
 ---
 name: opencode-dev-workflow
-description: Own OpenCode2 configuration and plugin changes through isolated worktrees, real-use verification, tracked PRs, automatic dev merges, and separate stable promotion on this machine.
+description: Own OpenCode2 configuration and plugin changes through isolated worktrees, real-use verification, tracked PRs, automatic agents merges, and separate stable promotion on this machine.
 ---
 
 # OpenCode2 dev workflow
@@ -13,7 +13,7 @@ The repository is `C:/Users/Jk101/.config/opencode`. Work in an owned worktree.
 Own implementation, coherent commits, a ready PR targeting agents, review using
 actual operation and captured states, merge into agents, and dev activation. Do
 not ask Jon to perform technical review or repeatedly approve those dev steps.
-Stable promotion, host updates and public plugin publishing remain explicit.
+Only Jon personally merges master, after he requests release preparation. Agents never merge stable or enable its auto-merge. Host updates and public publishing remain separate explicit actions.
 
 Read the selected dev release's `docs/development-workflow.md`: find its `root`
 in `C:/Users/Jk101/.config/opencode/.channels/dev.json`. If no dev release is

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Ship Fast"
-  short_description: "Automatic dev integration, deliberate stable releases"
-  default_prompt: "Use $ship-fast to set up verified dev auto-merges and human-approved stable releases for this project."

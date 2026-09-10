@@ -72,3 +72,5 @@ For hub work, use C:/Users/Jk101/Projects/opencode-hub/MEMORY.md. Quests own tas
 progress. These project-specific verification rules do not govern other projects.
 
 Read C:/Users/Jk101/.agents/user-verification.md before implementation. Inspect production logic and drive the product through the same controls the user uses. Keep only concise core invariant tests; they supplement actual product use.
+
+For this configuration repository, follow [Agents and Main](docs/development-workflow.md): use `sb agents` in an owned checkout and isolated worktrees for implementation. Authorized maintainers' agents integrate into `agents` after actual-product verification and CI. Stable is `master` (use `git switch master` and `git pull --ff-only origin master` in an owned checkout); `sb main` applies only to repositories named main. Only Jon personally merges stable, and release preparation starts only when he requests it.
