@@ -97,6 +97,10 @@ function badge(q: Quest): string {
  * "fast" (never a plain/default variant), and the reasoning level sits next
  * to it — never silently dropped.
  */
+export function workerTask(quest: Quest, session: QuestSession): string {
+  return session.deliverables.map(id=>quest.stages.find(step=>step.id===id)?.title??id).join(' · ') || session.task || session.taskDescription || 'delegated work'
+}
+
 export function workerLabel(session: QuestSession): string {
   const base = session.providerID && session.modelID ? `${session.providerID}/${session.modelID}` : session.model
   if (!base) return session.agentRole && session.agentRole !== "worker" ? session.agentRole : "worker"
@@ -400,7 +404,7 @@ function ContractDetail(props: { context: any; store: QuestStore; quest: () => Q
  const sessions=()=>props.quest().sessions
  const links=()=>view().artifacts.filter(a=>/https:\/\/[^/]+\/[^/]+\/[^/]+\/pull\/\d+/.test(a.uri??''))
  const rewards=()=>artifactChain(view().artifacts.filter(a=>!links().includes(a)))
- const open=async()=>{const rows=sessions();const key=rows.length===1?rows[0].callID:await props.context.ui.dialog.select({title:'Quest worker sessions',options:rows.map(s=>({value:s.callID,title:workerLabel(s),description:observation(s).state+' · '+(s.task??'assigned work')}))});const run=rows.find(s=>s.callID===key);if(run)await openWorkerSession(props.context,run)}
+ const open=async()=>{const rows=sessions();const key=rows.length===1?rows[0].callID:await props.context.ui.dialog.select({title:'Quest worker sessions',placeholder:'Search assigned step or model',options:rows.map(s=>({value:s.callID,title:workerTask(props.quest(),s),description:workerLabel(s),searchText:workerTask(props.quest(),s)+' '+workerLabel(s),details:observation(s).reason,footer:observation(s).state.toUpperCase()}))});const run=rows.find(s=>s.callID===key);if(run)await openWorkerSession(props.context,run)}
  const expandedWorker=()=>expandedRun()??sessions().at(-1)?.callID
  const toggleWorker=()=>{const run=sessions().at(-1);if(run)setExpandedRun(expandedWorker()===run.callID?'':run.callID)}
  const checks=()=>props.context.ui.dialog.alert({title:'Recorded checks',message:props.quest().evidence.tests.length?props.quest().evidence.tests.map(test=>redact(typeof test==='string'?test:JSON.stringify(test),2000)).join('\n\n'):'No verification checks recorded. Step notes and worker results remain available in the Quest.'})
@@ -461,7 +465,7 @@ function ContractDetail(props: { context: any; store: QuestStore; quest: () => Q
       </box>
       <box flexDirection="column" flexBasis="64%" flexGrow={1} flexShrink={1} minWidth={0}>
        <box flexDirection="row"><text fg={C.text} attributes={TextAttributes.BOLD}>AGENT LOG <span fg={C.muted}>({sessions().length})</span></text><box flexGrow={1}/><text fg={C.cyan} onMouseUp={(e:any)=>activate(e,()=>void open())}>[w] Open session</text></box>
-       <text fg={C.dim} wrapMode="none" truncate>TIME   MODEL / TASK             STATUS · [i] Evidence</text>
+       <text fg={C.dim} wrapMode="none" truncate>TIME   ASSIGNED STEP            STATUS · [i] Evidence</text>
        <Show when={sessions().length} fallback={<text fg={C.dim}>No worker sessions recorded</text>}>
         <For each={sessions()}>{run=>{
          const live=()=>observation(run)
@@ -469,7 +473,7 @@ function ContractDetail(props: { context: any; store: QuestStore; quest: () => Q
           <box flexDirection="row" gap={1} flexShrink={0} backgroundColor={live().state==='running'?C.selected:'transparent'}>
            <text fg={C.cyan} width={2} flexShrink={0} onMouseUp={(e:any)=>activate(e,()=>setExpandedRun(expandedWorker()===run.callID?'':run.callID))}>{expandedWorker()===run.callID?'▾':'▸'}</text>
            <text fg={C.muted} width={5} flexShrink={0} wrapMode="none" truncate>{live().lastActivityAt?new Date(live().lastActivityAt).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit',hour12:false}):'—'}</text>
-           <text fg={C.cyan} flexGrow={1} flexShrink={1} wrapMode="none" truncate onMouseUp={(e:any)=>activate(e,()=>void openWorkerSession(props.context,run))}>↳ {run.modelID??run.model??'Model not recorded'} · {run.task??run.taskDescription??'assigned work'}</text>
+           <text fg={C.cyan} flexGrow={1} flexShrink={1} wrapMode="none" truncate onMouseUp={(e:any)=>activate(e,()=>void openWorkerSession(props.context,run))}>↳ {workerTask(props.quest(),run)}</text>
            <text fg={live().state==='running'?C.green:live().state==='completed'?C.cyan:C.orange} width={11} flexShrink={0} wrapMode="none" truncate onMouseUp={(e:any)=>activate(e,()=>setExpandedRun(expandedWorker()===run.callID?'':run.callID))}>{live().state.toUpperCase()}</text>
           </box>
           <Show when={expandedWorker()===run.callID}>

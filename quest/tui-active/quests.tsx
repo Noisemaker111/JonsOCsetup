@@ -14,7 +14,7 @@ import { createGiver, hasQuestReturn, returnToQuest } from "../tui-workflow"
 import type { Quest, QuestSession } from "../types"
 import { watchQuests } from "../watcher"
 import { progressGlyph, questProgress } from "../steps"
-import { C, QuestBoard, activate, openWorkerSession, projectRoot, quests, workerLabel } from "./quest-board"
+import { C, QuestBoard, activate, openWorkerSession, projectRoot, quests, workerLabel, workerTask } from "./quest-board"
 
 /**
  * Snapshot of the route live right now, shaped the way the host's own router
@@ -90,7 +90,7 @@ async function openSessionPicker(context: any, allProjects = Boolean(userGiverID
   const options = await Promise.all([...byKey.entries()].map(async ([key, { quest, session }]) => {
     const live = await inspectWorker(context.client.session,session)
     const id = session.openCodeSessionId ?? session.sessionID
-    const task = session.deliverables.map(id=>quest.stages.find(step=>step.id===id)?.title??id).join(" · ") || session.task || session.taskDescription || "delegated work"
+    const task = workerTask(quest,session)
     return {
       value: key,
       title: task,
