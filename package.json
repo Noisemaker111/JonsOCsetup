@@ -16,7 +16,7 @@
     "runtime:host": "node scripts/host-status.mjs",
     "runtime:start": "node scripts/opencode-runtime.mjs",
     "runtime:verify": "bun scripts/verify-runtime.ts",
-    "runtime:ship": "bun test && bun scripts/verify-runtime.ts",
+    "runtime:ship": "bun scripts/verify-runtime.ts",
     "runtime:dispatch": "bun scripts/verify-dispatch.ts",
     "runtime:providers": "bun scripts/provider-audit.ts",
     "runtime:accounts": "bun scripts/accounts.ts",

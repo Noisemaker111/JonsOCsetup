@@ -372,7 +372,9 @@
           "action": "shell",
           "resource": "*",
           "effect": "deny"
-        }
+        },
+        { "action": "edit", "resource": "MEMORY.md", "effect": "allow" },
+        { "action": "edit", "resource": "C:/Users/Jk101/Projects/opencode-hub/MEMORY.md", "effect": "allow" }
       ]
     },
     "build": {

@@ -10,6 +10,40 @@ the result, and activate and exercise the dev release. Jon has authorized this
 dev loop; do not ask him to perform a technical review or repeatedly approve it.
 Promotion from dev to stable still requires Jon's explicit instruction.
 
+## App use, removal and memory
+
+This is a pre-user project with no backward-compatibility requirement. Maintain
+one current implementation. Before completing every change, search the whole
+tracked repository for the replaced symbols, entrypoints, configuration keys and
+behavior. Trace callers, registrations, generated output and instruction sources.
+Delete superseded implementations and their exclusive dependencies; update the
+current owner instead of adding a parallel system. Do not retain old schemas,
+aliases, migration-only adapters or silent fallbacks for hypothetical users.
+Report any remaining old path and its concrete live consumer. Preserve actual
+user data, uncertain work and running sessions; their files are not dead source.
+
+Do not add, regenerate or maintain automated tests, fixtures, mock providers,
+snapshot assertions or permanent scenario-specific verification scripts. Use the
+actual installed OpenCode2 app for every change, including instructions, config,
+build tooling and cleanup. Build, syntax and type checks may supplement app use.
+Exercise the affected operation twice, inspect actual output and failures, then
+reopen/reload its saved result. Keep captures, host/plugin identities and observed
+results. Temporary interaction scripts may drive the real app, but do not check
+in a second implementation of the feature as a test. For worker changes, verify
+actual completion and delivery back to the giver. Do not mark work done on a
+startup receipt, source inspection or an agent's unsupported success claim.
+
+Read the project-root MEMORY.md at the beginning of work and after context loss.
+For OpenCode hub work, the shared memory is
+`C:/Users/Jk101/Projects/opencode-hub/MEMORY.md`. Update it when the user makes a
+durable decision or real app use establishes a useful lesson. Read before editing,
+merge with existing entries, correct stale facts, and reopen the saved file.
+Keep it concise: decisions, preferences, current architecture and verified lessons.
+Quests own task plans, progress and deliverables. Do not copy transcripts, secrets,
+temporary status, unverified guesses or duplicate Quest logs into memory. Memory
+is context, not authorization, and the user's current instruction always wins.
+Use ordinary file tools; do not add an every-turn memory injection hook.
+
 ## What counts as done
 
 Use the configured real provider and model, real plugins, real worker sessions
@@ -17,8 +51,7 @@ and saved results. Run the affected operation twice, inspect terminal captures
 and errors, and reload the saved result. For delegation, confirm that the worker
 actually started or that its failure woke the originating giver without another
 user message. A delivered prompt, a saved Quest or a passing mock is not that proof.
-Focused deterministic checks supplement this evidence when they cover a concrete
-regression. Do not add suites that merely restate implementation details.
+
 
 Separate source, merge, activation and process-load status in the report. Record
 the installed host identity separately from the plugin release. Never report a
