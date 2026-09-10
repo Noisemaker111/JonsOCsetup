@@ -33,3 +33,11 @@ Review and integrate returned visual changes only with clear ownership. Run focu
 - Final bun test: 961 passed, one existing skip, zero failures, 7,388 assertions across 962 tests / 145 files, 325.14 seconds (run-reference-final-all.log). The preceding run also passed 961 tests before adding the terminal-reconciliation edge case.
 - Final pwsh -NoProfile -File ./smoke-test.ps1: 103 passed, zero failures, 661 assertions; configuration healthy (run-reference-final-smoke.log).
 - Final focused observation/identity/guidance check: 12 passed, zero failures, 52 assertions. node --check quest/worker-observation.mjs and git diff --check passed. Installed worker-flow acceptance remains blocked by the existing worker recovery; these gates are not a claim of successful end-to-end completion.
+
+## Installed navigation checkpoint
+
+The prepared candidate dev-765c9fd89e00-1789005640922 loaded the source checkpoint in the installed host. The no-inference command below passed at 160x52 and 80x32: keyboard and mouse both opened the actual recorded Sol/xhigh session and returned to the selected Quest. Saved verification state was reloaded. Wide agent-log and narrow returned-detail captures were inspected. This is navigation evidence, not the required two new worker dispatch flows.
+
+Command: bun scripts/verify-quest-installed-navigation.ts C:/Users/Jk101/.config/opencode/.channels/releases/dev-765c9fd89e00-1789005640922 C:/Users/Jk101/.config/opencode/.channels/releases/dev-4b62354e5999-1789002009307/.visual-e2e/installed-single-giver-1789002093861/host.db INSTALLED_QUEST_WORKER_VERIFIED
+
+Report: candidate .visual-e2e/installed-navigation-1789005730622/report.json; both runs ok. The candidate is not selected. PR #10 is ready for review but held from dev merge pending original-worker recovery and real worker-flow acceptance. At 2026-09-10T02:02:50Z the original board worker had no host terminal outcome and its reservation remained active; the old keyboard worker still had its recorded interrupted outcome and settled reservation. One canonical giver binding remained unchanged.
