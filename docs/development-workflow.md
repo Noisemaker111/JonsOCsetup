@@ -196,3 +196,7 @@ reads recover missed events after reconnect. Unknown ownership remains retained.
 The obsolete favorite/profile scheduler and capacity.json lane/task registry are removed.
 Quest admission uses dispatch-planner and RouteReservations; native session controls
 own manual selection. No provider substitution occurs during harness agent setup.
+
+Workspace snapshots use a temporary Git index. Already-tracked paths remain included
+even beneath ignored directories; ignored untracked files remain excluded. Snapshot
+staging never changes the coordinator index, and source changes invalidate preparation.

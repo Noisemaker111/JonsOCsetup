@@ -238,14 +238,24 @@ export class QuestWorkspaces {
     // Include HEAD paths removed from the real index by staged deletions.
     const selectedFiles=()=>git(source,["ls-files","--cached","--with-tree="+head,"--others","--exclude-standard","-z","--",...scopes.map(scope=>":(literal)"+scope),":(exclude,glob)**/.claude/worktrees/**",...excluded])
     const paths=selectedFiles()
+    // Only paths already tracked by Git may override ignore rules. New files
+    // come from --others --exclude-standard and must still pass normal add.
+    const tracked=new Set(git(source,["ls-files","--cached","--with-tree="+head,"-z"]).split("\0").filter(Boolean))
+    const names=paths.split("\0").filter(Boolean)
+    const trackedPaths=names.filter(name=>tracked.has(name)).map(name=>name+"\0").join("")
+    const newPaths=names.filter(name=>!tracked.has(name)).map(name=>name+"\0").join("")
+    const stage=()=>{
+      if(trackedPaths)run(["add","-A","--force","--pathspec-from-file=-","--pathspec-file-nul"],trackedPaths)
+      if(newPaths)run(["add","-A","--pathspec-from-file=-","--pathspec-file-nul"],newPaths)
+    }
     try {
       run(["read-tree", head])
-      if(paths)run(["add","-A","--pathspec-from-file=-","--pathspec-file-nul"],paths)
+      stage()
       const tree=run(["write-tree"])
       // Rebuild from the same baseline: the first add removed deleted entries,
       // so adding those literal paths again to that index would fail to match.
       run(["read-tree", head])
-      if(paths)run(["add","-A","--pathspec-from-file=-","--pathspec-file-nul"],paths)
+      stage()
       const changed=selectedFiles()!==paths?"file list":run(["write-tree"])!==tree?"content":git(source,["rev-parse","HEAD"]).trim()!==head?"HEAD":JSON.stringify(worktreeExclusions(source))!==JSON.stringify(excluded)?"worktree registration":undefined
       if(changed)throw new Error("Source changed during workspace snapshot ("+changed+"); retry after edits settle")
       if(!target)return tree
