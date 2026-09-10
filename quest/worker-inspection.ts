@@ -12,7 +12,7 @@ export async function inspectWorker(host:any, run:QuestSession):Promise<any> {
   const row=unwrap(await boundedInspection(signal=>host.get({sessionID},{signal})))
   if(row?.id!==sessionID)return {state:'missing',reason:'Recorded session was not returned by this host; ownership retained'}
   const active=typeof host.active==='function'?unwrap(await boundedInspection(signal=>host.active({signal}))):undefined
-  return observeWorker(row,{active:active===undefined?undefined:Object.hasOwn(active,sessionID)})
+  return observeWorker(row,{active:active===undefined?undefined:Object.hasOwn(active,sessionID),expected:run})
  }catch(error){return observationFailure(error)}
 }
 /** Poll persisted outcomes to recover missed events without turning silence into completion. */

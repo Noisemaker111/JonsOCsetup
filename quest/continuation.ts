@@ -99,7 +99,7 @@ export class QuestContinuation {
  }
  async run(questID:string,input:ContinuationRunOptions,context:QuestContext){
   if(input.readOnly!==undefined&&typeof input.readOnly!=="boolean")throw new QuestError("INVALID_INPUT","readOnly must be a boolean")
-  if(input.maxConcurrent!==undefined&&(!Number.isInteger(input.maxConcurrent)||input.maxConcurrent<1||input.maxConcurrent>16))throw new QuestError('INVALID_INPUT','maxConcurrent must be an integer from 1 to 16')
+  if(input.maxConcurrent!==undefined&&(!Number.isSafeInteger(input.maxConcurrent)||input.maxConcurrent<1))throw new QuestError('INVALID_INPUT','maxConcurrent must be a positive safe integer')
   const q=questsAPI(this.store,context,this.start).get(questID)
   const id=createHash('sha256').update(questID+':'+context.sessionID+':'+context.requestID).digest('hex').slice(0,26)
   const requestFingerprint=createHash('sha256').update(JSON.stringify({readOnly:input.readOnly===true,model:input.model??null,files:input.files??null,stepIDs:input.stepIDs??null,maxConcurrent:input.maxConcurrent??1,stepModels:input.stepModels?Object.fromEntries(Object.entries(input.stepModels).sort(([a],[b])=>a.localeCompare(b))):null})).digest('hex')

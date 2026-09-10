@@ -86,11 +86,15 @@ export async function workflowAPI(context: any, store: QuestStore, q: Quest) {
   return questsAPI(store,trusted,async input=>{await returns.watch(input);return start(input)})
 }
 export async function nudgeGiver(context: any, q: Quest) {
+  rememberReturn(context,q)
+  const returnRoute=returnRoutes.get(context)
   const row = await verifiedGiver(context, q)
   const text = await context.ui.dialog.prompt({ title: "Nudge Quest Giver", placeholder: "What should the giver check or change?" })
   if (typeof text !== "string" || !text.trim()) return
   await context.client.session.prompt({ sessionID: row.id, text: `Quest ${q.id}: ${text.trim()}\nInspect existing run outcomes before dispatch. Do not duplicate active or unknown launches. Retain the user's exact route preference.` })
-  await talkToGiver(context, q)
+  returnRoutes.set(context,returnRoute)
+  context.ui.dialog?.clear?.()
+  context.ui.router.navigate({type:'session',sessionID:row.id})
 }
 export function runDetails(q: Quest, session: QuestSession): string {
   const clean = (s: string) => redact(s, 4000).replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/[\x00-\x1f\x7f]/g, "")

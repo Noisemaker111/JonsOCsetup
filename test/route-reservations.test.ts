@@ -63,3 +63,60 @@ test("duplicate settlement retains first completion boundary",()=>{const dir=mkd
   expect(ledger.reserve('next',input).decision).toBeNull()
  }finally{rmSync(root,{recursive:true,force:true})}
  })
+
+test('explicit unlimited subscription policy admits independent runs without changing uncertain ownership',()=>{
+ const root=mkdtempSync(join(tmpdir(),'route-unlimited-'))
+ try{
+  const input=structuredClone(fixture) as PlannerInput,route=input.routes[0],account=input.accounts.find(a=>a.id===route.accountID)!
+  input.request.allowedRouteIDs=[route.id];input.request.explicitRouteID=route.id;route.admission='configured-choice';route.quotaPerTask={};route.evidence=[]
+  account.billing='subscription';account.windows.forEach(w=>w.remaining=80)
+  const ledger=new RouteReservations(join(root,'reservations.json'))
+  expect(ledger.reserve('older',input).reservation?.exclusive).toBe(true)
+  ledger.settle('older',{state:'unknown'})
+  const old=ledger.get('older')
+  input.request.subscriptionConcurrency='unlimited'
+  for(let n=0;n<32;n++){
+   const next=new RouteReservations(ledger.file).reserve('independent-'+n,input)
+   expect(next.reservation?.routeID).toBe(route.id)
+   expect(next.reservation?.exclusive).toBe(false)
+   expect(next.reservation?.windows).toEqual({})
+   expect(next.decision?.summary).toContain('without a fixed account cap')
+  }
+  expect(ledger.get('older')).toEqual(old)
+  expect(ledger.reserve('older',input)).toEqual({reservation:old,decision:null})
+  expect(ledger.reserve('independent-31',input).decision).toBeNull()
+  account.capacity='exhausted'
+  expect(ledger.reserve('exhausted',input).decision?.excluded[0].reasons).toContain('account capacity is exhausted')
+  account.capacity='available';account.authenticated=false
+  expect(ledger.reserve('unauthenticated',input).decision?.excluded[0].reasons).toContain('account is not authenticated')
+  account.authenticated=true;account.observedAt=new Date(Date.parse(input.request.now)-input.request.maxUsageAgeSeconds*1000).toISOString()
+  expect(ledger.reserve('stale',input).decision?.excluded[0].reasons).toContain('usage observation is stale or invalid')
+  account.observedAt=input.request.now;account.windows.forEach(w=>w.remaining=0)
+  expect(ledger.reserve('empty',input).decision?.excluded[0].reasons.some(r=>r.includes('insufficient unreserved quota'))).toBe(true)
+  account.windows.forEach(w=>w.remaining=80);account.billing='metered'
+  expect(ledger.reserve('paid',input).decision?.excluded[0].reasons).toContain('configured metered choice requires a cash budget')
+  input.request.subscriptionConcurrency='typo' as any
+  expect(()=>ledger.reserve('invalid',input)).toThrow('Invalid subscription concurrency policy')
+ }finally{rmSync(root,{recursive:true,force:true})}
+})
+
+test('unlimited subscription concurrency preserves calibrated quota reservations and explicit stop controls',()=>{
+ const root=mkdtempSync(join(tmpdir(),'route-unlimited-calibrated-'))
+ try{
+  const input=structuredClone(fixture) as PlannerInput,route=input.routes[0],account=input.accounts.find(a=>a.id===route.accountID)!
+  input.request.allowedRouteIDs=[route.id];input.request.explicitRouteID=route.id;input.request.reserveFraction=0;input.request.subscriptionConcurrency='unlimited';account.billing='subscription'
+  for(const w of account.windows)w.remaining=route.quotaPerTask[w.id]
+  const ledger=new RouteReservations(join(root,'reservations.json'))
+  expect(ledger.reserve('first',input).reservation).not.toBeNull()
+  ledger.settle('first',{state:'unknown'})
+  expect(ledger.reserve('second',input).decision?.excluded[0].reasons.some(r=>r.includes('insufficient unreserved quota'))).toBe(true)
+  route.quotaPerTask={};route.admission='configured-choice';route.evidence=[];account.windows.forEach(w=>w.remaining=80)
+  const now=Date.parse(input.request.now)
+  account.pacing={state:'ready',desiredConcurrency:1,updatedAt:now,deadlineAt:now+60000,reason:'Scoped pacing'}
+  expect(ledger.reserve('concurrent',input).reservation).not.toBeNull()
+  account.pacing.deadlineAt=now-1
+  expect(ledger.reserve('past-advisory-deadline',input).reservation).not.toBeNull()
+  account.pacing.state='stopped';account.pacing.reason='User stopped this burn target'
+  expect(ledger.reserve('stopped',input).decision?.excluded[0].reasons).toContain('Burn pacing stopped: User stopped this burn target')
+ }finally{rmSync(root,{recursive:true,force:true})}
+})

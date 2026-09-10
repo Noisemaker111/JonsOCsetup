@@ -19,7 +19,8 @@
       "proxy-luna-unknown",
       "proxy-terra-unknown",
       "openai-astra-medium"
-    ]
+    ],
+    "subscriptionConcurrency": "unlimited"
   },
   "routes": [
     {

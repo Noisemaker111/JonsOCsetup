@@ -17,7 +17,7 @@ function change<T>(store:QuestStore,fn:(state:Tracking)=>T){const lock=acquireLo
 export function configureLearning(store:QuestStore,context:QuestContext,questID:string,tags:Record<string,string[]>|undefined,maxConcurrent=1){
  const q=questsAPI(store,context,async()=>{throw Error('No launch')}).get(questID)
  if(tags!==undefined&&(!tags||Array.isArray(tags)||Object.entries(tags).some(([id,values])=>!q.steps.some(s=>s.id===id)||!Array.isArray(values)||!values.length||values.length>8||values.some(t=>typeof t!=='string'||!t.trim()||t.length>80))))throw new QuestError('INVALID_INPUT','taskTags must map existing steps to 1–8 short task categories')
- if(!Number.isInteger(maxConcurrent)||maxConcurrent<1||maxConcurrent>16)throw new QuestError("INVALID_INPUT","Invalid concurrency")
+ if(!Number.isSafeInteger(maxConcurrent)||maxConcurrent<1)throw new QuestError("INVALID_INPUT","Invalid concurrency")
  const active=readContinuations(store.runtime).some((r:any)=>r.questID===questID&&!['done','stopped'].includes(r.state));
  change(store,state=>{const prior=state.configs.find(c=>c.questID===questID);if(active&&prior&&tags!==undefined&&JSON.stringify(prior.tags)!==JSON.stringify(tags))throw new QuestError('REQUEST_CONFLICT','Task labels are fixed while a continuation is active');if(prior){prior.tags=tags??prior.tags;prior.maxConcurrent=maxConcurrent}else state.configs.push({questID,tags:tags??{},maxConcurrent})})
 }

@@ -22,6 +22,7 @@ test("policy authorizes exactly one native OpenAI Astra medium route", () => {
   expect(matches[0].quotaPerTask).toEqual({})
   expect(policy.request.allowedRouteIDs).toContain(matches[0].id)
   expect(policy.request.fallback).toBeUndefined()
+  expect(policy.request.subscriptionConcurrency).toBe("unlimited")
 })
 
 test("explicit Astra medium resolves without replacing provider, account, agent, or reasoning", async () => {
@@ -44,7 +45,7 @@ test("explicit Astra medium resolves without replacing provider, account, agent,
     } as any))
     expect(selected.route).toMatchObject({ id: "openai-astra-medium", accountID: "openai-429c9885edc3fc7113fc", providerID: "openai", modelID: "gpt-6-astra", reasoning: "medium", agent: "astra" })
     expect(selected.decision.selected?.routeID).toBe("openai-astra-medium")
-    expect(selected.ledger.get("astra-medium")).toMatchObject({ accountID: "openai-429c9885edc3fc7113fc", exclusive: true, windows: {} })
+    expect(selected.ledger.get("astra-medium")).toMatchObject({ accountID: "openai-429c9885edc3fc7113fc", exclusive: false, windows: {} })
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
