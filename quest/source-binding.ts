@@ -13,7 +13,7 @@ export function editingSource(context:{project:ProjectIdentity;directory:string}
   const binding=policy.sourceByProject?.[context.project.id]
   if(!binding)return {...sourceCheckout(context.directory,context.project),files}
   if(!isAbsolute(binding.directory)||!isAbsolute(binding.root)||physicalDirectory(binding.projectRoot)!==physicalDirectory(context.project.root))throw Error('Invalid configured source binding')
-  let directory=binding.directory,expectedRoot=binding.root
+  let directory=binding.directory,expectedRoot=binding.root,devRelease=false
   if(binding.loadedDevRelease===true&&process.env.OPENCODE_RELEASE_CHANNEL==='dev'){
     const generation=resolve(dirname(realpathSync.native(policyFile)),'..'),releaseRoot=resolve(generation,'..','..')
     if(basename(dirname(generation))!=='generations')throw Error('Dev editing requires a prepared reviewed release')
@@ -24,11 +24,16 @@ export function editingSource(context:{project:ProjectIdentity;directory:string}
     // The reviewed release is its own checkout, so it is also the identity to pin.
     directory=physicalDirectory(releaseRoot)
     expectedRoot=directory
+    devRelease=true
   }
   const selected=sourceCheckout(directory)
   // Pin both physical paths: retargeting a junction cannot silently choose a different checkout.
   const same=(a:string,b:string)=>process.platform==='win32'?a.toLowerCase()===b.toLowerCase():a===b
-  if(!same(physicalDirectory(directory),resolve(directory))||!same(selected.project.root,resolve(expectedRoot)))throw Error('Configured source checkout identity changed')
+  // A prepared release is a worktree of the config repo, so its project root is that repo,
+  // not the release. Pin the checkout we actually redirected to instead.
+  const pinned=devRelease?physicalDirectory(selected.source):selected.project.root
+  const expected=devRelease?directory:resolve(expectedRoot)
+  if(!same(physicalDirectory(directory),resolve(directory))||!same(pinned,expected))throw Error('Configured source checkout identity changed')
   const status=spawnSync('git',['-C',selected.source,'status','--porcelain','--untracked-files=all'],{encoding:'utf8',windowsHide:true,timeout:15000})
   if(status.status!==0||status.stdout.trim())throw Error('Configured source checkout must be clean; existing work was preserved')
   const prefix=binding.scopePrefix
