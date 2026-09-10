@@ -315,6 +315,11 @@
       "color": "#e8c547",
       "tools": { "task": true, "subagent": true, "read": false, "grep": false, "glob": false, "list": false, "bash": false },
       "permissions": [
+        { "action": "read", "resource": "*", "effect": "deny" },
+        { "action": "grep", "resource": "*", "effect": "deny" },
+        { "action": "glob", "resource": "*", "effect": "deny" },
+        { "action": "list", "resource": "*", "effect": "deny" },
+        { "action": "bash", "resource": "*", "effect": "deny" },
         { "action": "project_discover", "resource": "*", "effect": "allow" },
         { "action": "project_resolve", "resource": "*", "effect": "allow" },
         { "action": "project_select", "resource": "*", "effect": "allow" },
