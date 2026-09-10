@@ -33,9 +33,7 @@
     "quest/router-public.ts",
     "quest/goal-public.ts",
     "quest/route-public.ts",
-    "models/model-routing.ts",
     "models/model-catalog.ts",
-    "models/capacity-registry.ts",
     "models/model-router.ts",
     "models/session-lifecycle.ts",
     "usage/usage-lib.ts",
@@ -74,7 +72,6 @@
     "plugins-active/claude-code-session.ts",
     "plugins-active/claude-code-task.ts",
     "plugins-active/harness-run.ts",
-    "models/model-routing.ts",
     "orchestration/orchestration.ts"
   ],
   "packages": [

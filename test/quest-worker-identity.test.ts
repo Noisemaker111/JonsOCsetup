@@ -31,3 +31,11 @@ test('saved execution state cannot make a Quest active without host evidence',()
  expect(filterQuests([quest],'active',()=>({state:'running'}))).toHaveLength(1)
  for(const state of ['unknown','unreachable','blocked','completed'])expect(filterQuests([quest],'active',()=>({state}))).toHaveLength(0)
 })
+
+import {enforceSessionModelChange} from '../models/session-lifecycle'
+test('host model change guard preserves an executing worker pin',()=>{
+ const event={sessionModel:'cliproxyapi/gpt-5.6-sol',sessionVariant:'xhigh',workerStarted:true,input:{model:'cliproxyapi/gpt-5.6-sol',variant:'xhigh'}}
+ expect(()=>enforceSessionModelChange(event)).not.toThrow()
+ expect(()=>enforceSessionModelChange({...event,input:{...event.input,model:'openai/gpt-6-astra'}})).toThrow('immutable')
+ expect(()=>enforceSessionModelChange({...event,input:{...event.input,variant:'medium'}})).toThrow('immutable')
+})

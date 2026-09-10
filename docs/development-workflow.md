@@ -192,3 +192,7 @@ reconciling one client cannot reuse or erase another client's observations. The
 board Active filter requires a confirmed running observation, never a saved
 executing record. Native data events trigger bounded worker inspection; periodic
 reads recover missed events after reconnect. Unknown ownership remains retained.
+
+The obsolete favorite/profile scheduler and capacity.json lane/task registry are removed.
+Quest admission uses dispatch-planner and RouteReservations; native session controls
+own manual selection. No provider substitution occurs during harness agent setup.

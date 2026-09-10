@@ -73,7 +73,7 @@ export function planPackage(root: string, spec: PluginPackage): PackagePlan {
   for (const file of [spec.server, ...(spec.tui ? [spec.tui] : []), ...spec.assets]) visit(file)
   // Runtime-spawned collectors and filesystem-loaded assets cannot be found in an import graph.
   if (files.has("usage/usage-lib.ts")) for (const f of ["usage/usage-collector.ts", "usage/usage-plans.json", "usage/usage-plugin.json"]) visit(f)
-  if (files.has("models/model-router.ts") || files.has("models/model-routing.ts")) visit("models/model-profiles.json")
+  if (files.has("models/model-router.ts")) visit("models/model-profiles.json")
   return { spec, files: [...files].sort(), dependencies }
 }
 

@@ -25,9 +25,9 @@ prints no reset timestamp unless its provenance is provider-observed.
   output-token list prices, capacity states, and hard-coded Sol/Luna bonuses.
   It excludes harness entries and automatic Astra selection. It does not read
   benchmark results, task latency, or measured task cost.
-- `models/model-routing.ts:pickModel` is a separate favorite/profile scorer.
-  The routing skill and generated prose contain older defaults. Changing prose
-  alone does not change either scorer or existing worker pins.
+- Live Quest admission uses `models/dispatch-planner.ts` and account-scoped route
+  evidence. The obsolete favorite/profile scorer and provider lane-block registry
+  have been removed; they do not select models or supply worker status.
 - `usage/usage-lib.ts:capacitySnapshot` reduces healthy sources to state/auth.
   It retains resetAt only for capped windows. `telemetryFromCapacity` maps by
   providerID, so broker routes do not automatically inherit the correct

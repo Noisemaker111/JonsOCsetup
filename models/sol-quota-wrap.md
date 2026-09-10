@@ -53,7 +53,7 @@ Required behavior:
 3. Write `usage/quota-alert.md` **or** update `usage-cache.json` with a `cliproxyapi` / claude source whose window carries the cooldown remaining (`reset_seconds` / `reset_time`). Cache writes are local runtime state — **do not commit** `usage/usage-cache.json`.
 4. Keep Claude's "no quota endpoint" truth: you cannot invent a percent from nothing. Cooldown remaining from the 429 is the observation.
 
-Stay in this repo. If a hook has to live in `plugins-active/favorite-router.ts` or `models/model-routing.ts` so a standalone `opencode2 run` actually exits, do that; do not wait for a TUI-only HUD.
+Stay in this repo. If a hook has to live in `models/server.ts` so a standalone `opencode2 run` actually exits, do that; do not wait for a TUI-only HUD.
 
 ## Constraints
 

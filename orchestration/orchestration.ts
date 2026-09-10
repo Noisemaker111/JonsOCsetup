@@ -11,7 +11,7 @@
  *  - the watchdog that re-injects a completion an idle parent never received
  *  - tracked child sessions for the live view
  *
- * The watchdog needs the host's session API, so unlike model-routing.ts this
+ * The watchdog needs the host's session API, so this
  * module is not host-free; the pieces that can be pure (event parsing, child
  * summarisation, formatting) take their inputs as plain data so they stay
  * testable without a host.
