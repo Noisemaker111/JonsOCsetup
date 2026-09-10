@@ -18,9 +18,26 @@
       "proxy-claude-unknown",
       "proxy-luna-unknown",
       "proxy-terra-unknown",
-      "openai-astra-medium"
+      "openai-astra-medium",
+      "go-deepseek-high",
+      "go-glm-max"
     ],
-    "subscriptionConcurrency": "unlimited"
+    "subscriptionConcurrency": "unlimited",
+    "fallback": {
+      "when": "admission-unavailable",
+      "routeIDs": [
+        "proxy-sol-max",
+        "proxy-fable-high",
+        "proxy-fable-xhigh",
+        "proxy-fable-max",
+        "proxy-claude-unknown",
+        "proxy-luna-unknown",
+        "proxy-terra-unknown",
+        "openai-astra-medium",
+        "go-deepseek-high",
+        "go-glm-max"
+      ]
+    }
   },
   "routes": [
     {
@@ -148,11 +165,40 @@
       "admission": "configured-choice",
       "evidence": [],
       "quotaPerTask": {}
+    },
+    {
+      "id": "go-deepseek-high",
+      "accountID": "opencode-go-d9f819e2b95cc656f794",
+      "providerID": "opencode-go",
+      "modelID": "deepseek-v4.1-flash",
+      "harness": "native",
+      "agent": "worker",
+      "reasoning": "high",
+      "serviceTier": "default",
+      "verified": true,
+      "admission": "configured-choice",
+      "evidence": [],
+      "quotaPerTask": {}
+    },
+    {
+      "id": "go-glm-max",
+      "accountID": "opencode-go-d9f819e2b95cc656f794",
+      "providerID": "opencode-go",
+      "modelID": "glm-5.3-flash",
+      "harness": "native",
+      "agent": "worker",
+      "reasoning": "max",
+      "serviceTier": "default",
+      "verified": true,
+      "admission": "configured-choice",
+      "evidence": [],
+      "quotaPerTask": {}
     }
   ],
   "billing": {
     "openai-429c9885edc3fc7113fc": "subscription",
-    "claude-8ca596da07b766ac72c8": "subscription"
+    "claude-8ca596da07b766ac72c8": "subscription",
+    "opencode-go-d9f819e2b95cc656f794": "subscription"
   },
   "bootstrapByProject": {
     "ba7f7ae7bb584ce63b3afa36920b467c644b4a7effdef2f93c5ba39ff98f8576": [

@@ -148,11 +148,20 @@ export function planRoutes(input: PlannerInput): RoutingDecision {
  if(req.explicitRouteID||!req.primaryRouteID)return planEligibleRoutes(input)
  const first=planEligibleRoutes({...input,request:{...req,explicitRouteID:req.primaryRouteID}})
  if(first.selected||!req.fallback)return first
- const alternative=planEligibleRoutes({...input,request:{...req,allowedRouteIDs:req.fallback.routeIDs}})
+ // Each alternative is attempted as its own configured choice, in the order the user ranked them.
+ // A pooled pass cannot admit them: a route counts as a configured choice only while it is the
+ // requested one, so pooling excludes every un-benchmarked route and selects nothing.
  const reasons=first.excluded.flatMap(r=>r.reasons)
- if(!alternative.selected)return {...alternative,excluded:[...first.excluded,...alternative.excluded],summary:"Configured primary and fallback routes unavailable"}
- const fallback={fromRouteID:req.primaryRouteID,toRouteID:alternative.selected.routeID,reasons}
- return {...alternative,fallback,excluded:[...first.excluded,...alternative.excluded.filter(r=>r.routeID!==req.primaryRouteID)],summary:"Configured fallback "+fallback.fromRouteID+" → "+fallback.toRouteID+": "+reasons.join("; ")}
+ let alternative:RoutingDecision|undefined
+ const rejected:RoutingDecision["excluded"]=[]
+ for(const routeID of req.fallback.routeIDs){
+  const attempt=planEligibleRoutes({...input,request:{...req,explicitRouteID:routeID}})
+  if(attempt.selected){alternative=attempt;break}
+  rejected.push(...attempt.excluded)
+ }
+ if(!alternative)return {selected:null,ranked:[],excluded:[...first.excluded,...rejected],summary:"Configured primary and fallback routes unavailable"}
+ const fallback={fromRouteID:req.primaryRouteID,toRouteID:alternative.selected!.routeID,reasons}
+ return {...alternative,fallback,excluded:[...first.excluded,...rejected.filter(r=>r.routeID!==req.primaryRouteID)],summary:"Configured fallback "+fallback.fromRouteID+" → "+fallback.toRouteID+": "+reasons.join("; ")}
 }
 function planEligibleRoutes(input: PlannerInput): RoutingDecision {
   const { request: req, accounts, routes } = input
