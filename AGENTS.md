@@ -58,7 +58,7 @@ conflict.
 
 ## Standing decisions
 
-For OpenCode2 changes, follow the isolated dev workflow in the hub AGENTS.md and opencode-dev-workflow skill. Jon authorizes verified PR merges into dev and dev activation without another approval; complete that loop instead of stopping at mergeable or asking Jon to merge. This scoped standing authorization overrides generic merge-approval instructions. No default model — choose on task, usage, speed and correctness; an
+For OpenCode2 changes, follow the isolated dev workflow in the hub AGENTS.md and opencode-dev-workflow skill. Jon authorizes verified PR merges into agents and dev activation without another approval; complete that loop instead of stopping at mergeable or asking Jon to merge. This scoped standing authorization overrides generic merge-approval instructions. No default model — choose on task, usage, speed and correctness; an
 explicit choice is final; report an unavailable route instead of substituting, and apply a ban to
 reviewers, fallbacks and resumes too. No patched fork of OpenCode: changes go upstream as
 contributions, never into a private run-fork, and never into the T3 upstream fork.

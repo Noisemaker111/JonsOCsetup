@@ -9,9 +9,9 @@ Jon authorized this workflow on 2026-09-09 for his OpenCode2 setup. It does not
 authorize releases or merges in unrelated projects.
 
 The repository is `C:/Users/Jk101/.config/opencode`. Work in an owned worktree.
-`dev` is the integration branch; `master` is stable. Reuse existing repair PRs.
-Own implementation, coherent commits, a ready PR targeting dev, review using
-actual operation and captured states, merge into dev, and dev activation. Do
+`agents` is the integration branch; `master` is stable. Reuse existing repair PRs.
+Own implementation, coherent commits, a ready PR targeting agents, review using
+actual operation and captured states, merge into agents, and dev activation. Do
 not ask Jon to perform technical review or repeatedly approve those dev steps.
 Stable promotion, host updates and public plugin publishing remain explicit.
 

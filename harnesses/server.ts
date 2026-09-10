@@ -1,70 +1,18 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
-import { spawn } from "node:child_process"
-import { homedir } from "node:os"
+/** CLI bridge and shell/output hooks. Model selection belongs to native host controls and Quest admission. */
+import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { define } from "@opencode-ai/plugin/v2/promise"
 import { assertSafeShell } from "../scripts/shell-guard"
-import { expireExecutionLeases, readLedger, recordNotification, recordSpawn, recordSpawnResult, recordTerminal, trackedChildren } from "../orchestration/orchestration-ledger"
 import { recordPluginHealth, clearPluginHealth } from "../plugin-health"
-import { blockLane, laneBlock, taskState } from "../models/capacity-registry"
-import {
-  discoverModelsText,
-  ensureClaudeCodeCatalog,
-  isClaudeCodeModel,
-  isForbiddenXai,
-  openRouterTwin,
-  overlayProviderLane,
-  splitProviderModel,
-} from "../models/model-catalog"
-import { ensureClaudeCodeFavoriteList, installClaudeCodeSession } from "./claude-code-session"
-import { assertModelImmutable } from "../models/session-lifecycle"
-import {
-  type UsageCache,
-  USAGE_CACHE_FILE,
-  USAGE_STALE_MS,
-  usageCache,
-  usageAgeMs,
-  kickUsageCollector,
-  startUsageCollector,
-  windowCapped,
-  usageSummaryLine,
-  quotaSummaryLine,
-  capacitySnapshot,
-} from "../usage/usage-lib"
-import {
-  USAGE_REACHED,
-  detectProviderFailure,
-  failureMessage,
-  usageReachedMessage,
-  type ProviderFailure,
-} from "../usage/usage-reached"
-// Routing, quota and the roster now live in model-routing.ts. Re-exported so
-// existing importers keep one entry point while the plugin split lands.
-import {
-  favoritesFromJsonc, favoritesFromProfiles, fallbackFavoritesFromAgents,
-  QUOTA_LANE, mergeFavs, nextHealthyFallback, pickModel,
-  readFavorites, spawnLane, systemPart, enforceSessionModelChange,
-} from "../models/model-routing"
-export * from "../models/model-routing"
+import { installClaudeCodeSession } from "./claude-code-session"
 
-export { windowCapped, usageSummaryLine }
-
-const HERE = dirname(fileURLToPath(import.meta.url))
-const CONFIG_ROOT = dirname(HERE)
-const PROFILES_FILE = join(CONFIG_ROOT, "models", "model-profiles.json")
-const CACHE_FILE = join(CONFIG_ROOT, "models", "models-cache.json")
-const JSONC_FILE = join(CONFIG_ROOT, "opencode.jsonc")
-const STATE_FILES = [
-  join(homedir(), ".local", "state", "opencode", "model.json"),
-  join(homedir(), ".local", "share", "opencode", "state", "model.json"),
-]
-const AGENT_DIR = join(homedir(), ".opencode", "agent")
+const CONFIG_ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 const TOOL_LOG_DIR = join(CONFIG_ROOT, "logs")
 const TOOL_OUTPUT_MAX_LINES = 50
 const TOOL_OUTPUT_MAX_BYTES = 4096
-const TRUNCATED_OUTPUT_MARKER = "… (truncated, full log in logs/)"
-const PLUGIN_PATH = "plugins-active/favorite-router.ts"
+const TRUNCATED_OUTPUT_MARKER = "\u2026 (truncated, full log in logs/)"
+const PLUGIN_PATH = "harnesses/server.ts"
 
 /** Host hook isolation: one bad callback must not poison the shared event bus. */
 async function safeToolHook(toolHook: Function, name: string, callback: (...args: any[]) => any, essential = false) {
@@ -159,19 +107,10 @@ export async function installToolOutputTruncation(ctx: { tool?: { hook?: Functio
 export default define({
   id: "favorite-router",
   async setup(ctx) {
-    const resolved = ensureClaudeCodeFavoriteList(mergeFavs(favoritesFromProfiles(), readFavorites(), fallbackFavoritesFromAgents(), favoritesFromJsonc()))
-    const catalog = ensureClaudeCodeCatalog(discoverModelsText(existsSync(JSONC_FILE) ? readFileSync(JSONC_FILE, "utf8") : ""))
 
     await ctx.agent.transform((draft) => {
       for (const agent of draft.list()) {
         const name = agent.name ?? ""
-        const agentModel = agent.model
-        if (typeof agentModel === "string" && agentModel.startsWith("xai/")) {
-          const modelID = agentModel.slice("xai/".length)
-          draft.update(name, (next) => {
-            next.model = `grok-sub/${modelID}`
-          })
-        }
         if (name === "claude-code" || name === "claude-code-harness") {
           draft.update(name, (next) => {
             next.model = undefined

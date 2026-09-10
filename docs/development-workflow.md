@@ -1,6 +1,8 @@
 # OpenCode2 development and stable releases
 
-This repository's stable branch is `master`. `dev` is the integration branch.
+This repository's stable branch is `master`. `agents` is the integration branch.
+The development runtime remains the `dev` channel, opened with `ocd`; branch names do not select runtime state.
+
 These rules apply to OpenCode2 configuration and extensions, not other projects.
 
 The agent owns the full change: inspect existing work and PRs, use an isolated
@@ -80,7 +82,7 @@ the installed OpenCode host or publishes the public plugin mirrors.
 
 ## Stable promotion
 
-When Jon explicitly requests promotion, prepare a dev-to-master PR summarizing
+When Jon explicitly requests promotion, prepare a agents-to-master PR summarizing
 the included changes and real dev evidence, check its exact revision, merge it,
 and verify the stable release. Do not serve an unmerged branch as stable. Keep
 the preceding stable release available; rollback selects it for new sessions
@@ -95,7 +97,7 @@ model is the default for dev launch. Shared-checkout worker writes are rejected 
 dev because its isolated ledger cannot authorize against stable ownership.
 Use isolated worktrees for dev code work; this preserves stable checkout owners.
 
-Activation requires the current merged dev tree and two real return-flow passes.
+Activation requires the current merged agents tree and two real return-flow passes.
 It installs the scoped workflow skill and creates `.channels/start.mjs`. Start
 with `ocd` from your project folder
 or use `ocs`. Install these PATH commands once with
@@ -152,3 +154,7 @@ reconciling one client cannot reuse or erase another client's observations. The
 board Active filter requires a confirmed running observation, never a saved
 executing record. Native data events trigger bounded worker inspection; periodic
 reads recover missed events after reconnect. Unknown ownership remains retained.
+
+The obsolete favorite/profile scheduler and capacity.json lane/task registry are removed.
+Quest admission uses dispatch-planner and RouteReservations; native session controls
+own manual selection. No provider substitution occurs during harness agent setup.

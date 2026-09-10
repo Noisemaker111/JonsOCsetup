@@ -1,27 +1,10 @@
 import { installAdaptiveContext } from "./context-plugin"
-/**
- * The models plugin: routing, quota and the declared subagent roster.
- *
- * All policy lives in model-routing.ts, which touches no plugin host and can be
- * tested and shipped on its own. This file is only the wiring: it attaches the
- * policy to the host's hooks.
- *
- * What it owns:
- *  - rewriting Task spawns away from a capped or forbidden provider
- *  - refusing to change a live worker's pinned model
- *  - delivering observed provider failures once; usage remains in tools and HUD
- *
- * What it must never own: the Claude Code harness intercept, the orchestration
- * ledger, task display labels, tool-output truncation, or the shell guard —
- * those belong to other plugins and were tangled with routing in
- * favorite-router.ts for far too long.
+/** Access policy, pinned worker identity and observed provider failures.
+ * Account-aware dispatch lives in dispatch-planner.ts; this plugin never substitutes models.
  */
 import { installAccessGuard, assertConfiguredModel } from "./access-policy"
 import { define } from "@opencode-ai/plugin/v2/promise"
-import {
-  enforceSessionModelChange,
-  type UsageCacheLike,
-} from "./model-routing"
+import { enforceSessionModelChange } from "./session-lifecycle"
 
 
 /** Attach a tool hook without letting one bad registration disable the rest. */
@@ -38,13 +21,8 @@ async function safeToolHook(hook: Function, name: string, fn: Function, rethrow 
   }
 }
 
-/**
- * Rewrite capped or forbidden Task spawns before they start.
- *
- * The usage cache is re-read on every spawn on purpose: a snapshot captured at
- * setup can authorize a provider that a later probe has already seen capped.
- */
-export async function installSpawnGuard(ctx: { tool?: { hook?: Function } }, _cache?: UsageCacheLike, _keys?: readonly string[]) {
+/** Require the explicit authorized identity resolved by Quest dispatch. */
+export async function installSpawnGuard(ctx: { tool?: { hook?: Function } }) {
   if(typeof ctx.tool?.hook!=="function")throw new Error("Host spawn guard is unavailable")
   await safeToolHook(ctx.tool.hook,"execute.before",(event:any)=>{
     if(!/^(task|subagent)$/i.test(String(event?.tool??event?.name??"")))return

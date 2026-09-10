@@ -17,7 +17,7 @@ Plugins have their own directories, not their own GitHub repositories. Individua
 
 ## Dev and stable
 
-`dev` is the integration branch; `master` is stable. Use isolated worktrees, coherent commits and PRs to dev, then verify the actual intended operation. Stable promotion is a separate action. Existing running sessions retain their loaded version.
+`agents` is the integration branch; `master` is stable. Use isolated worktrees, coherent commits and PRs to agents, then verify the actual intended operation. Stable promotion is a separate action. Existing running sessions retain their loaded version.
 
 After channel preparation, **`ocd`** starts dev and **`ocs`** starts stable in the native console. Neither command proxies terminal output. The source for these commands lives in `scripts/install-channel-shortcuts.mjs` and `scripts/start-direct-channel.ps1`.
 
@@ -38,7 +38,7 @@ npx skills add Noisemaker111/JonsOCsetup --skill ship-fast
 npx skills add Noisemaker111/JonsOCsetup --skill skill-maker
 ```
 
-- **[Ship Fast](https://skills.sh/noisemaker111/jonsocsetup/ship-fast)**: verified agent auto-merges into dev, isolated development environments, and human-approved batches into stable. Ask: "Use ship-fast to set up dev and stable for this project." [Source](skills/ship-fast/SKILL.md).
+- **[Ship Fast](https://skills.sh/noisemaker111/jonsocsetup/ship-fast)**: verified agent auto-merges into agents, isolated development environments, and human-approved batches into stable. Ask: "Use ship-fast to set up dev and stable for this project." [Source](skills/ship-fast/SKILL.md).
 - **[Skill Maker](https://skills.sh/noisemaker111/jonsocsetup/skill-maker)**: create, check, publish, install and confirm a skill's public listing in one continuous workflow. Ask: "Use skill-maker to make and publish this skill." [Source](skills/skill-maker/SKILL.md).
 
 Installing a skill supplies agent instructions; the agent still needs the project's authorization and actual CI/deployment configuration to carry out changes.

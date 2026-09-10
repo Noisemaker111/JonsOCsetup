@@ -1,3 +1,2 @@
-/** Compatibility entrypoint; implementation belongs to harnesses/server.ts. */
-export * from "../harnesses/server"
+/** Host discovery shim; implementation belongs to harnesses/server.ts. */
 export { default } from "../harnesses/server"
