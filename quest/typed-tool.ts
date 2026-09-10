@@ -1,6 +1,6 @@
 import {bindUserGiver,userGiverID,giverContext,adoptQuestGiver,verifyGiverBinding} from './user-giver'
 import { reconcileWorkers, inspectWorker } from "./worker-inspection"
-import {configureLearning,trackedStart,collectWorkflowOutcomes} from "./outcome-tracking"
+import {configureLearning,collectWorkflowOutcomes} from "./outcome-tracking"
 import {workspaceSettings,setWorkspaceMode} from "./workspace-settings"
 import { prepareWorkspaceLater } from "./workspace-pool"
 import { QuestContinuation } from './continuation'
@@ -12,15 +12,13 @@ import { questsAPI,QuestError,type StartRun } from "./api"
 import { QuestStore } from "./store"
 import { projectIdentity, physicalDirectory, verifySourceBinding } from "./project"
 import { workerLedgerProject } from "./source-binding"
-import { QuestWorkerReturns } from "./worker-returns"
+import { questDispatch } from "./dispatch"
 import { QuestWorkspaces } from "./workspaces"
 import { questChanges } from "./change-view"
-import { startQuestRun,type QuestHost } from "./runtime"
+import type { QuestHost } from "./runtime"
 import {toolSummary,toolDetail,toolSection} from './tool-projection'
 export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFile?:string;settingsFile?:string;startRun?:StartRun}={}) {
- const baseStart=options.startRun??startQuestRun(store,host,{policyFile:options.policyFile??configuredDispatchPolicyFile(),settingsFile:options.settingsFile})
- const returns=new QuestWorkerReturns(store,host)
- const start=trackedStart(store,async input=>{await returns.watch(input);return baseStart(input)},options.settingsFile)
+ const {start,returns}=questDispatch(store,host,options)
  const continuation=new QuestContinuation(store,start,{verifyContext:async(context)=>{const result=await host.get({sessionID:context.sessionID});verifyGiverBinding(store,context,result?.data??result)}})
  let polling=false
  const tick=async()=>{if(polling)return;polling=true;try{await reconcileWorkers(store,host);await continuation.tick();await returns.tick();collectWorkflowOutcomes(store)}catch(error){console.error('[quests] inspection/continuation failed',error)}finally{polling=false}}

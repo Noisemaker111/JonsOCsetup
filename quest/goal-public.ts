@@ -4,7 +4,8 @@ import { QuestContinuation } from './continuation'
 import { QuestStore } from './store'
 import { questRoot } from './root'
 import { projectIdentity, physicalDirectory, verifySourceBinding } from './project'
-import { startQuestRun, type QuestHost } from './runtime'
+import type { QuestHost } from './runtime'
+import { questDispatch } from './dispatch'
 import { configuredDispatchPolicyFile, resolveDispatchSelector, dispatchReservationFile } from '../models/dispatch-planner'
 import { QuestError } from './api'
 import { routerWorker } from './router-public'
@@ -18,7 +19,7 @@ export function createGoalFacade(host: QuestHost) {
   const store = new QuestStore(questRoot())
   const policy=()=>JSON.parse(readFileSync(configuredDispatchPolicyFile(),'utf8'))
   const binding=(selector:string)=>{const result=resolveDispatchSelector(policy(),selector);if(!result.route)throw new QuestError(result.code,'Select an exact authorized route from project_route_status');const r=result.route;return {routeID:r.id,accountID:r.accountID,providerID:r.providerID,modelID:r.modelID,reasoning:r.reasoning,serviceTier:r.serviceTier}}
-  const start = startQuestRun(store, host, { policyFile: configuredDispatchPolicyFile() })
+  const { start } = questDispatch(store, host)
   const continuation = new QuestContinuation(store, start, { goalMode: true, routeBinding:binding, verifyContext: async context => {
     const result = await host.get({ sessionID: context.sessionID }), session = result?.data ?? result
     verifyGiverBinding(store,context,session)

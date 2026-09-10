@@ -200,3 +200,8 @@ own manual selection. No provider substitution occurs during harness agent setup
 Workspace snapshots use a temporary Git index. Already-tracked paths remain included
 even beneath ignored directories; ignored untracked files remain excluded. Snapshot
 staging never changes the coordinator index, and source changes invalidate preparation.
+
+Quest tool, board and goal admissions share quest/dispatch.ts: workflow measurement
+and the persistent giver return are registered before the existing worker launcher
+runs. The Quest tool owns reconciliation and return polling for all three paths;
+goal-specific continuation and worker pause/resume retain their existing owner.
