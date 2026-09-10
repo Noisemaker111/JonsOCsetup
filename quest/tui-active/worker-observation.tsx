@@ -19,11 +19,13 @@ export function useWorkerObservations(context:any,runs:()=>QuestSession[]) {
     try{
      const session=unwrap(await boundedInspection(signal=>context.client.session.get({sessionID:id},{signal})))
      if(session?.id!==id)throw {status:404}
-     let messages:any[]=[],permissions:any[]=[]
+     let messages:any[]=[],permissions:any[]=[],forms:any[]=[]
      if(context.client.message?.list){const response=unwrap(await boundedInspection(signal=>context.client.message.list({sessionID:id,limit:3,order:'desc'},{signal})));messages=Array.isArray(response)?response:response?.data??[]}
      if(context.client.permission?.list)permissions=unwrap(await boundedInspection(signal=>context.client.permission.list({sessionID:id},{signal})))??[]
      else if(context.data?.session?.permission?.list)permissions=context.data.session.permission.list(id)??[]
-     result[key]=activeError?observationFailure(activeError):observeWorker(session,{active:active===undefined?undefined:Object.hasOwn(active,id),messages,permissions})
+     if(context.data?.session?.form?.sync)await boundedInspection(()=>context.data.session.form.sync(id))
+     if(context.data?.session?.form?.list)forms=context.data.session.form.list(id)??[]
+     result[key]=activeError?observationFailure(activeError):observeWorker(session,{active:active===undefined?undefined:Object.hasOwn(active,id),messages,permissions,forms,expected:run})
     }catch(error){result[key]=observationFailure(error)}
    }))
    if(!disposed)setObservations(result)
