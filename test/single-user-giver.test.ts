@@ -48,6 +48,7 @@ test('a different returned session or a worker cannot claim the user giver',asyn
  try{
   await expect(bindUserGiver(store,{get:async()=>({id:'ses_other',agent:'quest-giver',location:{directory:root}})},'ses_user')).rejects.toThrow('different giver')
   await expect(bindUserGiver(store,{get:async()=>({id:'ses_child',parentID:'ses_parent',agent:'quest-giver',location:{directory:root}})},'ses_child')).rejects.toThrow('never an execution worker')
+  await expect(ensureUserGiver(store,{create:async()=>({id:'ses_created'}),get:async()=>({id:'ses_other',agent:'quest-giver',location:{directory:root}})},undefined,root)).rejects.toThrow('different created giver')
   expect(userGiverID(store)).toBeUndefined()
  }finally{rmSync(root,{recursive:true,force:true})}
 })

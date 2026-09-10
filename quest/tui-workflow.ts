@@ -51,7 +51,7 @@ export function snapshotRoute(context: any): any {
 // Session routes cannot carry plugin return data. Keep one explicit return link in chrome.
 const returnRoutes = new WeakMap<object, any>()
 const boardViews = new WeakMap<object, any>()
-export function rememberBoardView(context:object,data:{questID?:string;filter:string;allProjects:boolean}) { boardViews.set(context,data) }
+export function rememberBoardView(context:object,data:{questID?:string;filter:string;allProjects:boolean;projectDirectory?:string}) { boardViews.set(context,data) }
 const [returnVersion, setReturnVersion] = createSignal(0)
 export function returnToQuest(context: any) { const r = returnRoutes.get(context); if (r) context.ui.router.navigate(r) }
 export function hasQuestReturn(context: any) { returnVersion(); return returnRoutes.has(context) }

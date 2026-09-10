@@ -209,7 +209,7 @@ export function Sidebar(props: { context: any }) {
 export default Plugin.define({
   id: "quests",
   setup(context) {
-    context.ui.router.register({ name: "quests", render: (route: any) => <QuestBoard context={context} initialQuestID={route.data?.questID} initialFilter={route.data?.filter} initialAllProjects={route.data?.allProjects} returnRoute={route.data?.returnRoute} /> })
+    context.ui.router.register({ name: "quests", render: (route: any) => <QuestBoard context={context} initialQuestID={route.data?.questID} initialFilter={route.data?.filter} initialAllProjects={route.data?.allProjects} initialProjectDirectory={route.data?.projectDirectory} returnRoute={route.data?.returnRoute} /> })
     context.ui.slot({ append: "app", render: () => <Commands context={context} /> })
     context.ui.slot({ append: "prompt.footer", render: () => <Footer context={context} /> })
     // One worker face: the host's own background chip already carries the live

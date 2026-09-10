@@ -95,3 +95,7 @@ test("v2 root worker sessions open only with exact stored ID and worktree bindin
     expect(await navigateQuestSession(context,s)).toBe(false)
   } finally {f.close()}
 })
+
+test('returning from a different worker project preserves the verified board project',async()=>{
+ const f=fixture();try{const {resolveBoardProject}=await import('../quest/board-project');let reads=0;const restored=await resolveBoardProject({client:{session:{get:async()=>{reads++;throw Error('Worker source differs')}}}},'ses_worker',f.root);expect(restored.id).toBe(projectIdentity(f.root).id);expect(reads).toBe(0)}finally{f.close()}
+})
