@@ -10,9 +10,12 @@
   ],
   "tuiEntrypoints": [
     "usage/tui-active/usage.tsx",
-    "quest/tui-active/quests.tsx"
+    "quest/tui-active/quests.tsx",
+    "composer/tui-active/composer.tsx"
   ],
   "entrypointOwners": {
+    "composer/tui-active/composer.tsx": "composer",
+    "tui-bootstrap/composer/tui.tsx": "composer",
     "project-router/server.ts": "project-router",
     "plugins-active/models.ts": "models",
     "plugins-active/quests.ts": "quests",
@@ -80,6 +83,7 @@
     "models/plugin.json",
     "papercut/plugin.json",
     "harnesses/plugin.json",
-    "project-router/plugin.json"
+    "project-router/plugin.json",
+    "composer/plugin.json"
   ]
 }
