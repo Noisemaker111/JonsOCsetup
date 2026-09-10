@@ -13,7 +13,7 @@ import { createGiver, hasQuestReturn, returnToQuest } from "../tui-workflow"
 import type { Quest, QuestSession } from "../types"
 import { watchQuests } from "../watcher"
 import { progressGlyph, questProgress } from "../steps"
-import { C, QuestBoard, activate, footerWidth, liveWorkerLines, openWorkerSession, projectRoot, quests, workerLabel } from "./quest-board"
+import { C, QuestBoard, activate, footerWidth, openWorkerSession, projectRoot, quests, workerLabel } from "./quest-board"
 
 /**
  * Snapshot of the route live right now, shaped the way the host's own router

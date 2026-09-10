@@ -347,7 +347,7 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
       captured=await waitForScreen(render,text=>text.includes("UTC time")&&text.includes("recorded"),5000,"shared request history")
     } else {
       await paste("/quests",200);await enter(300)
-      captured=await waitForScreen(render,t=>t.includes("Quests ·")&&t.includes("matching"),15000,"populated real Quest board")
+      captured=await waitForScreen(render,t=>(t.includes("Quests ·")||t.includes("OPENCODE | quests"))&&t.includes("matching"),15000,"populated real Quest board")
       if(has("--source-capture")) {
         captured=await waitForScreen(render,t=>t.includes("PgUp/PgDn Scroll")&&!t.includes("/quests"),15000,"fully painted Quest list")
         writeScreenshot(captured.frame,captured.text,join(out,"00-list"),"Actual Quest list before selection")
@@ -355,18 +355,13 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
         await paste("invoice",200);await enter(200)
         await waitForScreen(render,t=>t.includes("2 matching"),5000,"search filters rows")
         await send("x",200)
-        await waitForScreen(render,t=>t.includes("11 matching"),5000,"clear search restores rows")
+        await waitForScreen(render,t=>/Search quests · \d+ matching/.test(t)&&!t.includes("Search: invoice"),5000,"clear search restores rows")
         await send("q",200);await waitForScreen(render,t=>t.includes("Select Quest"),5000,"picker")
         await paste("Fix duplicate invoice",200);await enter(300)
       }
       const shot=async(name:string)=>{await sleep(250);const s=await render();writeScreenshot(s.frame,s.text,join(out,name),name);return s}
       await shot("01-populated-board")
       if(has("--source-capture")) {
-        await send("h",200);await waitForScreen(render,t=>t.includes("Activity · 5 recorded runs"),5000,"Activity tab")
-        await shot("10-activity")
-        await send("d",200);await waitForScreen(render,t=>t.includes("No worker changes recorded"),5000,"Changes tab")
-        await shot("11-changes")
-        await send("v",200);await waitForScreen(render,t=>t.includes("Customers receive"),5000,"Overview tab")
         await send("m",200);await waitForScreen(render,t=>t.includes("Quest actions"),5000,"More actions")
         await shot("12-more-actions");await send("\x1b",200)
       }
@@ -390,7 +385,9 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
       await shot("07-selection-retains-scroll")
       for(let i=0;i<25;i++)await send("\x1b[<64;"+(COLS-8)+";"+(ROWS-8)+"M",40)
       await shot("07-blocked-quest")
-      await clickText(has("--source-capture")?"2 Ready for review":"2 Turn in");await waitForScreen(render,t=>t.includes("2 matching"),5000,"review-ready filter")
+      if(has("--source-capture")){await send("f",200);await waitForScreen(render,t=>t.includes("Quest state filter"),5000,"ready filter picker");await clickText("Ready for review")}
+      else await clickText("2 Turn in")
+      await waitForScreen(render,t=>t.includes("2 matching"),5000,"review-ready filter")
       if(has("--source-capture") && COLS<100)await enter(200)
       await shot("08-review-ready")
       if(has("--source-capture")) {
@@ -399,7 +396,9 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
         const entries=(await import(pathToFileURL(join(root,"quest/index.ts")).href)).readAllQuests(questFixture!.store.projectRoot,{includeArchived:true})
         if(entries.filter((entry:any)=>entry.quest?.state==="Archived").length!==1)throw Error("Dismissal changed archive")
       }
-      await clickText("1 Archived");if(has("--source-capture")&&COLS<100)await enter(200);await waitForScreen(render,t=>t.includes("Reopen Quest"),5000,"archived Quest")
+      if(has("--source-capture")){await send("f",200);await waitForScreen(render,t=>t.includes("Quest state filter"),5000,"archived filter picker");await clickText("Archived")}
+      else await clickText("1 Archived")
+      if(has("--source-capture")&&COLS<100)await enter(200);await waitForScreen(render,t=>t.includes("Reopen Quest"),5000,"archived Quest")
       await shot("09-archived")
       await send("\x1b",300)
       if(has("--source-capture") && COLS<100)await send("\x1b",300)

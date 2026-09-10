@@ -1,3 +1,5 @@
+import {readUserGiver} from '../giver-registry.mjs'
+import {artifactPreview} from '../artifact-preview'
 import {userGiverID} from '../user-giver'
 import { useWorkerObservations } from "./worker-observation"
 import { nudgeGiver } from "../tui-workflow"
@@ -16,7 +18,7 @@ import { WorkflowActions, inspectRun } from "./workflow-actions"
 import { questLane } from "../board"
 import { watchQuests } from "../watcher"
 import { progressGlyph, progressRing, questProgress, ringTone } from "../steps"
-import { artifactChain, artifactLine } from "../artifacts"
+import { artifactChain, artifactLine, questAssetsDir } from "../artifacts"
 import { subagentChipLabel as liveChipLabel } from "../../orchestration/dispatch"
 import { questRoot } from "../root"
 import { QuestStore } from "../store"
@@ -26,8 +28,8 @@ import { nextStepAction } from "../steps"
 import { navigateQuestSession } from "../tui-navigation"
 
 export const C = {
-  bg: "#101417", panel: "#171d21", selected: "#21343c", line: "#35434b",
-  text: "#e2e5e6", muted: "#a5afb5", dim: "#82919a", yellow: "#e5c477",
+  bg: "#0b1012", panel: "#101619", selected: "#21343c", line: "#35434b",
+  text: "#e2e5e6", muted: "#a5afb5", dim: "#82919a", yellow: "#efd06a",
   cyan: "#79cfde", green: "#9acb84", orange: "#e5b96f", red: "#e78d93",
 }
 
@@ -52,6 +54,18 @@ function integrationSession(q: Quest) {
 }
 
 function branch(q: Quest): string { const run=q.sessions.at(-1);return integrationSession(q)?.branch ?? run?.branch ?? (run?.scope as any)?.branch ?? "Branch not recorded" }
+
+function initials(q: Quest): string {
+  const value = repo(q).replace(/[^a-z0-9 ]/gi, " ").split(/\s+/).filter(Boolean)
+  return (value.length > 1 ? value.slice(0, 2).map(part => part[0]) : q.title.split(/\s+/).slice(0, 2).map(part => part[0])).join("").toUpperCase().slice(0, 2) || "Q"
+}
+
+function shortDate(value?: string): string {
+  if (!value) return "not recorded"
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return value
+  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+}
 
 function status(q: Quest): { label: string; color: string } {
   if (q.state === "Working") return { label: "RUNNING", color: C.green }
@@ -244,19 +258,32 @@ export function questStatus(q: Quest): { label: string; color: string; rank: num
   return { label: "Planned", color: C.muted, rank: 4 }
 }
 
-function Row(props: { quest: Quest; selected: boolean; select: () => void; allProjects?: boolean }) {
+function Row(props: { quest: Quest; selected: boolean; select: () => void; allProjects?: boolean; observation:(run:QuestSession)=>any }) {
   const p = () => questProgress(props.quest)
+  const state = () => {
+    const run=props.quest.sessions.findLast(r=>['executing','planned','waiting','blocked'].includes(r.state))
+    if(!run){const saved=questStatus(props.quest);return {...saved,label:({"Needs attention":"ATTENTION","Ready for review":"REVIEW","Work recorded":"RECORDED"} as Record<string,string>)[saved.label]??saved.label.toUpperCase()}}
+    const live=props.observation(run).state
+    return {label:live==='running'?'RUNNING':live==='completed'?'WORKER DONE':live==='external'?'EXTERNAL':live.toUpperCase(),color:live==='running'?C.green:live==='completed'?C.cyan:C.orange}
+  }
   return <box id={"quest-row-" + props.quest.id} flexDirection="column" paddingLeft={1} paddingRight={1} paddingBottom={1}
     border={["left"]} borderColor={props.selected ? C.green : C.panel} backgroundColor={props.selected ? C.selected : "transparent"} flexShrink={0} onMouseUp={(event:any)=>activate(event,props.select)}>
-    <text fg={props.selected ? C.cyan : C.text} attributes={TextAttributes.BOLD} wrapMode="word">{props.quest.title}</text>
-    <text fg={C.dim} wrapMode="none" truncate>{repo(props.quest)} · {branch(props.quest)}</text>
-    <text fg={questStatus(props.quest).color} wrapMode="none" truncate>{questStatus(props.quest).label} · {p().done}/{p().total} steps</text>
-    <text fg={C.green} wrapMode="none">{"━".repeat(p().total?Math.round(16*p().done/p().total):0)}<span fg={C.line}>{"─".repeat(16-(p().total?Math.round(16*p().done/p().total):0))}</span></text>
+    <box flexDirection="row" gap={1}>
+      <text fg={C.text} width={3} flexShrink={0}>{initials(props.quest)}</text>
+      <box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0}>
+       <text fg={C.text} attributes={TextAttributes.BOLD} wrapMode="word" maxHeight={2}>{props.quest.title}</text>
+       <text fg={C.dim} wrapMode="none" truncate>{repo(props.quest)} · {branch(props.quest)}</text>
+      </box>
+      <box flexDirection="column" width={11} flexShrink={0} alignItems="flex-end">
+       <text fg={state().color} wrapMode="none" truncate>{state().label}</text>
+       <text fg={C.muted}>{p().done}/{p().total} <span fg={ringTone(p(), C)}>{progressGlyph(p())}</span></text>
+      </box>
+    </box>
   </box>
 }
 
 function SectionHeader(props: { label: string; count: number; open: boolean; toggle: () => void }) {
-  return <text fg={C.muted} paddingLeft={1} paddingTop={1} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, props.toggle)}>{props.open ? "⌄" : "›"} {props.label} · {props.count}</text>
+  return <text fg={C.text} attributes={TextAttributes.BOLD} paddingLeft={1} paddingTop={1} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, props.toggle)}>{props.open ? "▾" : "▸"} {props.label.toUpperCase()} <span fg={C.muted}>({props.count})</span></text>
 }
 
 function StageList(props: { quest: Quest }) {
@@ -363,67 +390,105 @@ function LegacyDetail(props: { context: any; store: QuestStore; quest: () => Que
   </box>
 }
 
-function ContractDetail(props: { context: any; store: QuestStore; quest: () => Quest; refresh: () => void }) {
+function ContractDetail(props: { context: any; store: QuestStore; quest: () => Quest; refresh: () => void; observation:(run:QuestSession)=>any; width:()=>number }) {
  const view=createMemo(()=>questView(props.quest()))
- const observation=useWorkerObservations(props.context,()=>props.quest().sessions)
+ const observation=props.observation
  const [expanded,setExpanded]=createSignal<string>()
  const [descriptionOpen,setDescriptionOpen]=createSignal(false)
- const [failure,setFailure]=createSignal<string>()
+ const [expandedRun,setExpandedRun]=createSignal<string>()
  let scroll:ScrollBoxRenderable|undefined
  const sessions=()=>props.quest().sessions
  const links=()=>view().artifacts.filter(a=>/https:\/\/[^/]+\/[^/]+\/[^/]+\/pull\/\d+/.test(a.uri??''))
+ const rewards=()=>artifactChain(view().artifacts.filter(a=>!links().includes(a)))
  const open=async()=>{const rows=sessions();const key=rows.length===1?rows[0].callID:await props.context.ui.dialog.select({title:'Quest worker sessions',options:rows.map(s=>({value:s.callID,title:workerLabel(s),description:observation(s).state+' · '+(s.task??'assigned work')}))});const run=rows.find(s=>s.callID===key);if(run)await openWorkerSession(props.context,run)}
- const compose=()=>void nudgeGiver(props.context,props.quest()).catch(e=>setFailure(String(e)))
+ const expandedWorker=()=>expandedRun()??sessions().at(-1)?.callID
+ const toggleWorker=()=>{const run=sessions().at(-1);if(run)setExpandedRun(expandedWorker()===run.callID?'':run.callID)}
+ const checks=()=>props.context.ui.dialog.alert({title:'Recorded checks',message:props.quest().evidence.tests.length?props.quest().evidence.tests.map(test=>redact(typeof test==='string'?test:JSON.stringify(test),2000)).join('\n\n'):'No verification checks recorded. Step notes and worker results remain available in the Quest.'})
+
  props.context?.keymap?.layer?.(()=>({mode:'global',commands:[
   {id:'quests.worker',title:'Open worker session',bind:'w',run:()=>void open()},
+  {id:'quests.worker-evidence',title:'Toggle worker evidence',bind:'i',run:toggleWorker},
+  {id:'quests.checks',title:'View recorded checks',bind:'v',run:()=>void checks()},
   {id:'quests.description',title:'Expand description',bind:'d',run:()=>setDescriptionOpen(!descriptionOpen())},
   {id:'quests.detail-down',title:'Scroll detail down',bind:'pagedown',run:()=>scroll?.scrollBy(10)},
   {id:'quests.detail-up',title:'Scroll detail up',bind:'pageup',run:()=>scroll?.scrollBy(-10)},
  ]}))
- return <box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} minHeight={0} paddingLeft={2} paddingRight={2} paddingTop={1}>
-  <text fg={C.yellow} attributes={TextAttributes.BOLD} flexShrink={0} wrapMode="word">{view().title}</text>
-  <text fg={C.dim} flexShrink={0} wrapMode="word">{repo(props.quest())} · {branch(props.quest())}</text>
-  <text fg={questStatus(props.quest()).color} flexShrink={0} wrapMode="word">[ {questStatus(props.quest()).label.toUpperCase()} ] <span fg={C.dim}> Created {props.quest().createdAt} · Updated {props.quest().updatedAt}</span></text>
-  <Rule/>
+  return <box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} minHeight={0} paddingLeft={2} paddingRight={2} paddingTop={1}>
+   <box flexDirection="row" flexWrap="no-wrap" flexShrink={0}>
+    <box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0}>
+     <text fg={C.yellow} attributes={TextAttributes.BOLD} flexShrink={0} wrapMode="none" truncate>{view().title}</text>
+     <text fg={C.green} flexShrink={0} wrapMode="none" truncate>{repo(props.quest())} <span fg={C.dim}>· {branch(props.quest())}</span></text>
+     <text fg={C.muted} flexShrink={0}>{links().length} linked PR{links().length===1?'':'s'} · {props.quest().evidence.tests.length} check{props.quest().evidence.tests.length===1?'':'s'}</text>
+    </box>
+    <box flexDirection="column" alignItems="flex-end" flexShrink={0}>
+     <text fg={questStatus(props.quest()).color} attributes={TextAttributes.BOLD}>[ {questStatus(props.quest()).label.toUpperCase()} ]</text>
+     <text fg={C.dim}>Created {shortDate(props.quest().createdAt)}</text>
+     <text fg={C.dim}>Updated {shortDate(props.quest().updatedAt)}</text>
+    </box>
+   </box>
+   <Rule/>
   <scrollbox ref={scroll} flexGrow={1} flexShrink={1} minHeight={0} scrollX={false}>
-   <box flexDirection="column" flexShrink={0} gap={1} paddingRight={1}>
-    <text fg={C.cyan} attributes={TextAttributes.BOLD}>LINKED PULL REQUESTS</text>
-    <Show when={links().length} fallback={<text fg={C.dim}>No pull requests recorded</text>}><For each={links()}>{a=><text fg={C.cyan} wrapMode="word"><a href={a.uri!}>{a.name} · {a.uri}</a></text>}</For></Show>
-    <text fg={C.cyan} attributes={TextAttributes.BOLD} onMouseUp={(e:any)=>activate(e,()=>setDescriptionOpen(!descriptionOpen()))}>DESCRIPTION · [d] {descriptionOpen()?"Collapse":"Expand"}</text>
-    <text fg={C.text} wrapMode="word">{descriptionOpen()?view().description:fitTitle(view().description,Math.max(160,((props.context.renderer?.width??120)*0.65)*3))}</text>
-    <Rule/>
-    <text fg={C.cyan} attributes={TextAttributes.BOLD}>QUEST STEPS · {view().progress.done}/{view().progress.total} complete</text>
+   <box flexDirection="column" flexShrink={0} minHeight="100%" gap={0} paddingRight={1}>
+     <text fg={C.text} attributes={TextAttributes.BOLD}>PULL REQUESTS <span fg={C.muted}>({links().length})</span></text>
+     <Show when={links().length} fallback={<text fg={C.dim}>No pull requests recorded</text>}><For each={links()}>{a=><box flexDirection="row" gap={1} flexShrink={0}>
+      <text fg={C.cyan} width={9} flexShrink={0}><a href={a.uri!}>↗ #{a.uri!.match(/\/pull\/(\d+)/)?.[1]}</a></text>
+      <text fg={C.text} flexGrow={1} flexShrink={1} wrapMode="none" truncate><a href={a.uri!}>{a.name.replace(/^Dev PR #\d+\s*[—–-]\s*/,'')}</a></text>
+     </box>}</For></Show>
+     <Rule/>
+     <text fg={C.text} attributes={TextAttributes.BOLD} onMouseUp={(e:any)=>activate(e,()=>setDescriptionOpen(!descriptionOpen()))}>DESCRIPTION <span fg={C.cyan}>· [d] {descriptionOpen()?"Collapse":"Expand"}</span></text>
+     <text fg={C.text} wrapMode="word">{descriptionOpen()?view().description:fitTitle(view().description,Math.max(160,(props.width()*0.65)*3))}</text>
+     <Rule/>
+     <box flexDirection="row" flexWrap="no-wrap"><text fg={C.text} attributes={TextAttributes.BOLD}>QUEST STEPS <span fg={C.muted}>({view().progress.done}/{view().progress.total})</span></text><box flexGrow={1}/><text fg={C.cyan} onMouseUp={(e:any)=>activate(e,()=>void checks())}>[v] View checks →</text></box>
     <For each={view().steps}>{(step,index)=><box flexDirection="column" flexShrink={0}>
-     <text fg={stepColor(step.state)} wrapMode="word" onMouseUp={(e:any)=>activate(e,()=>setExpanded(expanded()===step.id?undefined:step.id))}>{stepMark(step.state)} {index()+1}. {step.title}</text>
-     <Show when={expanded()===step.id||step.state==='working'||step.state==='blocked'}><text fg={C.muted} paddingLeft={4} wrapMode="word">{step.note??step.detail??'No further detail recorded'}</text></Show>
+     <text fg={stepColor(step.state)} wrapMode="word" onMouseUp={(e:any)=>activate(e,()=>setExpanded(expanded()===step.id?undefined:step.id))}>{stepMark(step.state)} {String(index()+1).padStart(2,"0")} {step.title}</text>
+     <Show when={expanded()===step.id||step.state==='working'||step.state==='blocked'}><text fg={C.muted} paddingLeft={4} wrapMode="word">{expanded()===step.id?(step.note??step.detail??'No further detail recorded'):fitTitle(step.note??step.detail??'No further detail recorded',Math.max(80,props.width()*1.2))}</text></Show>
     </box>}</For>
-    <Rule/>
-    <box flexDirection={(props.context.renderer?.width??120)>=140?'row':'column'} gap={2} flexShrink={0}>
-     <box flexDirection="column" flexBasis="35%" flexGrow={1} flexShrink={1} minWidth={0}>
-      <text fg={C.yellow} attributes={TextAttributes.BOLD}>REWARD / ARTIFACTS</text>
-      <text fg={C.text} wrapMode="word">{view().reward||'No deliverable recorded yet'}</text>
-      <For each={view().artifacts}>{artifact=><text fg={C.muted} wrapMode="word">{artifactLine(artifact)}</text>}</For>
-     </box>
-     <box flexDirection="column" flexBasis="65%" flexGrow={1} flexShrink={1} minWidth={0}>
-      <text fg={C.cyan} attributes={TextAttributes.BOLD}>AGENT LOG · [w] Open session</text>
-      <text fg={C.dim}>WORKER / MODEL · LIVE STATE · ACTIVITY</text>
-      <Show when={sessions().length} fallback={<text fg={C.dim}>No worker sessions recorded</text>}>
-       <For each={sessions()}>{run=><box flexDirection="column" paddingTop={1} flexShrink={0}>
-        <text fg={C.yellow} wrapMode="word" onMouseUp={(e:any)=>activate(e,()=>void openWorkerSession(props.context,run))}>↳ {workerLabel(run)} · Open session</text>
-        <text fg={observation(run).state==='running'?C.green:observation(run).state==='completed'?C.cyan:C.orange} wrapMode="word">{observation(run).state.toUpperCase()} <span fg={C.dim}>· Saved: {run.state}</span></text>
-        <text fg={C.muted} wrapMode="word">{observation(run).reason}</text>
-        <text fg={C.dim} wrapMode="word">Activity: {observation(run).lastActivityAt??'unknown'} · Checked: {observation(run).checkedAt??'pending'}</text>
-        <Show when={run.result}><text fg={C.muted} wrapMode="word">{redact(run.result!,450)}</text></Show>
-       </box>}</For>
-      </Show>
-     </box>
+    <box flexGrow={1} minHeight={1}/><Rule/>
+     <box flexDirection={props.width()>=150?'row':'column'} gap={2} flexShrink={0}>
+      <box flexDirection="column" flexBasis="36%" flexGrow={1} flexShrink={1} minWidth={0} border borderColor={C.line} paddingLeft={1} paddingRight={1}>
+       <text fg={C.text} attributes={TextAttributes.BOLD}>QUEST REWARDS <span fg={C.muted}>({rewards().length})</span></text>
+       <Show when={view().reward} fallback={<text fg={C.dim}>No reward recorded</text>}>{reward=><text fg={C.text} wrapMode="word">{fitTitle(reward(),200)}</text>}</Show>
+       <box flexDirection="row" flexWrap="wrap" gap={1}>
+        <For each={rewards()}>{artifact=>{
+         const preview=createMemo(()=>artifactPreview(artifact,[props.quest().project?.root,...sessions().map(s=>s.worktree??s.scope?.worktree),questAssetsDir(props.store.projectRoot,props.quest().id)].filter((x):x is string=>typeof x==='string'),props.store.projectRoot))
+         return <box flexDirection="column" width={14} minWidth={12} maxWidth={32} flexGrow={1} flexShrink={1} border borderColor={C.line} paddingLeft={1} paddingRight={1}>
+          <text fg={C.cyan} wrapMode="none" truncate><a href={preview().uri??artifact.uri}>▣ {artifact.name}</a></text>
+          <For each={preview().lines}>{line=><text fg={C.muted} wrapMode="none" truncate>{line}</text>}</For>
+          <text fg={C.dim} wrapMode="none" truncate>{artifact.label??preview().kind}</text>
+         </box>
+        }}</For>
+       </box>
+      </box>
+      <box flexDirection="column" flexBasis="64%" flexGrow={1} flexShrink={1} minWidth={0}>
+       <box flexDirection="row"><text fg={C.text} attributes={TextAttributes.BOLD}>AGENT LOG <span fg={C.muted}>({sessions().length})</span></text><box flexGrow={1}/><text fg={C.cyan} onMouseUp={(e:any)=>activate(e,()=>void open())}>[w] Open session</text></box>
+       <text fg={C.dim} wrapMode="none" truncate>TIME   MODEL / TASK             STATUS · [i] Evidence</text>
+       <Show when={sessions().length} fallback={<text fg={C.dim}>No worker sessions recorded</text>}>
+        <For each={sessions()}>{run=>{
+         const live=()=>observation(run)
+         return <box flexDirection="column" flexShrink={0}>
+          <box flexDirection="row" gap={1} flexShrink={0} backgroundColor={live().state==='running'?C.selected:'transparent'}>
+           <text fg={C.cyan} width={2} flexShrink={0} onMouseUp={(e:any)=>activate(e,()=>setExpandedRun(expandedWorker()===run.callID?'':run.callID))}>{expandedWorker()===run.callID?'▾':'▸'}</text>
+           <text fg={C.muted} width={5} flexShrink={0} wrapMode="none" truncate>{live().lastActivityAt?new Date(live().lastActivityAt).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit',hour12:false}):'—'}</text>
+           <text fg={C.cyan} flexGrow={1} flexShrink={1} wrapMode="none" truncate onMouseUp={(e:any)=>activate(e,()=>void openWorkerSession(props.context,run))}>↳ {run.modelID??run.model??'Model not recorded'} · {run.task??run.taskDescription??'assigned work'}</text>
+           <text fg={live().state==='running'?C.green:live().state==='completed'?C.cyan:C.orange} width={11} flexShrink={0} wrapMode="none" truncate onMouseUp={(e:any)=>activate(e,()=>setExpandedRun(expandedWorker()===run.callID?'':run.callID))}>{live().state.toUpperCase()}</text>
+          </box>
+          <Show when={expandedWorker()===run.callID}>
+           <text fg={C.yellow} wrapMode="word" onMouseUp={(e:any)=>activate(e,()=>void openWorkerSession(props.context,run))}>↳ {workerLabel(run)} · Open session</text>
+           <text fg={C.muted} wrapMode="word">{live().state.toUpperCase()} · Saved: {run.state}</text>
+           <text fg={C.muted} wrapMode="word">{live().reason}</text>
+           <text fg={C.dim} wrapMode="word">Activity: {live().lastActivityAt??'unknown'} · Checked: {live().checkedAt??'pending'}</text>
+           <Show when={run.result}><text fg={C.muted} wrapMode="word">{redact(run.result!,450)}</text></Show>
+          </Show>
+         </box>
+        }}</For>
+       </Show>
+      </box>
     </box>
    </box>
   </scrollbox>
   <Rule/>
-  <WorkflowActions context={props.context} store={props.store} quest={props.quest} refresh={props.refresh}/>
-  <Show when={failure()}><text fg={C.red} wrapMode="word">{failure()}</text></Show>
-  <box border borderColor={C.line} paddingLeft={1} flexShrink={0} onMouseUp={(e:any)=>activate(e,compose)}><text fg={C.muted} wrapMode="word">› [n] Message your Quest Giver…</text></box>
+   <box flexDirection="row" justifyContent="flex-end" flexShrink={0}><WorkflowActions context={props.context} store={props.store} quest={props.quest} refresh={props.refresh}/></box>
+
  </box>
 }
 
@@ -431,11 +496,12 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
   const store = new QuestStore(projectRoot(props.context))
   const [records,setRecords] = createSignal<Quest[]>([])
   const [loaded,setLoaded] = createSignal(false)
+  const [failure,setFailure] = createSignal<string>()
   const [allProjects,setAllProjects] = createSignal(props.initialAllProjects??Boolean(userGiverID()))
   const [project,setProject] = createSignal(boardProject(props.initialProjectDirectory??props.context?.location?.directory??props.context?.state?.path?.directory))
   const [filter,setFilter] = createSignal<QuestFilter>(props.initialFilter??"all")
   const [query,setQuery] = createSignal("")
-  const [collapsed,setCollapsed]=createSignal<Record<string,boolean>>({})
+  const [collapsed,setCollapsed]=createSignal<Record<string,boolean>>({"New Quests":true,"Completed Quests":true})
   const group=(q:Quest)=>["Complete","Archived","Ready to complete"].includes(q.state)?"Completed Quests":q.sessions.length||q.stages.some(s=>s.status!=="pending")?"Current Quest":"New Quests"
   const [selectedID,setSelectedID] = createSignal(props.initialQuestID)
   const [detail,setDetail] = createSignal(Boolean(props.initialQuestID))
@@ -446,6 +512,9 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
   const rows = createMemo(()=>filterQuests(scoped(),filter()).filter(q=>!query() || (q.title+" "+q.description).toLowerCase().includes(query().toLowerCase()))
     .sort((a,b)=>questStatus(a).rank-questStatus(b).rank || b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)))
   const selected = createMemo(()=>rows().find(q=>q.id===selectedID()))
+  let initialSelectionShown=false
+  createEffect(()=>{const q=selected();if(q&&!initialSelectionShown){initialSelectionShown=true;setCollapsed(value=>({...value,[group(q)]:false}))}})
+  const observation=useWorkerObservations(props.context,()=>rows().flatMap(q=>q.id===selectedID()?q.sessions:q.sessions.filter(r=>['executing','planned','waiting','blocked'].includes(r.state))))
   const refresh = () => { try {setRecords(quests(store.projectRoot));setLoaded(true)} catch {} }
   const reveal = () => { if(selectedID()) listScroll?.scrollChildIntoView("quest-row-"+selectedID()) }
   createEffect(()=>{if(loaded()&&!rows().some(q=>q.id===selectedID()))setSelectedID(rows()[0]?.id)})
@@ -465,6 +534,8 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
   const chooseQuest = async()=>{const id=await props.context.ui.dialog.select({title:"Select Quest",options:rows().map(q=>({value:q.id,title:q.title,description:questStatus(q).label}))});if(id)select(id,true)}
   const move = (delta:number)=>{const items=rows();if(!items.length)return;const index=Math.max(0,items.findIndex(q=>q.id===selectedID()));select(items[Math.max(0,Math.min(items.length-1,index+delta))].id)}
   const newQuest = ()=>void createGiver(props.context).catch(error=>props.context.ui.dialog.alert({title:"Start Quest",message:String(error)}))
+  const compose = ()=>void (selected()?nudgeGiver(props.context,selected()!):createGiver(props.context)).catch(error=>setFailure(String(error)))
+  const giverLabel=createMemo(()=>{records();const model=readUserGiver(store.runtime)?.model;return model?.providerID&&model?.id?model.providerID+"/"+model.id+" · "+(model.variant??"reasoning not recorded"):"Model not recorded"})
   props.context?.keymap?.layer?.(()=>({mode:"global",commands:[
     {id:"quests.close",title:"Back",bind:"escape",run:back},
     {id:"quests.filter",title:"Filter Quests",bind:"f",run:chooseFilter},
@@ -476,43 +547,50 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
     {id:"quests.open",title:"Open selected Quest",bind:"return",run:()=>setDetail(true)},
     {id:"quests.scope",title:"Toggle project scope",bind:"a",run:()=>{setAllProjects(!allProjects());setDetail(false)}},
     {id:"quests.create",title:"Start Quest",bind:"+",run:newQuest},
+    {id:"quests.compose",title:"Message your Quest Giver",bind:"n",run:compose},
   ]}))
   return <box flexDirection="column" width="100%" height="100%" backgroundColor={C.bg}>
-    <box flexDirection="row" flexShrink={0} paddingLeft={1} paddingRight={1} backgroundColor={C.panel}>
-      <text fg={C.text} attributes={TextAttributes.BOLD}>Quests · {rows().length} matching</text>
+    <box flexDirection="row" flexShrink={0} paddingLeft={2} paddingRight={2} backgroundColor={C.panel} border={["bottom"]} borderColor={C.line}>
+      <text fg={C.text} attributes={TextAttributes.BOLD}>OPENCODE</text><text fg={C.dim}>  |  </text><text fg={C.text}>quests</text><Show when={width()>=120}><text fg={C.dim}>  |  // turn ideas into shipped code</text></Show>
       <box flexGrow={1}/>
       <text fg={C.cyan} onMouseUp={(e:any)=>activate(e,newQuest)}>+ New  </text>
       <text fg={C.cyan} onMouseUp={(e:any)=>activate(e,back)}>{narrow()&&detail()?"Esc · Back to Quests":"Esc · Back to chat"}</text>
     </box>
-    <box flexDirection="row" flexWrap="wrap" columnGap={2} rowGap={0} paddingLeft={1} flexShrink={0}>
+    <Show when={narrow()}><box flexDirection="row" flexWrap="wrap" columnGap={2} rowGap={0} paddingLeft={1} flexShrink={0}>
       <text fg={C.cyan} onMouseUp={(e:any)=>activate(e,()=>{setAllProjects(!allProjects());setDetail(false)})}>[a] {allProjects()?"All projects":"Current project"}</text>
       <text fg={C.cyan} onMouseUp={(e:any)=>activate(e,()=>void chooseFilter())}>[f] {label(filter())}</text>
       <For each={["attention","ready","archived"] as QuestFilter[]}>{id=><text fg={filter()===id?C.cyan:C.muted} onMouseUp={(e:any)=>activate(e,()=>{setFilter(id);setDetail(false)})}>{filterQuests(scoped(),id).length} {label(id)}</text>}</For>
-    </box>
+    </box></Show>
     <Show when={!allProjects()&&project().error}><text fg={C.orange} wrapMode="word">{project().error}</text></Show>
-    <Rule/>
     <box flexDirection="row" flexGrow={1} flexShrink={1} minHeight={0}>
       <Show when={!narrow()||!detail()}>
         <box width={narrow()?"100%":Math.max(28,Math.floor(width()*0.29))} flexShrink={0} flexDirection="column" backgroundColor={C.panel}>
-          <text fg={C.cyan} paddingLeft={1} paddingBottom={1} wrapMode="word" onMouseUp={(e:any)=>activate(e,()=>void search())}>/ {query()?"Search: "+query():"Search quests"}</text>
-          <Show when={query()}><text fg={C.cyan} paddingLeft={1} onMouseUp={(e:any)=>activate(e,()=>setQuery(""))}>[x] Clear search</text></Show>
           <scrollbox ref={listScroll} flexGrow={1} flexShrink={1} minHeight={0} scrollX={false}>
             <For each={['New Quests','Current Quest','Completed Quests']}>{name=><>
             <SectionHeader label={name} count={rows().filter(q=>group(q)===name).length} open={!collapsed()[name]} toggle={()=>setCollapsed({...collapsed(),[name]:!collapsed()[name]})}/>
-            <Show when={!collapsed()[name]}><For each={rows().filter(q=>group(q)===name)}>{q=><Row quest={q} selected={q.id===selectedID()} select={()=>select(q.id,true)} allProjects={allProjects()}/>}</For></Show>
+            <Show when={!collapsed()[name]}><For each={rows().filter(q=>group(q)===name)}>{q=><Row quest={q} selected={q.id===selectedID()} select={()=>select(q.id,true)} allProjects={allProjects()} observation={observation}/>}</For></Show>
             </>}</For>
             <Show when={!rows().length}><text fg={C.muted} padding={1} wrapMode="word">No matching Quests. Clear search or change the filter.</text></Show>
           </scrollbox>
+          <text fg={C.cyan} paddingLeft={1}  wrapMode="none" truncate onMouseUp={(e:any)=>activate(e,()=>void search())}>/ {query()?"Search: "+query():"Search quests"} <span fg={C.dim}>· {rows().length} matching</span></text>
+          <text fg={C.dim} paddingLeft={1} wrapMode="none" truncate onMouseUp={(e:any)=>activate(e,()=>void chooseFilter())}>[a] {allProjects()?"All projects":"This project"} · [f] {label(filter())}</text>
+          <Show when={query()}><text fg={C.cyan} paddingLeft={1} onMouseUp={(e:any)=>activate(e,()=>setQuery(""))}>[x] Clear search</text></Show>
+
         </box>
-        <Show when={!narrow()}><box width={1} backgroundColor={C.line} flexShrink={0}/></Show>
+        <Show when={!narrow()}><box width={1} border={["left"]} borderColor={C.line} flexShrink={0}/></Show>
       </Show>
       <Show when={!narrow()||detail()}>
         <box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} minHeight={0}>
           <Show when={selectedID()} keyed>{id=><Show when={selected()} fallback={<text fg={C.muted} padding={1}>Choose a Quest to view its details.</text>}>
-            {q=><Show when={q().contractVersion===2} fallback={<LegacyDetail context={props.context} store={store} quest={q} refresh={refresh} />}><ContractDetail context={props.context} store={store} quest={q} refresh={refresh} /></Show>}
+            {q=><Show when={q().contractVersion===2} fallback={<LegacyDetail context={props.context} store={store} quest={q} refresh={refresh} />}><ContractDetail context={props.context} store={store} quest={q} refresh={refresh} observation={observation} width={width} /></Show>}
           </Show>}</Show>
         </box>
       </Show>
+    </box>
+    <Show when={failure()}><text fg={C.red} paddingLeft={1} wrapMode="word">{failure()}</text></Show>
+    <box flexDirection="column" marginLeft={1} marginRight={1} border borderColor={C.yellow} paddingLeft={1} paddingRight={1} flexShrink={0} onMouseUp={(e:any)=>activate(e,compose)}>
+      <text fg={C.text} wrapMode="none" truncate>❯ Message your Quest Giver… <span fg={C.muted}>[n] Compose</span></text>
+      <text fg={C.yellow} wrapMode="none" truncate>Quest Giver <span fg={C.dim}>· Recorded {giverLabel()}</span></text>
     </box>
     <text fg={C.muted} paddingLeft={1} backgroundColor={C.panel} flexShrink={0} wrapMode="none" truncate>↑↓ Select  Enter Open  / Search  f Filter  q Picker  w Worker  PgUp/PgDn Scroll</text>
   </box>

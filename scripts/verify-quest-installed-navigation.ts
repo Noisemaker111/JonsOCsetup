@@ -28,6 +28,7 @@ for(const width of [160,80]){
  store.apply(q.id,'session-planned',{callID:'navigation-evidence',role:'worker',model:model.providerID+'/'+model.id,deliverables:[]},'verification')
  store.apply(q.id,'session-claimed',{callID:'navigation-evidence',sessionID:actual.id,providerID:model.providerID,modelID:model.id,reasoningEffort:model.variant,runtime:'native',scope:{worktree:actual.directory},task:'Real model transcript (navigation reference)'},'verification')
  store.apply(q.id,'session-state',{callID:'navigation-evidence',state:'completed',result:'Host persisted a successful execution outcome'},'verification')
+ store.apply(q.id,'evidence-added',{kind:'artifacts',value:{name:'Development workflow',path:'docs/development-workflow.md',label:'Recorded source instructions',at:new Date().toISOString(),verified:false}},'verification')
  const height=width===160?52:32,setup=await createTestRenderer({width,height}),terminal=new EmbeddedTerminalRenderable(setup.renderer,{id:'installed',width,height,cols:width,rows:height,maxScrollback:100000});setup.renderer.root.add(terminal);terminal.focus()
  const env={...process.env,OPENCODE_CONFIG_DIR:root,OPENCODE_CONFIG_PROJECT_DISABLE:'1',OPENCODE_RELEASE_CHANNEL:'dev',OPENCODE_DB:dbPath,OPENCODE_QUEST_ROOT:store.projectRoot,OPENCODE_ORCHESTRATION_LEDGER:join(dir,'orchestration.jsonl'),OPENCODE_TELEMETRY_FILE:join(dir,'requests.jsonl'),XDG_STATE_HOME:join(dir,'state'),OPENCODE_DISABLE_AUTOUPDATE:'1',CLAUDE_CODE_BRIDGE_PORT:String(await freePort()),OPENCODE_ROUTE_RESERVATIONS:'C:/Users/Jk101/.config/opencode/.channels/state/dev/quests/.opencode/.quest-runtime/route-reservations.json'}
  const child=spawn('node',[join(root,'scripts/opencode-runtime.mjs'),'--json','--cwd',root,'--model',model.providerID+'/'+model.id+'#'+model.variant,'--agent','quest-giver','--cols',String(width),'--rows',String(height)],{cwd:root,env,windowsHide:true,stdio:['pipe','pipe','pipe']})
@@ -45,11 +46,11 @@ for(const width of [160,80]){
   await wait('home',async()=>(await frame()).includes('Quests'))
   await sleep(1000);await command('/quests');await wait('board',async()=>(await frame()).includes('Search quests'))
   if(width<100)await key('return','\r')
-  await wait('details',async()=>(await frame()).includes('QUEST STEPS'));await capture('board')
+  await wait('details',async()=>(await frame()).includes('QUEST STEPS'));await capture('board');await key('v','v');await wait('recorded checks dialog',async()=>(await frame()).includes('Recorded checks'));await capture('recorded-checks');await key('escape','\x1b');result.checks=true
   await key('w','w');await wait('actual native session',async()=>(await frame()).includes(marker));await capture('worker-keyboard')
   await command('/quest-back');await wait('return to selected Quest',async()=>(await frame()).includes('QUEST STEPS'));result.keyboard=true
-  for(let i=0;i<4;i++)await key('pagedown','\x1b[6~')
-  await wait('live inspection completes',async()=>!(await frame()).includes('Checking owning host'));await capture('agent-log');const lines=(await frame()).split('\n'),y=lines.findIndex(l=>l.includes('↳')&&l.includes(model.id)),x=y<0?-1:lines[y].indexOf('↳')
+  for(let i=0;i<5;i++){if((await frame()).includes('Development workflow')){result.artifactPreview=true;await capture('artifact-preview')}if(i<4)await key('pagedown','\x1b[6~')}
+  await wait('live inspection completes',async()=>!(await frame()).includes('Checking owning host'));await capture('agent-log');if(!result.artifactPreview)throw Error('Recorded artifact preview missing throughout detail scroll');const lines=(await frame()).split('\n'),y=lines.findIndex(l=>l.includes('↳')&&l.includes(model.id)),x=y<0?-1:lines[y].indexOf('↳')
   if(y<0)throw Error('Worker mouse target not visible')
   send('\x1b[<0;'+(x+3)+';'+(y+1)+'M');send('\x1b[<0;'+(x+3)+';'+(y+1)+'m')
   await wait('mouse native session',async()=>(await frame()).includes(marker));await capture('worker-mouse');result.mouse=true
@@ -57,7 +58,7 @@ for(const width of [160,80]){
   store.apply(q.id,'stage-state',{stageID:'navigate',status:'done',evidence:'Actual installed keyboard and mouse opened the native recorded transcript and returned'},'verification')
   result.persisted=new QuestStore(store.projectRoot).read(q.id);result.ok=result.persisted.stages[0].status==='done'
  }catch(e){result.error=String(e);await capture('failure')}
- finally{terminal.onData=undefined;if(!exited)child.stdin.write(JSON.stringify({type:'stop'})+'\n');await sleep(1500);terminal.destroy();setup.renderer.destroy();result.events=events;result.errors=errors;report.runs.push(result);writeFileSync(join(output,'report.json'),JSON.stringify(report,null,2))}
+ finally{terminal.onData=undefined;if(!exited){await key('escape','\x1b');if(width<100)await key('escape','\x1b');await command('/exit');await sleep(1500)}terminal.destroy();setup.renderer.destroy();result.events=events;result.errors=errors;report.runs.push(result);writeFileSync(join(output,'report.json'),JSON.stringify(report,null,2))}
  console.log(JSON.stringify({width,ok:result.ok,error:result.error,output:dir}))
 }
 report.ok=report.runs.every((r:any)=>r.ok);writeFileSync(join(output,'report.json'),JSON.stringify(report,null,2));console.log(join(output,'report.json'));process.exit(report.ok?0:1)
