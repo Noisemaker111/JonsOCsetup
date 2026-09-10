@@ -73,7 +73,7 @@ function launch(pointer) {
   const env = Object.fromEntries(Object.entries({ ...process.env, OPENCODE_CONFIG_DIR: launchRoot, OPENCODE_CONFIG_CONTENT: JSON.stringify(reviewed), OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_PLUGIN_GENERATION: generation, OPENCODE_RUNTIME_CONTROL: control, OPENCODE_RUNTIME_TOKEN: token, OPENCODE_RUNTIME_RECEIPT: receipt }).filter(([, value]) => typeof value === "string"))
   const child = pty.spawn(exe, args, { name: "xterm-256color", cols: Number(option("--cols") ?? process.stdout.columns ?? 120), rows: Number(option("--rows") ?? process.stdout.rows ?? 40), cwd, env })
   terminal = child
-  writeFileSync(join(control, "owner.json"), JSON.stringify({ pid: process.pid, childPID: child.pid || undefined, generation, sessionID, cwd, sequence }))
+  writeFileSync(join(control, "owner.json"), JSON.stringify({ releaseLease, pid: process.pid, childPID: child.pid || undefined, generation, sessionID, cwd, sequence }))
   emit({ type: "launched", configRoot: launchRoot, host: hostIdentity, generation, sourceCommit: pointer.evidence.sourceCommit, pid: child.pid || undefined, sessionID, sequence, receipt, control })
   child.onData((data) => emit({ type: "data", data: Buffer.from(data).toString("base64") }))
   child.onExit(({ exitCode }) => {

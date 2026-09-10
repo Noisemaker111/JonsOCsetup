@@ -321,7 +321,7 @@ export class QuestWorkspaces {
       if(!value)throw Error("Unknown workspace")
       if(value.removed)return {removed:true,reason:"Already removed; retained records available"}
       if(value.mode==="shared"||value.mode==="research")return this.retain(runID,"Original checkout is never removed")
-      this.collect(runID);this.verify(value);beforeRemove()
+      Object.assign(value,this.collect(runID));this.verify(value);beforeRemove()
       const result=removeIntegratedWorktree({root:value.root,path:value.path,ref:integrationRef(value.root,value.source??value.root),branch:value.branch,beforeRemove})
       if(result.removed){value.removed=true;value.integration={workerHead:result.workerHead!,projectHead:result.projectHead!,verifiedAt:new Date().toISOString(),method:"ancestor"}}
       value.cleanup={...result,at:new Date().toISOString()};this.save(value);return result

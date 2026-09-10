@@ -35,7 +35,7 @@ if(action==='prepare'){
   await run('bun',['install','--frozen-lockfile'],root,process.env)
   const env=envFor(root,'dev')
   await run('bun',[join(root,'scripts/prepare-channel.ts'),'--model',model],root,env)
-  atomic(join(root,'channel-release.json'),{schema:1,cleanupProtocol:1,channel,commit,root,model,preparedAt:new Date().toISOString()})
+  atomic(join(root,'channel-release.json'),{schema:1,cleanupProtocol:existsSync(join(root,'scripts/release-retirement.mjs'))?1:undefined,channel,commit,root,model,preparedAt:new Date().toISOString()})
   console.log(JSON.stringify({prepared:true,active:false,root,commit,next:'Exercise this candidate twice, then activate dev with the real evidence report.'},null,2))
 }else if(action==='activate'){
   if(channel!=='dev')throw Error('Stable activation is never an implicit dev action')
@@ -57,6 +57,7 @@ if(action==='prepare'){
   atomic(skillReceipt,{path:skillPath,hash:hash(skill),sourceCommit:release.commit})
   writeFileSync(join(registry,'start.mjs'),"import {readFileSync} from 'node:fs';import {dirname,join} from 'node:path';import {fileURLToPath,pathToFileURL} from 'node:url';const root=JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)),'dev.json'),'utf8')).root;process.argv.splice(2,0,'start');await import(pathToFileURL(join(root,'scripts/runtime-channel.mjs')).href);\n")
   atomic(path,{...release,generation:pointer.activeGeneration,evidence:reportPath,previous:previous?{...previous,previous:undefined}:undefined,activatedAt:new Date().toISOString()})
+  await run('node',[join(root,'scripts/install-channel-shortcuts.mjs')],root,process.env)
   console.log(JSON.stringify({active:true,channel,root,commit:release.commit,existingSessions:'unchanged',cleanup:{tasks:retryFinishedWorktrees(repository),releases:retireReleases(repository)}},null,2))
 }else if(action==='status'){
   console.log(JSON.stringify(channel==='dev'?(existsSync(join(registry,'dev.json'))?read(join(registry,'dev.json')):{active:false}):{channel,root:runtimeHome,activation:read(join(runtimeHome,'plugin-activation.json'))},null,2))

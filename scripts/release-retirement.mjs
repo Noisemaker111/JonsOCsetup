@@ -24,7 +24,7 @@ function preserveTree(source,destination){
  for(const e of readdirSync(source,{withFileTypes:true})){
   if(e.isSymbolicLink())continue // launch config junctions are reproducible, not artifacts
   const from=join(source,e.name),to=join(destination,e.name)
-  if(e.isDirectory())preserveTree(from,to);else if(e.isFile())copyFileSync(from,to)
+  if(e.isDirectory())preserveTree(from,to);else if(e.isFile()){copyFileSync(from,to);if(!readFileSync(from).equals(readFileSync(to)))throw Error('Release evidence copy changed: '+from)}
  }
 }
 export function retireReleases(repository){return locked(()=>retireReleasesLocked(repository))}
@@ -41,6 +41,9 @@ function retireReleasesLocked(repository){
   const release=read(file)
   if(release.cleanupProtocol!==1){results.push({root,removed:false,reason:'Older release has no complete process lifetime record'});continue}
   if(!within(dir,realpathSync(root))||pathKey(root)!==pathKey(realpathSync(root))||pathKey(release.root)!==pathKey(root)||release.channel!=='dev')throw Error('Release ownership mismatch')
+  let untrackedLaunch=false
+  for(const [kind,name] of [['runtime','owner.json'],['direct','launch.json']]){const launches=join(root,'run',kind);if(existsSync(launches))for(const d of readdirSync(launches)){const file=join(launches,d,name);if(existsSync(file)&&!read(file).releaseLease)untrackedLaunch=true}}
+  if(untrackedLaunch){results.push({root,removed:false,reason:'A launch has no process lifetime lease; ownership review required'});continue}
   const owners=users.filter(u=>pathKey(u.root)===pathKey(root))
   // Even an absent/dead PID cannot prove an unacknowledged child stopped.
   if(owners.some(u=>!u.endedAt)){results.push({root,removed:false,reason:'A release process is active or its exit was not acknowledged'});continue}
