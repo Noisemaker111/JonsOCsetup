@@ -64,7 +64,5 @@ export function reviewedAgentConfig(root,generation){
  const config=JSON5.parse(readFileSync(join(selected,"opencode.jsonc"),"utf8"))
  if(!config.agents?.["quest-giver"])throw Error("Selected generation lacks Quest Giver configuration")
  const mcp=structuredClone(config.mcp??{})
- const bridge=mcp.mcp
- if(Array.isArray(bridge?.command))bridge.command=bridge.command.map(value=>typeof value==='string'&&value.replaceAll('\\','/').endsWith('/harnesses/opencode-mcp-stdio.mjs')?join(selected,'harnesses/opencode-mcp-stdio.mjs'):value)
  return JSON.stringify({agents:config.agents,default_agent:config.default_agent,mcp})
 }

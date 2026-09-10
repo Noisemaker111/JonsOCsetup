@@ -1,3 +1,4 @@
+import {hostExecution,hostPermissions} from "./host-observation"
 import { observeWorker, observationFailure, boundedInspection } from './worker-observation.mjs'
 import { QuestTracker } from './tracker'
 import { readAllQuests } from './index'
@@ -12,7 +13,9 @@ export async function inspectWorker(host:any, run:QuestSession):Promise<any> {
   const row=unwrap(await boundedInspection(signal=>host.get({sessionID},{signal})))
   if(row?.id!==sessionID)return {state:'missing',reason:'Recorded session was not returned by this host; ownership retained'}
   const active=typeof host.active==='function'?unwrap(await boundedInspection(signal=>host.active({signal}))):undefined
-  return observeWorker(row,{active:active===undefined?undefined:Object.hasOwn(active,sessionID),expected:run})
+  const messages=typeof host.context==='function'?unwrap(await boundedInspection(()=>host.context({sessionID}))):[]
+  const permissions=unwrap(await boundedInspection(()=>hostPermissions(host,sessionID)))
+  return observeWorker(row,{active:active===undefined?hostExecution(host,sessionID):Object.hasOwn(active,sessionID),messages:Array.isArray(messages)?messages.slice(-3):[],permissions,expected:run})
  }catch(error){return observationFailure(error)}
 }
 /** Poll persisted outcomes to recover missed events without turning silence into completion. */

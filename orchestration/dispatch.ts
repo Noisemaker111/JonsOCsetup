@@ -77,16 +77,6 @@ export function reasoningEffortFor(providerID: string, modelID: string, variant:
   return { reasoningEffort: LANE_REASONING_DEFAULT[`${providerID}/${modelID}`.toLowerCase()], fast }
 }
 
-/**
- * harnesses/opencode-mcp-stdio.mjs (the mcp_agent gateway non-native harness
- * CLIs dispatch through) posts POST /session { title, agent: "build", model }
- * directly to the host. That `agent` is never caller-chosen — it is the fixed
- * hidden worker capability every mcp_agent call carries alongside its
- * required explicit model, not a role selection. Anything else in `agent` is
- * still a caller trying to pick its own role/runtime and stays forbidden.
- */
-const GATEWAY_MODEL_HINT_AGENT = "build"
-
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : ""
 }
@@ -184,10 +174,9 @@ export function canonicalizeDispatch(event: unknown): WorkerIdentity | undefined
 
   const input = (ev.input ?? ev.args) as Record<string, unknown> | undefined
   if (!input || typeof input !== "object") throw new Error("Quest dispatch requires an input object")
-  const isGatewayModelHintAgent = input.agent === GATEWAY_MODEL_HINT_AGENT && !!text(input.model)
   const requested = splitProviderModel(text(input.model)) ?? aliasModel(input.model) ?? (!text(input.model) ? { providerID: "opencode", modelID: "muse-spark-1.3-contributor-free" } : undefined)
   const preparedAgent = requested && typeof input.description === "string" && input.agent === WORKER_AGENTS[`${requested.providerID}/${requested.modelID}`]
-  const forbidden = FORBIDDEN_CALLER_FIELDS.find((field) => field in input && !(field === "agent" && (isGatewayModelHintAgent || preparedAgent)))
+  const forbidden = FORBIDDEN_CALLER_FIELDS.find((field) => field in input && !(field === "agent" && preparedAgent))
   if (forbidden) throw new Error(`Quest dispatch derives hidden role/runtime; caller field ${forbidden} is forbidden`)
 
   const task = taskDescription(input)

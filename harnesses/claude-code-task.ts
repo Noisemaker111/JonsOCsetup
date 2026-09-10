@@ -2,7 +2,6 @@ import { accessSync, existsSync } from "node:fs"
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 import { delimiter, isAbsolute, join, resolve } from "node:path"
-import { homedir, tmpdir } from "node:os"
 import { appendLedger, claimCompletionDelivery, completionEvidence, recordCompletionDelivered, recordHeartbeat, recordLifecycle, recordNotification } from "../orchestration/orchestration-ledger"
 import { normalizeScope, stringList, validateContinuation, type TaskScopeManifest } from "../orchestration/task-scope"
 import { superviseForeground } from "../scripts/foreground-supervisor"
@@ -10,7 +9,7 @@ import { recordHang } from "../papercut/server"
 import { canonicalWorkerTitle, claudeModelAlias, subagentChipLabel, workerIdentityFromEvent } from "../orchestration/dispatch"
 import { QuestStore } from "../quest/store"
 import { questRoot } from "../quest/root"
-import { harnessFor, mcpConfigForWrapper } from "./"
+import { harnessFor } from "./"
 import { wireStreamEvents } from "./harness-run"
 import { isUsageReached, usageReachedMessage } from "../usage/usage-reached"
 
@@ -24,17 +23,6 @@ const PROBE_TIMEOUT_MS = 8_000
 const SPEC = harnessFor("claude-code")!
 
 import type { HarnessStreamEvent } from "./"
-
-/** Hand the CLI an MCP server so the harness can spawn opencode subagents back through us. */
-async function mcpConfigPathFor(parentSessionId?: string, cwd?: string, invocationID?:string): Promise<string | undefined> {
-  try {
-    const wrapper = join(homedir(), ".config", "opencode", "harnesses", "opencode-mcp-stdio.mjs")
-    if (!existsSync(wrapper)) return undefined
-    const file = join(tmpdir(), `opencode-mcp-${randomUUID()}.json`)
-    await writeFile(file, JSON.stringify(mcpConfigForWrapper(wrapper, parentSessionId, cwd, invocationID), null, 2), "utf8")
-    return file
-  } catch { return undefined }
-}
 
 export type ClaudeCodeTaskInput = { task: string; cwd?: string; constraints?: string; verification?: string; sessionKey?: string; resume?: boolean; model?: string; scope?: TaskScopeManifest; followUpKind?: string; executable?: string; executableArgs?: string[] }
 export type ClaudeCodeTaskContext = { sessionID?: string; callID?: string; abortSignal?: AbortSignal; signal?: AbortSignal; onHeartbeat?: () => void; onEvent?: (event: HarnessStreamEvent) => void; onBlocked?: (event: { sessionID?: string; command: string; elapsedMs: number; state: "BLOCKED/HUNG" }) => void }
@@ -316,19 +304,13 @@ export async function runClaudeCodeCli(input: ClaudeCodeCliInput, context: Claud
   if (!executable) return fail("blocked", "client-not-started: Claude Code CLI was not found. Install and authenticate Claude Code normally.")
   const cwd = input.cwd || process.cwd()
   const id = input.sessionId
-  const mcpConfigPath = await mcpConfigPathFor(input.sessionKey || context.sessionID, cwd, context.callID??runID)
-  const args = [...(input.executableArgs ?? []), ...SPEC.args({ model: input.model, sessionId: id, resumed: input.resumed, mcpConfigPath })]
+  const args = [...(input.executableArgs ?? []), ...SPEC.args({ model: input.model, sessionId: id, resumed: input.resumed })]
   const abort = context.abortSignal || context.signal
-  let result: Awaited<ReturnType<typeof superviseForeground>>
-  try {
-    result = await superviseForeground(executable, args, {
+  const result = await superviseForeground(executable, args, {
       cwd, env: safeEnv(process.env), input: input.prompt, sessionID: context.sessionID, abortSignal: abort,
       timeoutMs: 15 * 60 * 1000, leaseMs: 30_000, onHeartbeat: context.onHeartbeat, onBlocked: context.onBlocked,
       onStdoutLine: wireStreamEvents(SPEC, context.onEvent),
     })
-  } finally {
-    if (mcpConfigPath) { try { await rm(mcpConfigPath, { force: true }) } catch {} }
-  }
   const output = result.stdout.slice(-MAX_OUTPUT), error = result.stderr.slice(-MAX_OUTPUT), runtimeID = extractSessionId(output)
   if (result.timedOut) return fail("failed", "Claude Code timed out after 900000 ms.")
   if (abort?.aborted) return fail("cancelled", "Claude Code cancelled.")

@@ -1,12 +1,4 @@
-/**
- * One blanket vocabulary for "we ran out of usage".
- *
- * Providers spell exhaustion a dozen ways — 402, 403, 429, "resource
- * exhausted", "5-hour usage limit", "insufficient credits". None of that is
- * useful to read. Everything that means *the plan is spent* collapses to a
- * single `Usage reached — <provider/model>` line plus the failover target.
- * Raw status codes and provider snippets never reach the user.
- */
+/** Classify actual provider errors. Authentication, throttling and capacity are distinct. */
 
 export const USAGE_REACHED = "Usage reached"
 
@@ -26,15 +18,8 @@ const USAGE_RE = new RegExp(
     /out\s+of\s+(quota|credits?)/.source,
     /insufficient\s+(quota|credits?|balance|funds)/.source,
     /resource.?exhausted/.source,
-    /rate.?limit(ed|\s+exceeded|\s+reached)?/.source,
-    /too\s+many\s+requests/.source,
-    /over\s+capacity/.source,
     /billing\s+(hard\s+)?limit/.source,
     /credit\s+balance\s+is\s+too\s+low/.source,
-    // status codes, in the shapes providers actually emit them
-    /"?(status|statusCode|code)"?\s*[:=]\s*"?(402|403|429)"?\b/.source,
-    /\bHTTP\s+(402|403|429)\b/.source,
-    /\b(402|403|429)\s+(Payment\s+Required|Forbidden|Too\s+Many\s+Requests)\b/.source,
   ].join("|"),
   "i",
 )
@@ -82,7 +67,7 @@ export function providerModelFromBlob(blob: string): { providerID?: string; mode
 
 /**
  * Classify a provider failure blob. Exhaustion wins over generic provider
- * errors: a 403 that also says "internal error" is still usage reached.
+ * errors only when the response explicitly says quota is exhausted.
  */
 export function detectProviderFailure(blob: string): ProviderFailure | undefined {
   if (!blob) return
@@ -90,6 +75,7 @@ export function detectProviderFailure(blob: string): ProviderFailure | undefined
   if (usage) return { kind: "usage", ...providerModelFromBlob(blob), detail: excerpt(blob, usage.index) }
 
   const generic =
+    /\bHTTP\s+(401|402|403|429)\b|"?(status|statusCode|code)"?\s*[:=]\s*"?(401|402|403|429)\b|rate.?limit|too many requests|over capacity/i.exec(blob) ??
     PROVIDER_RE.exec(blob) ??
     /opencode-go[\s\S]{0,200}(apierror|provider (error|returned)|returned error)/i.exec(blob) ??
     /(apierror|provider (error|returned)|returned error)[\s\S]{0,200}opencode-go/i.exec(blob)
@@ -113,7 +99,7 @@ export function usageReachedMessage(
   const spent = failureTarget(failure)
   return fallback
     ? `${USAGE_REACHED} — ${spent}. Falling over to ${fallback.providerID}/${fallback.modelID}.`
-    : `${USAGE_REACHED} — ${spent}. No healthy failover target is available; this work is paused until the window resets.`
+    : `${USAGE_REACHED} — ${spent}. Inspect the actual quota and reset evidence. No fallback has been authorized or performed.`
 }
 
 /** Summary line for a non-exhaustion provider failure. Still bounded, still no raw dump. */
@@ -124,7 +110,7 @@ export function providerFailureMessage(
   const failed = failureTarget(failure)
   return fallback
     ? `Provider unavailable — ${failed}. Falling over to ${fallback.providerID}/${fallback.modelID}.`
-    : `Provider unavailable — ${failed}. No healthy failover target is available.`
+    : `Provider unavailable — ${failed}. Inspect the actual request error and retry guidance; quota exhaustion is not established.`
 }
 
 /** User-facing text for either kind, so callers never branch on status codes. */

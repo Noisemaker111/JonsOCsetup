@@ -756,66 +756,6 @@ export function pickModel(task: string, favs: Fav[], usage?: UsageCache) {
 }
 
 /**
- * Host tool.execute.before event (opencode2.exe Tool.execute):
- *   kn = { tool, inputSchema, sessionID, agent, messageID, id, input }
- *   trigger("tool", "execute.before", kn)
- * `event.agent` is the caller; the Task target is `event.input.agent`.
- */
-export function rewriteLegacyModelAgent(input: unknown, favs?: Fav[]): void {
-  if (!input || typeof input !== "object") return
-  const args = input as Record<string, unknown>
-  const name = String(args.agent ?? args.subagent_type ?? "").trim()
-  if (!name.startsWith("model-")) return
-  const list = favs ?? mergeFavs(favoritesFromProfiles(), readFavorites(), fallbackFavoritesFromAgents(), favoritesFromJsonc())
-  const hit = list.find((item) => legacyModelAgentName(item) === name)
-  if (!hit) return
-  args.agent = workerRoleFor(hit)
-  args.model = `${hit.providerID}/${hit.modelID}`
-}
-
-/**
- * execute.before for Task/subagent spawns: rewrite a spawn aimed at an
- * exhausted or unroutable provider onto one that can actually do the work.
- * Named for what it does rather than for the one provider it started with.
- */
-export function spawnFailoverBefore(event: unknown, cache?: UsageCache, keys?: readonly string[]): void {
-  const ev = (event ?? {}) as Record<string, unknown>
-  const toolName = String(ev.tool ?? ev.name ?? "")
-  if (!/^(task|subagent)$/i.test(toolName)) return
-  const args = (ev.input ?? ev.args ?? event) as Record<string, unknown>
-  if (!args || typeof args !== "object") return
-  if (isClaudeCodeSpawn(args)) return
-  rewriteLegacyModelAgent(args)
-  const blob = spawnBlob(args)
-  const id = String(ev.id ?? ev.callID ?? "failover")
-  const sessionID = String(ev.sessionID ?? "unknown")
-  const note = (lane: string, agent: string, reason: string) => {
-    rememberFailoverNotice(reason)
-    taskState(id, sessionID, id, lane, "executing", reason)
-  }
-  if (isForbiddenXai(blob)) {
-    const fb = nextHealthyFallback("xai", cache)
-    const agent = applySpawnTarget(args, fb.providerID, fb.modelID)
-    note(fb.providerID, agent, `${XAI_NEVER_MSG} Rewrote Task -> ${agent}.`)
-    return
-  }
-  const provider = spawnProvider(args)
-  if (!spawnNeedsFailover(provider, cache)) return
-  // One path for every provider. This used to fork: opencode-go got a twin
-  // rewrite, a lane block and a bespoke message, and everything else got a
-  // single generic sentence — so no other provider could ever gain the same
-  // handling without another branch being written for it by hand.
-  const from = provider ?? "other"
-  const target = nextHealthyFallback(from, cache)
-  const agent = applySpawnTarget(args, target.providerID, target.modelID)
-  const reason = quotaUnreadable(from, cache)
-    ? `${from} quota unknown — usage cache is stale or incomplete, failing closed. Rewrote Task -> ${agent}; ${from} models stay favorited.`
-    : `${capMessage(from, sourceCapHit(from, cache), target)} Rewrote Task -> ${agent}.`
-  blockLane(from, reason, capResetAt(from, cache))
-  note(target.providerID, agent, reason)
-}
-
-/**
  * The real end of the window a provider says it is capped in. The lane block
  * tracks that when telemetry reports it — a 5h or 7d window is not something
  * the router may shorten. Undefined when no capped window carries a reset, and
@@ -828,31 +768,10 @@ export function capResetAt(providerID: string, cache?: UsageCache): string | und
   return new Date(Math.max(...resets as number[])).toISOString()
 }
 
-/** Task agent=claude-code runs the official CLI; never starts a relay chat-model session. */
-// ---- failover notices ----------------------------------------------------
-// A quota rewrite has to reach the orchestrator's next turn. These are drained
-// by the models plugin's context hook and pushed as SystemPart objects — never
-// as raw strings, which fail opencode2 schema validation.
+/** Construct a host system text part; raw strings fail host schema validation. */
 
 export function systemPart(text: string): { type: "text"; text: string } {
   return { type: "text", text }
-}
-
-const failoverNotices: string[] = []
-
-export function rememberFailoverNotice(text: string) {
-  const trimmed = String(text ?? "").trim()
-  if (trimmed) failoverNotices.push(trimmed)
-}
-
-export function drainFailoverNotices(): string[] {
-  const out = failoverNotices.slice()
-  failoverNotices.length = 0
-  return out
-}
-
-export function failoverSystemParts(): { type: "text"; text: string }[] {
-  return drainFailoverNotices().map(systemPart)
 }
 
 /**

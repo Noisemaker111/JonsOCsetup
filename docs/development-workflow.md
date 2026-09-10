@@ -131,3 +131,13 @@ generation. An older open dev session cannot claim a newer generation's queued w
 Inspection retains all queue histories; a new admission refuses another generation's
 active continuation until it is explicitly cancelled. Cancellation preserves already
 launched workers and their evidence. No queue is silently migrated on reload.
+
+## Native worker inspection
+
+OpenCode2 uses the native Quest tool for worker status, results and dispatch.
+Use quest get with inspect.section runs, and project_route_status for route
+diagnostics. The external-harness MCP bridge is not registered inside OpenCode2:
+standalone hosts do not publish the supporting-host registration it requires.
+The obsolete bridge, its generated harness config and CLI adapter were removed. Worker status uses live
+host events and permissions, clears live observations on disconnect, and keeps
+missing or uncertain ownership intact. Historical ledgers are never liveness proof.

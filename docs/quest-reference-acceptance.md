@@ -1,3 +1,5 @@
+> Historical verification record. Its bridge and scenario-test commands have since been removed; current native inspection and verification are documented in development-workflow.md.
+
 # Quest reference acceptance follow-up (in progress)
 
 The merged board/runtime repair and one-user-giver changes are dev PRs [8](https://github.com/Noisemaker111/JonsOCsetup/pull/8) and [9](https://github.com/Noisemaker111/JonsOCsetup/pull/9). The actual ocd launch loaded merged source 4b62354e599921e6f3faeca6c5a2e49110cad19a from dev-4b62354e5999-1789002009307. Stable and the installed host were not promoted or changed.

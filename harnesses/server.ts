@@ -44,7 +44,7 @@ import {
 import {
   favoritesFromJsonc, favoritesFromProfiles, fallbackFavoritesFromAgents, forceUsageCollectOnCap,
   QUOTA_LANE, quotaLaneNotice, mergeFavs, nextHealthyFallback, pickModel,
-  readFavorites, rememberFailoverNotice, spawnLane, systemPart, enforceSessionModelChange,
+  readFavorites, spawnLane, systemPart, enforceSessionModelChange,
 } from "../models/model-routing"
 export * from "../models/model-routing"
 

@@ -24,8 +24,7 @@ import { spawn } from "node:child_process"
 import { ledgerLockStatus, claimCompletionDelivery, suppressCompletionDelivery, recordCompletionDelivered, recordCompletionDeliveryFailed, recordNativeSessionLineage, recordNotification, recordTerminal, trackedChildren, expireExecutionLeases, pendingCompletionEvidence, readLedger, recordSpawn, recordSpawnResult, type CompletionEvidence } from "./orchestration-ledger"
 import { injectCompletion } from "./watchdog-inject"
 import { detectProviderFailure, failureMessage, type ProviderFailure } from "../usage/usage-reached"
-import { blockLane } from "../models/capacity-registry"
-import { capResetAt, nextHealthyFallback, quotaLaneNotice, rememberFailoverNotice, spawnLane, forceUsageCollectOnCap } from "../models/model-routing"
+import { quotaLaneNotice, spawnLane, forceUsageCollectOnCap } from "../models/model-routing"
 import { usageCache } from "../usage/usage-lib"
 
 /**
@@ -147,30 +146,6 @@ function safeJson(value: unknown): string {
   }
 }
 
-function partBlobs(part: unknown): string[] {
-  if (part == null) return []
-  if (typeof part === "string") return [part]
-  if (typeof part !== "object") return [String(part)]
-  const p = part as Record<string, unknown>
-  const blobs: string[] = []
-  if (typeof p.type === "string") blobs.push(p.type)
-  if (typeof p.text === "string") blobs.push(p.text)
-  if (typeof p.error === "string") blobs.push(p.error)
-  else if (p.error != null) blobs.push(safeJson(p.error))
-  if (typeof p.message === "string") blobs.push(p.message)
-  if (typeof p.data === "string") blobs.push(p.data)
-  else if (p.data != null) blobs.push(safeJson(p.data))
-  if (p.type === "error" || p.type === "data" || p.type === "retry") blobs.push(safeJson(p))
-  const state = p.state
-  if (state && typeof state === "object") {
-    const st = state as Record<string, unknown>
-    if (typeof st.error === "string") blobs.push(st.error)
-    else if (st.error != null) blobs.push(safeJson(st.error))
-    if (st.status === "error") blobs.push(safeJson(st))
-  }
-  return blobs
-}
-
 function messageRole(message: unknown): string {
   const m = (message ?? {}) as Record<string, unknown>
   if (typeof m.type === "string") return m.type
@@ -179,30 +154,6 @@ function messageRole(message: unknown): string {
   if (info && typeof info.role === "string") return info.role
   if (info && typeof info.type === "string") return info.type
   return ""
-}
-
-function messageBlobs(message: unknown): string[] {
-  const m = (message ?? {}) as Record<string, unknown>
-  const blobs: string[] = [...messageTexts(message)]
-  if (typeof m.error === "string") blobs.push(m.error)
-  else if (m.error != null) blobs.push(safeJson(m.error))
-  if (typeof m.message === "string") blobs.push(m.message)
-  const info = m.info
-  if (info && typeof info === "object") {
-    const inf = info as Record<string, unknown>
-    if (inf.error != null) {
-      blobs.push(safeJson(inf.error))
-      if (typeof inf.providerID === "string") blobs.push(inf.providerID)
-    }
-    if (typeof inf.message === "string") blobs.push(inf.message)
-  }
-  const parts = Array.isArray(m.content) ? m.content : Array.isArray(m.parts) ? m.parts : []
-  for (const part of parts) {
-    for (const extra of partBlobs(part)) {
-      if (!blobs.includes(extra)) blobs.push(extra)
-    }
-  }
-  return blobs
 }
 
 function eventBlob(event: unknown): string {
@@ -218,51 +169,9 @@ function eventBlob(event: unknown): string {
   return chunks.join("\n")
 }
 
-/**
- * How long a spent lane stays out of rotation when telemetry reports no reset.
- * When it does report one, capResetAt() wins: a plan that says 7d must not be
- * retried in an hour, and one that resets in ten minutes must not wait a full
- * hour. This constant is only the blind case.
- */
-const USAGE_LANE_BLOCK_MS = 60 * 60 * 1000
-
-/**
- * Classification lives in usage-reached.ts so the proxies, the Claude Code
- * harness and this router all speak the same blanket vocabulary. Nothing here
- * ever renders a status code: exhaustion is always "Usage reached — <model>".
- */
-function findProviderFailure(blob: string): ProviderFailure | undefined {
-  return detectProviderFailure(blob)
-}
-
-/**
- * The line the parent session actually reads. Names the spent model and the
- * successor, and records the same line as a failover notice so the orchestrator
- * sees it on its next turn even when the child never rendered a result.
- */
-function renderFailure(failure: ProviderFailure): string {
-  const from = failure.providerID ?? spawnLane(failure.modelID ?? "")
-  const fallback = failure.kind === "usage" ? nextHealthyFallback(from, usageCache()) : undefined
-  const text = failureMessage(failure, fallback)
-  if (failure.kind === "usage") {
-    // Blocking the lane is what makes the next spawn land somewhere healthy;
-    // without it execute.before would re-pick the model that just ran out.
-    // The block always self-heals: it expires at the window reset the usage
-    // cache reports, or an hour out when it reports none. A permanent
-    // blacklist would quietly strand a lane after one bad hour.
-    //
-    // Only a lane we actually identified is blocked. spawnLane() answers
-    // "other" for anything it cannot place, and blocking that is both
-    // meaningless and a way to poison shared capacity state from a blob we
-    // never understood.
-    if (from && from !== "other") {
-      const resetAt = capResetAt(from, usageCache()) ?? new Date(Date.now() + USAGE_LANE_BLOCK_MS).toISOString()
-      blockLane(from, text, resetAt, failure.detail)
-    }
-    rememberFailoverNotice(text)
-  }
-  return text
-}
+/** Only a host execution error is failure evidence; conversation text is not. */
+function findProviderFailure(blob: string): ProviderFailure | undefined { return detectProviderFailure(blob) }
+function renderFailure(failure: ProviderFailure): string { return failureMessage(failure) }
 
 type ChildScan = { summary: string; providerError?: string; failure?: ProviderFailure }
 
@@ -318,8 +227,6 @@ async function childSummary(sessionApi: { context?: Function }, childID: string,
     const messages = sessionMessages(res)
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i]
-      const hit = findProviderFailure(messageBlobs(message).join("\n"))
-      if (hit && !failure) failure = hit
       if (!lastAssistant && messageRole(message) === "assistant") {
         const text = messageTexts(message).join("").trim()
         // Keep the TAIL: a harness turn is one long message (CLI activity first, the STEP report last).
@@ -328,7 +235,8 @@ async function childSummary(sessionApi: { context?: Function }, childID: string,
       if (failure && lastAssistant) break
     }
   } catch {}
-  failure = failure ?? findProviderFailure(eventBlob(event))
+  const error = (event as any)?.data?.error
+  failure = error ? findProviderFailure(JSON.stringify(error)) : undefined
   // `providerError` stays the internal detail (logs, papercuts, cap collection);
   // `summary` is the blanket user-facing line. It names a quest session, never
   // the hidden worker agent: Jk reads "quest/session finished", never "build

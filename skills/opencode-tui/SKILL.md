@@ -22,7 +22,7 @@ These notes combine observations from multiple historical beta builds. Read the 
   - `app` renders nothing itself; mount a component there **just to get a render context** for `keymap.layer()`.
   - `prompt.footer` is the always-present composer footer (count/badge lives here).
   - `sidebar.content` / `sidebar.footer` render beside Subagents and receive `{ sessionID }`.
-  - **The native background-subagent chip carries the live line via dispatch `description`.** Decompiled from the live `opencode2.exe` (`@opencode-ai/cli`, not the older `opencode-ai` npm package binary — they differ): the chip's label is literally `` `${titlecase(input.agent ?? input.subagent_type ?? "General")} Subagent — ${input.description ?? "Subagent"}` ``, read straight off the raw Task-tool call args (`e.input`), plus a `Background` badge while `metadata.background` and status `running`. `"General"` is the host's own hardcoded fallback for a Task call whose `agent`/`subagent_type` came through empty — not a bug in our dispatch code, and `subagent_type` is a fixed small enum of agent personas (`general-purpose`, `Explore`, `Plan`, …), not free text, so it can never carry quest/model/fast/reasoning info. But `description` IS free text: every Quest dispatch surface (`quest/spawn.ts`, the `opencode-mcp` harness gateway session title, the claude-code task title/label) sets it to the exact live line `(quest title, model, reasoning[, fast])` built by `subagentChipLabel` in `orchestration/dispatch.ts`, so the host chip itself is the one worker face. `onClick` already does `router.navigate({type:"session", sessionID})` natively — the chip's click-through was never broken, only its label. There is no slot placement that targets this specific element (`prepend|append|before|after|replace` only hit named slots, and none of them is "the chip"), so never render a second chip beside it: `sidebar.content` stays the general board list.
+  - Native Quest workers use real root sessions in owned workspaces. Open their native sessions through the board or /session. The role strip and session titles distinguish workers from the one giver; /giver returns to that same conversation. Native subagent chips remain the host's own navigation for native child sessions.
   - **beta-19059+:** `cli.json` `plugins` entries must be plugin **directories** (`./tui-bootstrap/quests`), resolved by the host as `<dir>/tui.tsx` (`Host.resolve` in `@opencode-ai/plugin/host`). An entry that names a **file** is skipped silently — no toast, no log line, the plugin just never appears (this is how the Quest board vanished after the 18999 -> 19059 auto-update). `tui.json` is dead: the host only reads it to seed a missing `cli.json`. Failures that do surface show as a toast plus `/plugins`.
 - **Commands via `context.keymap.layer(() => ({ mode, commands }))` from a *mounted* component.** Calling from `setup()` throws `Keymap.Provider is missing` and no slash ever appears. Live keys: `active,commands,dispatch,layer,mode,pending,shortcuts`. Slash is `slash: { name, aliases? }` — flat `slashName` string is gone (host reads `command.slash.name` for palette). Colliding with host `/sessions` hides your command.
 - **Dialog is `{ alert, clear, confirm, prompt, select, set, show }`.** `replace` is gone — guarding on it turns every command into a silent no-op. Use:
@@ -241,3 +241,12 @@ PTY driver may operate and capture the real app; do not hand-draw expected frame
 4. Add `scrollbox` with `contentHeight` + `DIALOG_INNER` minWidth and `UsageSkeleton` fallback.
 5. Switch list UIs from manual `<box>` lists to `dialog.select` with `category` + `searchText`.
 6. Add `sidebar.content` panel if you only had `prompt.footer` count — users can't see quests from inside session without it (see `tui-slots.test.ts:quests mount the count on composer footer AND in sidebar`).
+
+## Session roles
+
+The bound user giver has the persistent title Quest Giver, yellow role chrome and
+a /giver (Ctrl+Alt+G) entry from any session. Worker sessions have Worker titles
+and cyan role chrome based on Quest receipts. Native worker agents are mode all
+and visible so the host composer can restore their actual persisted identity;
+hidden subagent-only agents caused the composer to fall back to the giver.
+Worker permissions and exact agent/model/reasoning guards still apply.

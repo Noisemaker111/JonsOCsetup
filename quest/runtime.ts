@@ -67,7 +67,7 @@ export function startQuestRun(store:QuestStore,host:QuestHost,options:{policyFil
    if(selected.route.harness!=="native")throw new QuestError("HARNESS_UNAVAILABLE","This dispatch adapter requires a configured native route; the requested harness was not substituted")
    const workspace=allocate(selected.bootstrapByProject[input.context.project.id])
    const model={providerID:selected.route.providerID,id:selected.route.modelID,...(selected.route.reasoning!=="unknown"?{variant:selected.route.reasoning}:{})}
-   const created=unwrap(await host.create({title:input.quest.title,agent:selected.route.agent??"general",model,location:{directory:realpathSync.native(workspace.path)}}));sessionID=created?.id
+   const created=unwrap(await host.create({title:"Worker · "+input.quest.title,agent:selected.route.agent??"general",model,location:{directory:realpathSync.native(workspace.path)}}));sessionID=created?.id
    if(!sessionID)throw new QuestError("DISPATCH_OUTCOME_UNKNOWN","Host did not return a worker session identity; workspace and reservation retained")
    const actual=unwrap(await host.get({sessionID})),directory=actual?.location?.directory
    if(typeof directory!=="string"||!samePath(directory,workspace.path))throw new QuestError("WORKSPACE_BINDING_FAILED","Worker session is not bound to its owned worktree; no prompt was sent")

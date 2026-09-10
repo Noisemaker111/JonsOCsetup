@@ -1,3 +1,4 @@
+import {connectHostObservation,disconnectHostObservation,recordHostObservation,registerHostObservation} from "./host-observation"
 import {installWorkerCapabilities} from './worker-capabilities'
 import {installUserGiverContext} from './user-giver'
 import {guidanceTool,outcomeTool,workSupplyTool} from "./adaptive-tools"
@@ -139,8 +140,9 @@ const HOST_EVENTS = Symbol.for("opencode-config.quests.host-events")
  * ends when the host shuts down. State lives on globalThis so a plugin reload
  * reuses the running subscription instead of stacking a second one.
  */
-export function installQuestEvents(ctx: { event?: { subscribe?: Function } }, quests: QuestTracker) {
+export function installQuestEvents(ctx: { event?: { subscribe?: Function }; session?: any; permission?: any }, quests: QuestTracker) {
   const state = globalThis as { [HOST_EVENTS]?: { installed: boolean; controller: AbortController } }
+  if(ctx.session)registerHostObservation(ctx.session,ctx.permission)
   if (state[HOST_EVENTS]?.installed) return
   const subscribe = ctx?.event?.subscribe
   if (typeof subscribe !== "function") {
@@ -149,15 +151,17 @@ export function installQuestEvents(ctx: { event?: { subscribe?: Function } }, qu
   }
   const controller = new AbortController()
   state[HOST_EVENTS] = { installed: true, controller }
-  const handle = (event: unknown) => { try { quests.onHostEvent(event) } catch (error) { console.error("[quests] host event error:", error) } }
+  const handle = (event: unknown) => { try { if(ctx.session)recordHostObservation(ctx.session,event);quests.onHostEvent(event) } catch (error) { console.error("[quests] host event error:", error) } }
   queueMicrotask(async () => {
     let delay=1000
     while(!controller.signal.aborted){
       try {
         const stream=await subscribe({signal:controller.signal})
         if(!stream||typeof stream[Symbol.asyncIterator]!=="function")throw new Error("Unsupported host event stream shape")
+        if(ctx.session)connectHostObservation(ctx.session,ctx.permission)
         for await(const event of stream){if(controller.signal.aborted)break;handle(event);delay=1000}
       }catch(error){if(!controller.signal.aborted)console.error("[quests] host event connection lost; reconnecting and polling persisted outcomes:",error)}
+      if(ctx.session)disconnectHostObservation(ctx.session)
       if(controller.signal.aborted)break
       await new Promise<void>(done=>{const finish=()=>{clearTimeout(timer);controller.signal.removeEventListener('abort',finish);done()};const timer=setTimeout(finish,delay);timer.unref();controller.signal.addEventListener('abort',finish,{once:true})})
       delay=Math.min(delay*2,30000)
