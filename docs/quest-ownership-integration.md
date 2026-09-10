@@ -1,3 +1,5 @@
+> Historical evidence: scenario scripts named below have been removed. They are not current verification instructions. Use [the actual product](user-verification.md) and the small production-logic core suite.
+
 # Quest ownership recovery integration
 
 This source integrates the verified Codex ownership recovery repair into the

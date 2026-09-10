@@ -1,3 +1,5 @@
+> Historical evidence: scenario scripts named below have been removed. They are not current verification instructions. Use [the actual product](user-verification.md) and the small production-logic core suite.
+
 # Planning useful work toward a usage reset
 
 Call `usage_status` with `format: "json"`. `planning` is account-wide even when

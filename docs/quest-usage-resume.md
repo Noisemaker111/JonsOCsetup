@@ -1,3 +1,5 @@
+> Historical evidence: scenario scripts named below have been removed. They are not current verification instructions. Use [the actual product](user-verification.md) and the small production-logic core suite.
+
 # Quest repair and real usage UI continuation
 
 This branch resumes the existing **Build project-router: one conversational entry point for all projects** usage-experience step and **Make Quest tool calls recoverable across the hub and project sessions** repair. It integrates the attributable, unfinished usage handoff from `usage-pacing-audit` into the isolated `usage-quest-resume` worktree. The original dirty worktrees, live config, installed plugins and existing processes were preserved.

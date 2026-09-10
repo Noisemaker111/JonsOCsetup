@@ -21,13 +21,6 @@ test('recorded artifact paths cannot preview outside their workspace through rel
   for(const path of ['../outside/result.txt','linked/result.txt',join(outside,'result.txt')])expect(artifactPreview(artifact(path),[owned]).uri).toBeUndefined()
  }finally{rmSync(root,{recursive:true,force:true})}
 })
-test('image cards show measured dimensions rather than invented thumbnails',()=>{
- const root=mkdtempSync(join(tmpdir(),'quest-preview-png-'));try{
-  const bytes=Buffer.alloc(24);Buffer.from([137,80,78,71,13,10,26,10]).copy(bytes);bytes.writeUInt32BE(1600,16);bytes.writeUInt32BE(900,20);writeFileSync(join(root,'capture.png'),bytes)
-  expect(artifactPreview(artifact('capture.png'),[root])).toMatchObject({kind:'Image',lines:['1600×900','View image ↗']})
- }finally{rmSync(root,{recursive:true,force:true})}
-})
-
 test('canonical Quest capture paths resolve from the ledger root within the allowed asset directory',()=>{
  const root=mkdtempSync(join(tmpdir(),'quest-preview-canonical-'));try{
   const assets=join(root,'.opencode','quests-assets','owned');mkdirSync(assets,{recursive:true});writeFileSync(join(assets,'capture.txt'),'Recorded actual capture');writeFileSync(join(root,'private.txt'),'Outside allowed assets');

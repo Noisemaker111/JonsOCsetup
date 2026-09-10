@@ -1,3 +1,5 @@
+> Historical evidence: scenario scripts named below have been removed. They are not current verification instructions. Use [the actual product](user-verification.md) and the small production-logic core suite.
+
 # Codex ownership recovery follow-up — 2026-09-08
 
 ## Capability and ownership evidence
