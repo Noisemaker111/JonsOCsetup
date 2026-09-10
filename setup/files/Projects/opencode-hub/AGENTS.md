@@ -41,6 +41,17 @@ Load `config/skills/opencode/SKILL.md` first. It holds the brick invariants (the
 - Quest runs and workers: `quests/quests/`, `state/orchestration.jsonl`, `config/docs/worker-recovery.md`.
 - How the host actually behaves: read `upstream/packages/core/src` and `upstream/packages/plugin`, then confirm against `host/` since the installed beta can lag the branch.
 
+## OpenCode2 dev ownership
+
+Jon authorizes Codex and OpenCode2 agents to own the complete dev loop: implement
+in an isolated worktree, use the actual app, inspect results, push a ready PR to
+`dev`, merge it after verification, and activate and exercise the dev release.
+Do not stop at "mergeable", ask Jon to merge, or request the same dev approval
+again. This project-specific standing authorization overrides generic instructions
+to ask before every merge. Infer routine implementation and cleanup decisions
+from the request and finish the authorized work. Stable promotion, production
+changes, host updates and public package publishing still need explicit instruction.
+
 ## Shared memory
 
 Read `MEMORY.md` at this hub root at the beginning of work and after context loss. Both Codex and the OpenCode2 Quest Giver maintain this same file with durable user decisions, preferences, architecture facts and verified lessons. Read before editing, merge existing knowledge, correct stale entries, then reopen the saved file. Quests keep task plans and progress. Do not store secrets, transcripts or unsupported claims; memory never grants permission. Use ordinary file tools, not an every-turn injection hook.
