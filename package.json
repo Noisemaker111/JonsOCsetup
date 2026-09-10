@@ -27,6 +27,6 @@
     "setup:plan": "node scripts/install-setup.mjs",
     "setup:install": "node scripts/install-setup.mjs --apply",
     "runtime:drive": "bun scripts/drive-opencode.ts",
-    "check:core": "bun test test/quest-worker-identity.test.ts test/quest-artifact-preview.test.ts"
+    "check:core": "bun test test/quest-worker-identity.test.ts test/quest-artifact-preview.test.ts test/provider-failure-boundary.test.ts"
   }
 }

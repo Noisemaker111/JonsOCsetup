@@ -1,3 +1,4 @@
+import {inspectWorker} from "../worker-inspection"
 import { ensureUserGiver, userGiverID } from "../user-giver"
 import { QuestStore } from "../store"
 import { questRoot } from "../root"
@@ -13,7 +14,7 @@ import { createGiver, hasQuestReturn, returnToQuest } from "../tui-workflow"
 import type { Quest, QuestSession } from "../types"
 import { watchQuests } from "../watcher"
 import { progressGlyph, questProgress } from "../steps"
-import { C, QuestBoard, activate, footerWidth, openWorkerSession, projectRoot, quests, workerLabel } from "./quest-board"
+import { C, QuestBoard, activate, openWorkerSession, projectRoot, quests, workerLabel } from "./quest-board"
 
 /**
  * Snapshot of the route live right now, shaped the way the host's own router
@@ -86,19 +87,20 @@ async function openSessionPicker(context: any, allProjects = Boolean(userGiverID
   const project=await resolveBoardProject(context,activeSessionID(context))
   const rows = allWorkerSessions(context,project.id,allProjects)
   const byKey = new Map(rows.map((row) => [sessionKey(row.quest, row.session), row]))
-  const options = [...byKey.entries()].map(([key, { quest, session }]) => {
+  const options = await Promise.all([...byKey.entries()].map(async ([key, { quest, session }]) => {
+    const live = await inspectWorker(context.client.session,session)
     const id = session.openCodeSessionId ?? session.sessionID
-    const task = session.task ?? session.taskDescription ?? "delegated work"
+    const task = session.deliverables.map(id=>quest.stages.find(step=>step.id===id)?.title??id).join(" · ") || session.task || session.taskDescription || "delegated work"
     return {
       value: key,
       title: `${workerLabel(session)} · ${task}`,
       category: quest.title,
       searchText: `${id ?? ""} ${workerLabel(session)} ${task}`,
-      description: id,
-      footer: session.state.toUpperCase(),
+      description: live.reason,
+      footer: live.state.toUpperCase(),
     }
-  })
-  const picked = await dialog.select({ title: `Worker sessions · ${allProjects?"All projects":"current project"}`, placeholder: "Paste or search a ses_… id", options:[{value:"scope",title:allProjects?"Show current project":"Show All projects",description:project.error},...options] })
+  }))
+  const picked = await dialog.select({ title: `Worker sessions · ${allProjects?"All projects":"current project"}`, placeholder: "Search Quest, step, or model", options:[{value:"scope",title:allProjects?"Show current project":"Show All projects",description:project.error},...options] })
   if (!picked) return
   if(picked==="scope")return openSessionPicker(context,!allProjects)
   const row = byKey.get(picked)
@@ -172,15 +174,13 @@ export function Footer(props: { context: any }) {
     const picked=await props.context.ui.dialog.select({title:all.error()??"Quest counts · all projects",options:QUEST_FILTERS.filter(f=>f.id!=="all").map(f=>({value:f.id,title:`${filterQuests(all(),f.id).length} ${f.label}`}))})
     if(picked)openBoard(props.context,undefined,picked)
   }
-  return <box flexDirection="column" flexShrink={0}>
-    <box flexDirection="row" flexWrap="no-wrap" gap={1} flexShrink={0}>
-      <Show when={hasQuestReturn(props.context)}><text fg={C.cyan} flexShrink={0} onMouseUp={(event:any)=>activate(event,()=>returnToQuest(props.context))}>↩ Return to Quest</text></Show>
-      <Show when={(props.context?.renderer?.width ?? 80)>=150&&!all.error()} fallback={<text fg={C.yellow} flexShrink={0} onMouseUp={(event:any)=>activate(event,()=>void counts())}>Quests · all projects {all.error()?"?":filterQuests(all(),"open").length} ▾</text>}>
-        <text fg={C.yellow} flexShrink={0} onMouseUp={(event:any)=>activate(event,()=>openBoard(props.context))}>Quests · all projects</text>
-        <For each={QUEST_FILTERS.filter(f=>!["open","all","archived"].includes(f.id))}>{f=><text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>openBoard(props.context,undefined,f.id))}>{filterQuests(all(),f.id).length} {f.label.toLowerCase()}</text>}</For>
-      </Show>
+  return <box flexDirection="column" flexShrink={1} flexGrow={1} minWidth={0} maxWidth={70}>
+    <box flexDirection="row" flexShrink={1} minWidth={0} gap={1}>
+      <Show when={hasQuestReturn(props.context)}><text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>returnToQuest(props.context))}>↩ Quest</text></Show>
+      <text fg={C.yellow} wrapMode="none" truncate flexShrink={1} onMouseUp={(event:any)=>activate(event,()=>openBoard(props.context))}>Quests · {filterQuests(all(),"open").length} open</text>
+      <text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>void counts())}>▾</text>
     </box>
-    <For each={lines()}>{row=><text fg={C.muted} wrapMode="none" truncate onMouseUp={(event:any)=>activate(event,()=>void openWorkerSession(props.context,row.session))}>↳ {observation(row.session).state} · {row.quest.title} · {workerLabel(row.session)} · Open worker (/session)</text>}</For>
+    <For each={lines()}>{row=><text fg={C.muted} wrapMode="none" truncate onMouseUp={(event:any)=>activate(event,()=>void openWorkerSession(props.context,row.session))}>↳ {observation(row.session).state} · {row.quest.title} · Open worker</text>}</For>
   </box>
 }
 
@@ -189,7 +189,9 @@ function SessionRole(props: { context: any; sessionID: string }) {
   const all = useQuests(props.context)
   const assignment = () => all().flatMap(quest => quest.sessions.map(session => ({quest,session}))).find(row => (row.session.openCodeSessionId ?? row.session.sessionID) === props.sessionID)
   const observation = useWorkerObservations(props.context, () => assignment() ? [assignment()!.session] : [])
-  const giver = () => userGiverID() === props.sessionID
+  const [boundGiver,setBoundGiver] = createSignal(userGiverID())
+  onMount(()=>{const timer=setInterval(()=>setBoundGiver(userGiverID()),1000);onCleanup(()=>clearInterval(timer))})
+  const giver = () => boundGiver() === props.sessionID
   const go = () => void createGiver(props.context).catch(error => props.context.ui.dialog.alert({title:"Quest Giver unavailable",message:String(error)}))
   const native = () => props.context.data?.session?.get(props.sessionID)
   createEffect(() => {

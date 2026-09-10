@@ -827,11 +827,7 @@ export function capResetAt(providerID: string, cache?: UsageCache): string | und
   return new Date(Math.max(...resets as number[])).toISOString()
 }
 
-/** Task agent=claude-code runs the official CLI; never starts a relay chat-model session. */
-// ---- failover notices ----------------------------------------------------
-// A quota rewrite has to reach the orchestrator's next turn. These are drained
-// by the models plugin's context hook and pushed as SystemPart objects — never
-// as raw strings, which fail opencode2 schema validation.
+/** Construct a host system text part; raw strings fail host schema validation. */
 
 export function systemPart(text: string): { type: "text"; text: string } {
   return { type: "text", text }
