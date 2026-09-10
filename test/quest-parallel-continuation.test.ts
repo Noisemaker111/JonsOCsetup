@@ -66,7 +66,7 @@ test('unknown launch survives reload without retry and does not block unrelated 
 test('authorization change during refresh prevents admission and validates concurrency and per-step model keys',async()=>{
  const f=fixture();try{
   const a=new QuestContinuation(f.store,f.start,f.options)
-  await expect(a.run(f.q.id,{model,maxConcurrent:17},f.context)).rejects.toThrow('1 to 16')
+  for (const maxConcurrent of [0,1.5,Number.MAX_SAFE_INTEGER+1]) await expect(a.run(f.q.id,{model,maxConcurrent},f.context)).rejects.toThrow('positive safe integer')
   await expect(a.run(f.q.id,{model,stepModels:{unknown:model}},f.context)).rejects.toThrow('authorized step IDs')
   const b=new QuestContinuation(f.store,f.start,{refresh:async()=>{questsAPI(f.store,f.context,f.start).update(f.q.id,{description:'Changed scope'});return {accounts:[]} as any}})
   await b.run(f.q.id,{model,maxConcurrent:2},f.context);expect(f.launches).toHaveLength(0);expect(b.status(f.q.id)[0].state).toBe('stopped')
@@ -91,5 +91,16 @@ test('same request replays after steps begin and conflicting authorization is re
   expect(replay.continuation!.id).toBe(first.continuation!.id);expect(f.launches).toHaveLength(2)
   for(const change of [{model:'other/model'},{files:['src']},{stepIDs:['a']},{maxConcurrent:3},{stepModels:{b:'different/model'}}])await expect(a.run(f.q.id,{...input,...change},f.context)).rejects.toThrow('different work')
   expect(f.launches).toHaveLength(2)
+ }finally{f.clean()}
+})
+
+test('parallel authorization above sixteen launches only ready steps and remains idempotent',async()=>{
+ const f=fixture();try{
+  const a=new QuestContinuation(f.store,f.start,f.options)
+  await a.run(f.q.id,{model,maxConcurrent:32},f.context)
+  expect(f.launches.map(x=>x.stepIDs)).toEqual([['a'],['b']])
+  await new QuestContinuation(f.store,f.start,f.options).tick()
+  expect(f.launches).toHaveLength(2)
+  expect(a.status(f.q.id)[0].desired).toBe(32)
  }finally{f.clean()}
 })

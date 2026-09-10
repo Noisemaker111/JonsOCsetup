@@ -41,3 +41,13 @@ The prepared candidate dev-765c9fd89e00-1789005640922 loaded the source checkpoi
 Command: bun scripts/verify-quest-installed-navigation.ts C:/Users/Jk101/.config/opencode/.channels/releases/dev-765c9fd89e00-1789005640922 C:/Users/Jk101/.config/opencode/.channels/releases/dev-4b62354e5999-1789002009307/.visual-e2e/installed-single-giver-1789002093861/host.db INSTALLED_QUEST_WORKER_VERIFIED
 
 Report: candidate .visual-e2e/installed-navigation-1789005730622/report.json; both runs ok. The candidate is not selected. PR #10 is ready for review but held from dev merge pending original-worker recovery and real worker-flow acceptance. At 2026-09-10T02:02:50Z the original board worker had no host terminal outcome and its reservation remained active; the old keyboard worker still had its recorded interrupted outcome and settled reservation. One canonical giver binding remained unchanged.
+
+## Subscription concurrency correction
+
+The user's updated policy explicitly permits concurrent subscription workers without a fixed account count. The previous single uncalibrated worker rule was local dispatch policy, not a demonstrated provider limit. The configured request now sets subscriptionConcurrency to unlimited. Old exclusive reservations retain their state and identity but no longer block other run identities on that subscription account. Duplicate run requests remain idempotent; uncertain ownership is never cleared to launch a replacement.
+
+Fresh authenticated quota, configured exact models, calibrated quota reservations, explicit spending budgets and explicit stopped/invalid quota-scope controls remain enforced. The optional pacing controller's worker count no longer caps unlimited subscription admissions. Parallel Quest continuations accept positive safe integers rather than a hard-coded maximum of sixteen, and still launch only dependency-ready steps in isolated worktrees.
+
+Focused command: bun test test/route-reservations.test.ts test/route-planner.test.ts test/configured-dispatch.test.ts test/quest-parallel-continuation.test.ts test/usage-burn-control.test.ts test/astra-dispatch-policy.test.ts — 52 passed, zero failed, 338 assertions. A prior run caught the old Astra test's expected exclusive reservation; that expectation was updated to the explicit new policy. Smoke: 103 passed, zero failed, 661 assertions.
+
+The installed acceptance driver now dispatches two independent real-model Quests per round, verifies overlapping reservation intervals and both saved terminal outcomes, rejects any assistant identity substitution, and preserves unresolved workers on a failed test. It exits its completed test host through the native exit command.

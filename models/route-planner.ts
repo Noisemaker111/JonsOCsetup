@@ -76,6 +76,8 @@ export type RoutingRequest = {
   maxTaskMilliseconds?: number
   maxCashPerSuccess?: number
   cashCurrency?: string
+  /** Explicit user policy: no fixed subscription worker cap; quota and ownership still apply. */
+  subscriptionConcurrency?: "unlimited" | "calibrated"
   reserveFraction: number
   cashBudget?: { id:string; currency:string; limit:number; spent:number; startsAt:string; endsAt:string; reserved?:number }
   /** Restricts the exact route; never authorizes a silent replacement or extra spending. */
@@ -88,6 +90,9 @@ export type RoutingRequest = {
   preference?: "capacity" | "latency" | "cash"
   /** Absolute allowance units held for demanding queued work, by account/window. */
   reserveByAccount?: Record<string, Record<string, number>>
+}
+export function unlimitedSubscriptionConcurrency(account: Pick<Account, "billing">, request: Pick<RoutingRequest, "subscriptionConcurrency">) {
+  return account.billing === "subscription" && request.subscriptionConcurrency === "unlimited"
 }
 export type PlannerInput = { request: RoutingRequest; accounts: Account[]; routes: Route[] }
 export function applicableQuotaWindows(account: Account, route: Route) {
@@ -118,6 +123,7 @@ const positive = (n: number) => finite(n) && n > 0
 const date = (s: string) => typeof s === "string" ? Date.parse(s) : NaN
 
 function validateRequest(r: RoutingRequest) {
+  if (r.subscriptionConcurrency !== undefined && !["unlimited", "calibrated"].includes(r.subscriptionConcurrency)) throw new Error("Invalid subscription concurrency policy")
   if(r.cashCurrency!==undefined&&(!r.cashCurrency.trim()||r.cashBudget&&r.cashBudget.currency!==r.cashCurrency))throw new Error("Invalid or conflicting cash currency")
   if(r.cashBudget){const b=r.cashBudget;if(!b.id?.trim()||!b.currency?.trim()||![b.limit,b.spent,b.reserved??0].every(nonnegative)||!finite(date(b.startsAt))||!finite(date(b.endsAt))||date(b.startsAt)>=date(b.endsAt))throw new Error("Invalid cash budget")}
   if (r.preference !== undefined && !["capacity", "latency", "cash"].includes(r.preference)) throw new Error("Invalid routing preference")
@@ -170,8 +176,8 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
     if (!account) reasons.push("account is not registered")
     else {
       if (!["subscription", "free", "metered"].includes(account.billing)) reasons.push("unknown billing arrangement")
-      if (configuredChoice && windows.some(w=>!positive(route.quotaPerTask[w.id])) && (account.concurrentWorkers ?? 0) > 0 && !pacedSubscriptionAdmission(account,req.now)) reasons.push("uncalibrated admission awaits existing account workers and fresh quota")
-      if(account.pacing){const p=account.pacing,now=Date.parse(req.now);if(p.state==="stopped"||now>=p.deadlineAt)reasons.push("Burn pacing stopped: "+p.reason);else if(p.state!=="ready"||p.updatedAt>now||now-p.updatedAt>=30000||(account.concurrentWorkers??0)>=p.desiredConcurrency)reasons.push("Burn pacing hold: "+p.reason)}
+      if (configuredChoice && windows.some(w=>!positive(route.quotaPerTask[w.id])) && (account.concurrentWorkers ?? 0) > 0 && !unlimitedSubscriptionConcurrency(account,req) && !pacedSubscriptionAdmission(account,req.now)) reasons.push("uncalibrated admission awaits existing account workers and fresh quota")
+      if(account.pacing){const p=account.pacing,now=Date.parse(req.now);if(p.state==="stopped"||(!unlimitedSubscriptionConcurrency(account,req)&&now>=p.deadlineAt))reasons.push("Burn pacing stopped: "+p.reason);else if(p.state!=="ready"||p.updatedAt>now||now-p.updatedAt>=30000||(!unlimitedSubscriptionConcurrency(account,req)&&(account.concurrentWorkers??0)>=p.desiredConcurrency))reasons.push("Burn pacing hold: "+p.reason)}
       if (account.dispatchHold) reasons.push(account.dispatchHold)
       if (configuredChoice && account.billing === "metered" && !req.cashBudget) reasons.push("configured metered choice requires a cash budget")
       if (!account.authenticated) reasons.push("account is not authenticated")
@@ -221,7 +227,7 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
         if (!nonnegative(reserve)) { reasons.push("invalid reserve for " + window.id); continue }
         if (configuredChoice && !positive(burn)) {
           if (window.remaining - reserve - window.reserved <= 0) reasons.push("insufficient unreserved quota in " + window.id)
-          continue // Unknown consumption is not a zero-token forecast. The ledger serializes this account.
+          continue // Unknown consumption is not a zero-token forecast. Concurrency follows explicit policy.
         }
         const slots = (window.remaining - reserve - window.reserved) / burn
         if (slots < 1) reasons.push("insufficient unreserved quota in " + window.id)
@@ -250,7 +256,7 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
     if (configuredChoice && !evidence) {
       const selected: Candidate = {routeID:route.id,accountID:route.accountID,successRate:null,millisecondsPerSuccess:null,cashPerSuccess:null,expiryOpportunity:null,evidenceSource:"configured choice; outcomes and consumption uncalibrated"}
       const unknownConsumption = windows.some(w=>!positive(route.quotaPerTask[w.id]))
-      return {selected,ranked:[selected],excluded,summary:route.id + ": configured choice; quality uncalibrated; " + (unknownConsumption ? (pacedSubscriptionAdmission(account!,req.now) ? "consumption uncalibrated; explicit scoped pacing permits up to "+account!.pacing!.desiredConcurrency+" concurrent managed workers. Quota movement, not session count, controls pacing." : "consumption uncalibrated; one worker on this account, refresh after completion. Quota reserves are admission thresholds, not a task consumption guarantee.") : "quota reservations use configured/calibrated consumption.")}
+      return {selected,ranked:[selected],excluded,summary:route.id + ": configured choice; quality uncalibrated; " + (unknownConsumption ? (unlimitedSubscriptionConcurrency(account!,req) ? "consumption uncalibrated; user policy permits concurrent subscription workers without a fixed account cap. Fresh quota is required; unknown consumption is not a capacity guarantee." : pacedSubscriptionAdmission(account!,req.now) ? "consumption uncalibrated; explicit scoped pacing permits up to "+account!.pacing!.desiredConcurrency+" concurrent managed workers. Quota movement, not session count, controls pacing." : "consumption uncalibrated; one worker on this account, refresh after completion. Quota reserves are admission thresholds, not a task consumption guarantee.") : "quota reservations use configured/calibrated consumption.")}
     }
     candidates.push({
       routeID: route.id, accountID: route.accountID, successRate,
