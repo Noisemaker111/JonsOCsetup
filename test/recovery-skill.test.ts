@@ -1,5 +1,0 @@
-import {expect,test} from 'bun:test'
-import {readFileSync} from 'node:fs'
-import {join} from 'node:path'
-const root=join(import.meta.dir,'..')
-test('recovery skill advertises every trigger and discloses a bounded portable handoff',()=>{const body=readFileSync(join(root,'skills/help-i-cant-work-right/SKILL.md'),'utf8');expect(body).toContain('name: "help!-i cant work right"');expect(body).toMatch(/^description:.*tools.*dispatch.*generations.*continue/m);expect(body).not.toMatch(/autoinvoke:\s*false|disable-model-invocation:\s*true/);expect(body).toContain('[handoff.md](handoff.md)');for(const term of ['unknown launch','exact model','dirty-work ownership','last operation/result','next safe action','normally ended session','no endless retries','recursive repair agents'])expect(body).toContain(term);const handoff=readFileSync(join(root,'skills/help-i-cant-work-right/handoff.md'),'utf8');for(const term of ['absolute path','authorization','acceptance','rollback','resume'])expect((body+handoff).toLowerCase()).toContain(term)})

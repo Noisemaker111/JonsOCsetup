@@ -62,3 +62,11 @@ For OpenCode2 changes, follow the isolated dev workflow in the hub AGENTS.md and
 explicit choice is final; report an unavailable route instead of substituting, and apply a ban to
 reviewers, fallbacks and resumes too. No patched fork of OpenCode: changes go upstream as
 contributions, never into a private run-fork, and never into the T3 upstream fork.
+
+For JonsOCsetup changes, follow `docs/development-workflow.md`: use the actual
+installed app for every change, keep no automated tests or obsolete compatibility
+paths, and search for and remove superseded code and instructions before finishing.
+Read the project-root MEMORY.md at the start and after context loss; maintain
+concise durable decisions and verified lessons there using ordinary file tools.
+For hub work, use C:/Users/Jk101/Projects/opencode-hub/MEMORY.md. Quests own task
+progress. These project-specific verification rules do not govern other projects.

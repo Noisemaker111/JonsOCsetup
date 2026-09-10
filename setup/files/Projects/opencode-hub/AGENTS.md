@@ -20,7 +20,7 @@ Sibling experiments `~/.config/opencode-*` (claude-harness, scope-*) are separat
 - Work in `config/`. Everything else is evidence or reference. If a fix seems to need a change in `upstream/` or `host/`, it belongs in a plugin under `config/`, or it is not ours to make.
 - `config/AGENTS.md` is injected into every OpenCode session in every project. It stays a few lines of personal policy. Anything about how OpenCode itself is built belongs here, in a skill, in an agent prompt or in `config/docs/`.
 - Launch sessions at this hub root so this file loads. The host realpaths the cwd and walks up to `~`; a session started inside `config/` resolves to `~/.config/opencode` and never passes through here. PowerShell shortcuts: `oh` cds here, `oho` opens opencode2, `ohc` opens Codex, `ohcc` opens Claude Code (`oc` still cds here).
-- Gates run from `config/`: `bun test` and `pwsh -NoProfile -File .\smoke-test.ps1`. Local checks need no permission. Promotion, publish, restart of running sessions and anything outside `config/` need explicit authorization.
+- Verify every change by using the actual installed OpenCode2 app twice and reopening its saved result. No automated tests or fixtures; build/type checks only supplement app use. Before completion, search every source and instruction for replaced behavior and remove superseded code, registrations and obsolete fallbacks. This pre-user project has no backward-compatibility requirement. Preserve real data and active sessions.
 
 ## Extending OpenCode
 
@@ -40,3 +40,7 @@ Load `config/skills/opencode/SKILL.md` first. It holds the brick invariants (the
 - Plugin load or activation failures: `state/plugin-health.json`, `config/run/runtime/`, `config/plugin-activation.json` evidence block.
 - Quest runs and workers: `quests/quests/`, `state/orchestration.jsonl`, `config/docs/worker-recovery.md`.
 - How the host actually behaves: read `upstream/packages/core/src` and `upstream/packages/plugin`, then confirm against `host/` since the installed beta can lag the branch.
+
+## Shared memory
+
+Read `MEMORY.md` at this hub root at the beginning of work and after context loss. Both Codex and the OpenCode2 Quest Giver maintain this same file with durable user decisions, preferences, architecture facts and verified lessons. Read before editing, merge existing knowledge, correct stale entries, then reopen the saved file. Quests keep task plans and progress. Do not store secrets, transcripts or unsupported claims; memory never grants permission. Use ordinary file tools, not an every-turn injection hook.

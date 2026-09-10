@@ -16,9 +16,9 @@ If you only read one section, read **Host brick invariants** — breaking any of
 
 These notes combine observations from multiple historical beta builds. Read the installed package versions and isolated host receipts before relying on them. Check host behavior and SDK types together; neither a stale version in this skill nor a type declaration alone proves runtime support.
 
-- **Export shape:** `export default Plugin.define({ id, setup })` where `id` === filename stem. `{ id, tui }` without `setup` is rejected as *Invalid V2 TUI plugin module* (see `test/tui-slots.test.ts`, `smoke-test.ps1`).
+- **Export shape:** `export default Plugin.define({ id, setup })` where `id` === filename stem. `{ id, tui }` without `setup` is rejected as *Invalid V2 TUI plugin module* (verify by loading the plugin in the installed host).
 - **Mount chrome via `context.ui.slot({ <placement>: "<slot>", render })`** where placement is exactly one of `prepend | append | before | after | replace`. Two or none throws *Slot claim requires exactly one placement key*. `context.slots.register` / `context.keymap.registerLayer` / `ui.dialog.replace` are **gone** — each throws and takes the rest of `setup()` down. Grep `tui-usage.log` for `undefined is not an object (evaluating 'context.slots.register')`.
-- **Slot names are dotted** (host renderer paths): `app` · `home.footer` · `prompt.footer` · `prompt.footer.file` · `prompt.footer.status` · `session.composer.top` · `sidebar.content` · `sidebar.footer`. Underscored `app_bottom` / `sidebar_content` never matches. `RUNTIME_SLOTS` in `test/tui-slots.test.ts` is derived from the binary (`_\(to,{path:"..."`) — re-derive if host bumps.
+- **Slot names are dotted** (host renderer paths): `app` · `home.footer` · `prompt.footer` · `prompt.footer.file` · `prompt.footer.status` · `session.composer.top` · `sidebar.content` · `sidebar.footer`. Underscored `app_bottom` / `sidebar_content` never matches. Inspect the current installed renderer when the host changes.
   - `app` renders nothing itself; mount a component there **just to get a render context** for `keymap.layer()`.
   - `prompt.footer` is the always-present composer footer (count/badge lives here).
   - `sidebar.content` / `sidebar.footer` render beside Subagents and receive `{ sessionID }`.
@@ -110,7 +110,7 @@ Terminal = grid of cells, not pixels. Core docs: `@opentui` skill → `docs/core
 
 Rules that matter for host plugins:
 
-- **Budget first.** Pick `DIALOG_INNER` (e.g. 44) and `TABLE_WIDTH` (sum `COL.win + COL.bar + COL.pct + COL.reset + gaps`) and keep `TABLE_WIDTH ≤ DIALOG_INNER ≤ ~72`. Assert it (`test/tui-usage.test.ts` does: `expect(TABLE_WIDTH).toBeLessThanOrEqual(DIALOG_INNER)`). Use `pad(value, w, align)` from `tui-usage-format.ts` for fixed columns.
+- **Budget first.** Pick `DIALOG_INNER` (e.g. 44) and `TABLE_WIDTH` (sum `COL.win + COL.bar + COL.pct + COL.reset + gaps`) and keep `TABLE_WIDTH ≤ DIALOG_INNER ≤ ~72`. Inspect the real terminal at the intended widths.toBeLessThanOrEqual(DIALOG_INNER)`). Use `pad(value, w, align)` from `tui-usage-format.ts` for fixed columns.
 - **Row = no-wrap.** Every `<box flexDirection="row" flexWrap="no-wrap" gap={2}>` + each `<text truncate wrapMode="none" flexShrink={0} width={w}>`. Wrapping chrome bleeds into host composer. Use `scrollbox` when content must exceed viewport (`height={contentHeight(lines, ctx)}`, `scrollbarOptions={{ visible: lines > 12 }}`).
 - **Cap height.** `contentHeight(lines, ctx)` = `min(maxHeightCap, min(max(lines, 3), floor(renderer.height) - 12))`. Without cap, dialog grows off-screen on small terminals.
 - **Skeleton while loading.** `UsageSkeleton` (muted `░░░░` bars) + `<Show when={view()} fallback={<UsageSkeleton/>}>` — instant chrome, no pop.
@@ -217,20 +217,19 @@ function Row(p:{row:UsageRowOut, colors:any}){
 - [ ] Theme via `themeColors(ctx)`; tone mapping via `pctTone`/`sourceStateTone`; muted for secondary; `TextAttributes.BOLD` only for cap.
 - [ ] Layout budget: `TABLE_WIDTH ≤ DIALOG_INNER ≤ 72`; `flexWrap="no-wrap"`; `truncate` + `wrapMode="none"` + `flexShrink={0}` on every cell; `scrollbox` with `contentHeight` cap; skeleton fallback.
 - [ ] No raw `block.doc` dump; `sourceHint` + `formatDoc` filtering; `pad()` for columns; `fmtBar`/`fmtMoney`/`fmtReset` for cells.
-- [ ] Tests: `tui-slots.test.ts` (real slots from binary) + `tui-usage.test.ts` pattern (problems() gate on src) + `tui-dialog.test.ts` (show/select/confirm) + `captureCharFrame()` not hand-drawn ASCII.
+- [ ] Use the actual installed UI, capture its terminal output and reopen the saved result.
 
-## Testing your chrome (don't fabricate frames)
+## Use the actual chrome
 
-- **Never hand-draw a session frame and assert on it.** That test passed for weeks while chrome mounted nowhere. Assert against real `Plugin.define` src and real `SlotMap` from binary (`test/tui-slots.test.ts` does `_(to,{path:"..."})` extraction).
-- **Source gate test:** `problems(src)` stripping comments, checking `setup()` doesn't call `keymap.layer`, checking `ui.slot("prompt.footer")` exists, checking `slash:{name:"..."}`.
-- **Format unit test:** `tui-usage-format.ts` pure functions — `fmtBar`, `pctTone`, `sourceState`, `formatDoc`, `formatWindowRow`.
-- **Dialog contract:** `tui-dialog.test.ts` — `openTuiDialog({show}, render)` succeeds; `{replace}` alone fails with `"dialog.show unavailable"`.
-- **Headless render:** `@opentui/solid` → `testRender(()=><App/>, {width:40, height:10})` → `await setup.renderOnce()` → `setup.captureCharFrame()` / `captureSpans()`. Always `setup.renderer.destroy()` in `finally`. For Core imperative: `createTestRenderer({width, height})`.
+Follow docs/development-workflow.md. Load the candidate in the installed host,
+use the affected controls, inspect the actual terminal capture, and reopen the
+saved result. Do not add source-shape, unit or snapshot assertions. A temporary
+PTY driver may operate and capture the real app; do not hand-draw expected frames.
 
 ## When to read what next
 
 - Layout/recipes → `@opentui` skill: `docs/core-concepts/layout.mdx`, `docs/components/box.mdx`, `docs/components/text.mdx`, `docs/components/overview.mdx`.
-- Slot deep-dive → `@opentui` skill: `docs/plugins/slots.mdx` + `docs/plugins/solid.mdx` + `test/tui-slots.test.ts` + live log `~/.local/state/opencode/tui-usage.log`.
+- Slot deep-dive → `@opentui` skill: `docs/plugins/slots.mdx` + `docs/plugins/solid.mdx` + live log `~/.local/state/opencode/tui-usage.log`.
 - Keymap scoping → `@opentui` skill: `docs/keymap/overview.mdx` + live keys `active,commands,dispatch,layer,mode,pending,shortcuts`.
 - Visual checks: use this repository's headless capture or isolated standalone acceptance tools. Do not open or capture the user's live terminal or desktop.
 

@@ -56,7 +56,7 @@ Break one of these and the host stops loading plugins, usually silently.
   `The subagent is working in the background (sessionID: ses_x)…`; turn ends
   are `session.execution.succeeded|failed|interrupted` (no `.cancelled`);
   `message.updated` carries `info.{sessionID, providerID, modelID, agent}`.
-- **Verify the installed host and SDK separately.** Read package.json and the isolated host receipts; do not assume a version from this skill is current. The observations below describe previously tested host contracts. Re-run the relevant tests after host updates.
+- **Verify the installed host and SDK separately.** Read package.json and the isolated host receipts; do not assume a version from this skill is current. The observations below describe previously tested host contracts. Re-exercise affected operations in the installed app after host updates.
 - **Chrome mounts via `context.ui.slot({ <placement>: "<slot>", render })`**,
   where placement is exactly one of `prepend` `append` `before` `after`
   `replace` — two or none throws *Slot claim requires exactly one placement
@@ -146,22 +146,11 @@ scope. Omitting --no-publish can push public mirrors; only do that with explicit
 publish authorization. Never restart or terminate unrelated running sessions.
 Immutable generations are build output; edit source in this checkout.
 
-## Gates
+## Acceptance
 
-```bash
-bun test
-pwsh -NoProfile -File .\smoke-test.ps1
-```
-
-`bunfig.toml` scopes `bun test` to `./test`; the preload gives each run its own
-orchestration ledger (`OPENCODE_ORCHESTRATION_LEDGER`), so tests never touch
-`~/.local/state/opencode/orchestration.jsonl`. `OPENCODE_QUEST_ROOT` pins the
-Quest ledger for the server plugin, the board and dispatch. The test root in
-bunfig.toml prevents discovery of stale suites inside generations. Pass every
-test file that exists — bun treats a missing path as a name *filter* and
-searches the whole tree for it.
-
-Never assert on a frame a test drew itself. A prior "screenshot proof" rendered
-a hand-written ASCII mockup to a PNG and asserted on its own drawing; it passed
-for weeks while the chrome mounted nowhere. Assert against the real module and
-the SDK's real slot map.
+Follow the app-use, removal and memory policy in `docs/development-workflow.md`.
+Use the installed app for every change, inspect actual output and saved results
+after reload, and search for and delete superseded code and instructions before
+finishing. Do not create or regenerate test suites, fixtures or old compatibility
+paths. Build/type checks supplement actual app use. Root MEMORY.md preserves
+durable decisions separately from Quest task progress.

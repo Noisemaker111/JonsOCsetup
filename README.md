@@ -21,6 +21,14 @@ Plugins have their own directories, not their own GitHub repositories. Individua
 
 After channel preparation, **`ocd`** starts dev and **`ocs`** starts stable in the native console. Neither command proxies terminal output. The source for these commands lives in `scripts/install-channel-shortcuts.mjs` and `scripts/start-direct-channel.ps1`.
 
+## Development acceptance
+
+This pre-user project uses the installed app to verify every change. It maintains
+no automated test suites or backward-compatibility layers. Search for and remove
+superseded implementations and instructions before completion. Durable project
+knowledge lives in root MEMORY.md; Quests hold task progress. See
+[the development workflow](docs/development-workflow.md).
+
 ## Portable skills
 
 These standalone MIT-licensed skills also work outside this personal OpenCode setup. Install one without installing the runtime:
