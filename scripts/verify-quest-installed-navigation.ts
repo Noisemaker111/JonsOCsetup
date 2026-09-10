@@ -49,8 +49,8 @@ for(const width of [160,80]){
   await wait('details',async()=>(await frame()).includes('QUEST STEPS'));await capture('board');await key('v','v');await wait('recorded checks dialog',async()=>(await frame()).includes('Recorded checks'));await capture('recorded-checks');await key('escape','\x1b');result.checks=true
   await key('w','w');await wait('actual native session',async()=>(await frame()).includes(marker));await capture('worker-keyboard')
   await command('/quest-back');await wait('return to selected Quest',async()=>(await frame()).includes('QUEST STEPS'));result.keyboard=true
-  for(let i=0;i<4;i++)await key('pagedown','\x1b[6~')
-  await wait('live inspection completes',async()=>!(await frame()).includes('Checking owning host'));await capture('agent-log');if(!(await frame()).includes('Development workflow'))throw Error('Recorded artifact preview missing');result.artifactPreview=true;const lines=(await frame()).split('\n'),y=lines.findIndex(l=>l.includes('↳')&&l.includes(model.id)),x=y<0?-1:lines[y].indexOf('↳')
+  for(let i=0;i<5;i++){if((await frame()).includes('Development workflow')){result.artifactPreview=true;await capture('artifact-preview')}if(i<4)await key('pagedown','\x1b[6~')}
+  await wait('live inspection completes',async()=>!(await frame()).includes('Checking owning host'));await capture('agent-log');if(!result.artifactPreview)throw Error('Recorded artifact preview missing throughout detail scroll');const lines=(await frame()).split('\n'),y=lines.findIndex(l=>l.includes('↳')&&l.includes(model.id)),x=y<0?-1:lines[y].indexOf('↳')
   if(y<0)throw Error('Worker mouse target not visible')
   send('\x1b[<0;'+(x+3)+';'+(y+1)+'M');send('\x1b[<0;'+(x+3)+';'+(y+1)+'m')
   await wait('mouse native session',async()=>(await frame()).includes(marker));await capture('worker-mouse');result.mouse=true
