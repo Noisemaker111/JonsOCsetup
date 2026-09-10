@@ -25,7 +25,7 @@ function envFor(root, name) {
 async function run(exe,argv,cwd,env){const child=spawn(exe,argv,{cwd,env,stdio:'inherit',windowsHide:true});const code=await new Promise((done,reject)=>{child.once('error',reject);child.once('exit',done)});if(code!==0)throw Error(`${exe} exited ${code}`)}
 if(!['dev','stable'].includes(channel))throw Error('Choose dev or stable: prepare dev --ref <branch> --model <exact-route>; activate dev --candidate <root> --evidence <report>; start dev|stable; status dev|stable')
 if(action==='prepare'){
-  if(channel!=='dev')throw Error('Stable preparation requires the separate explicitly authorized dev-to-master promotion')
+  if(channel!=='dev')throw Error('Stable preparation requires the separate human-merged agents-to-master release')
   const ref=option('--ref'),model=option('--model');if(!ref||!model)throw Error('Preparation requires a committed ref and exact real model route')
   const commit=git(['rev-parse','--verify',ref+'^{commit}']),root=join(registry,'releases','dev-'+commit.slice(0,12)+'-'+Date.now())
   mkdirSync(dirname(root),{recursive:true});git(['worktree','add','--detach',root,commit])
@@ -41,9 +41,9 @@ if(action==='prepare'){
   if(!root.toLowerCase().startsWith((join(registry,'releases')+'\\').toLowerCase())&&!root.startsWith(join(registry,'releases')+'/'))throw Error('Candidate must be an owned channel release')
   const release=read(join(root,'channel-release.json')),pointer=read(join(root,'plugin-activation.json')),report=read(reportPath)
   if(release.channel!=='dev'||git(['rev-parse','HEAD'],root)!==release.commit)throw Error('Candidate identity changed')
-  git(['fetch','origin','dev'])
-  git(['merge-base','--is-ancestor',release.commit,'origin/dev'])
-  if(git(['rev-parse',release.commit+'^{tree}'])!==git(['rev-parse','origin/dev^{tree}']))throw Error('Prepare the current merged dev tree before activation')
+  git(['fetch','origin','agents'])
+  git(['merge-base','--is-ancestor',release.commit,'origin/agents'])
+  if(git(['rev-parse',release.commit+'^{tree}'])!==git(['rev-parse','origin/agents^{tree}']))throw Error('Prepare the current merged agents tree before activation')
   if(!report.ok||report.root!==root||report.sourceCommit!==release.commit||report.runs?.length!==2||report.runs.some(r=>!r.ok||!r.automaticReturn||!r.screenshots?.length))throw Error('Two real automatic-return runs with captures are required for this release')
   if(pointer.evidence?.ok!==true||pointer.evidence.sourceCommit!==release.commit)throw Error('Candidate validation does not match source')
   const path=join(registry,'dev.json'),previous=existsSync(path)?read(path):undefined

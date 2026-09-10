@@ -1,11 +1,11 @@
 # OpenCode2 development and stable releases
 
-This repository's stable branch is `master`. `dev` is the integration branch.
+This repository's stable branch is `master`. `agents` is the integration branch.
 These rules apply to OpenCode2 configuration and extensions, not other projects.
 
 The agent owns the full change: inspect existing work and PRs, use an isolated
 worktree, implement, exercise the intended operation in the installed host,
-save coherent commits, open a ready PR targeting `dev`, merge it after checking
+save coherent commits, open a ready PR targeting `agents`, merge it after checking
 the result, and activate and exercise the dev release. Jon has authorized this
 dev loop; do not ask him to perform a technical review or repeatedly approve it.
 Promotion from dev to stable still requires Jon's explicit instruction.
@@ -80,11 +80,51 @@ the installed OpenCode host or publishes the public plugin mirrors.
 
 ## Stable promotion
 
-When Jon explicitly requests promotion, prepare a dev-to-master PR summarizing
-the included changes and real dev evidence, check its exact revision, merge it,
-and verify the stable release. Do not serve an unmerged branch as stable. Keep
-the preceding stable release available; rollback selects it for new sessions
-without terminating existing work.
+Only when Jon requests a release, freeze a candidate branch at the verified agents
+revision and open its PR against master. Generate patch notes from that exact
+candidate's merged PRs and changes, attach them to the PR, and run release CI.
+Later agents changes belong to a separate batch. Only Jon personally merges
+master: agents never merge it, enable auto-merge, or push to it, including after
+chat approval. After observing his merge, follow separately authorized stable
+activation gates. Keep the previous stable artifact for rollback; changing code
+does not roll back mutable data. Never propose releases during routine work.
+
+## Branch controls and commands
+
+Use the shared helper in [agents-and-main](../skills/agents-and-main/SKILL.md).
+Install it once with that skill's `scripts/install.ps1`; use `sb agents` only in
+a checkout you own. Stable remains master, so use `git switch master` followed by
+`git pull --ff-only origin master`. Do not switch another session's checkout.
+
+The agents branch replaces dev. The existing runtime channel is still called dev:
+`ocd`, `.channels/dev.json`, and its isolated state are runtime identities, not Git
+branches. Keeping those identities preserves real sessions, Quests and queued work.
+Activation validates the candidate against origin/agents. Stable source and runtime
+are unchanged by this branch migration; the open stable-pointer repair owns the
+remaining stable launcher work.
+
+Eligible contributors have current GitHub write, maintain or admin permission;
+bots additionally need recorded maintainer authorization. The authorized coordinator
+reviews the current head and diff, verifies actual app evidence, waits for the
+required `core` CI check and mergeability, then merges the exact head into agents.
+No privileged CI executes PR code. This coordinator is the integration mechanism;
+there is no unattended merge service. Stable releases are human-only.
+
+Run `bun install --frozen-lockfile` once in the owned package directory, then
+`bun run check:core` and `node --check scripts/runtime-channel.mjs`. The GitHub
+workflow runs the core checks on PRs to agents and master. Before activation,
+prepare the committed candidate with `bun run runtime:channel -- prepare dev
+--ref <revision> --model <exact-route>`, drive the installed app twice, and use
+`activate dev --candidate <root> --evidence <report>` with the real captures and
+return evidence. Build commands do not activate or publish.
+
+The dev host database, Quests, UI state, orchestration and telemetry live under
+`.channels/state/dev`; stable retains its original stores. Broker accounts and
+external providers are shared existing integrations, so use throwaway data and
+record actual provider usage. Plugin code is pinned in immutable generations;
+TUI and server load receipts must match that revision. Record the installed host
+binary separately. Old sessions keep their loaded generation and cannot consume
+new-generation continuation work.
 
 ## Channel isolation
 
@@ -95,7 +135,7 @@ model is the default for dev launch. Shared-checkout worker writes are rejected 
 dev because its isolated ledger cannot authorize against stable ownership.
 Use isolated worktrees for dev code work; this preserves stable checkout owners.
 
-Activation requires the current merged dev tree and two real return-flow passes.
+Activation requires the current merged agents tree and two real return-flow passes.
 It installs the scoped workflow skill and creates `.channels/start.mjs`. Start
 with `ocd` from your project folder
 or use `ocs`. Install these PATH commands once with
