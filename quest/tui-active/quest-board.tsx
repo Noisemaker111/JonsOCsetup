@@ -332,7 +332,7 @@ function AgentLog(props: { context: any; quest: Quest }) {
     <box flexDirection="row" gap={1} alignItems="center" flexShrink={0}>
       <ProgressRing quest={props.quest} />
       <text fg={st().color} attributes={TextAttributes.BOLD} wrapMode="none" truncate>{st().label}</text>
-      <text fg={C.cyan} attributes={TextAttributes.BOLD} wrapMode="none" truncate>AGENT LOG <span fg={C.muted}>· {props.quest.executingCount} running</span></text>
+      <text fg={C.cyan} attributes={TextAttributes.BOLD} wrapMode="none" truncate>AGENT LOG <span fg={C.muted}>· {props.quest.executingCount} recorded executing</span></text>
     </box>
     <Show when={props.quest.sessions.length > 0} fallback={<text fg={C.dim} paddingTop={1}>No delegated work yet</text>}>
       <For each={props.quest.sessions}>{(session) => {
@@ -513,12 +513,12 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
   const narrow = () => width()<100
   let listScroll: ScrollBoxRenderable | undefined
   const scoped = createMemo(()=>projectQuests(records(),project().id,allProjects()))
-  const rows = createMemo(()=>filterQuests(scoped(),filter()).filter(q=>!query() || (q.title+" "+q.description).toLowerCase().includes(query().toLowerCase()))
+  const observation=useWorkerObservations(props.context,()=>scoped().flatMap(q=>q.sessions))
+  const rows = createMemo(()=>filterQuests(scoped(),filter(),observation).filter(q=>!query() || (q.title+" "+q.description).toLowerCase().includes(query().toLowerCase()))
     .sort((a,b)=>questStatus(a).rank-questStatus(b).rank || b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)))
   const selected = createMemo(()=>rows().find(q=>q.id===selectedID()))
   let initialSelectionShown=false
   createEffect(()=>{const q=selected();if(q&&!initialSelectionShown){initialSelectionShown=true;setCollapsed(value=>({...value,[group(q)]:false}))}})
-  const observation=useWorkerObservations(props.context,()=>rows().flatMap(q=>q.id===selectedID()?q.sessions:q.sessions.filter(r=>['executing','planned','waiting','blocked'].includes(r.state))))
   const refresh = () => { try {setRecords(quests(store.projectRoot));setLoaded(true)} catch {} }
   const reveal = () => { if(selectedID()) listScroll?.scrollChildIntoView("quest-row-"+selectedID()) }
   createEffect(()=>{if(loaded()&&!rows().some(q=>q.id===selectedID()))setSelectedID(rows()[0]?.id)})
@@ -533,7 +533,7 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
   const select = (id:string, open=false) => {const q=rows().find(q=>q.id===id);if(q)setCollapsed({...collapsed(),[group(q)]:false});setSelectedID(id);if(open)setDetail(true);reveal()}
   const back = () => {if(narrow()&&detail()){setDetail(false);queueMicrotask(reveal)}else props.context?.ui?.router?.navigate?.(props.returnRoute??{type:"home"})}
   const label = (id:QuestFilter) => id==="ready"?"Ready for review":id==="waiting"?"Planned / idle":QUEST_FILTERS.find(f=>f.id===id)?.label??id
-  const chooseFilter = async()=>{const picked=await props.context.ui.dialog.select({title:"Quest state filter",options:QUEST_FILTERS.map(f=>({value:f.id,title:`${label(f.id)} · ${filterQuests(scoped(),f.id).length}`})),current:filter()});if(picked){setFilter(picked);setDetail(false)}}
+  const chooseFilter = async()=>{const picked=await props.context.ui.dialog.select({title:"Quest state filter",options:QUEST_FILTERS.map(f=>({value:f.id,title:`${label(f.id)} · ${filterQuests(scoped(),f.id,observation).length}`})),current:filter()});if(picked){setFilter(picked);setDetail(false)}}
   const search = async()=>{const value=await props.context.ui.dialog.prompt({title:"Search Quests",placeholder:"Title or description; blank clears search",value:query()});if(typeof value==="string"){setQuery(value.trim());setDetail(false)}}
   const chooseQuest = async()=>{const id=await props.context.ui.dialog.select({title:"Select Quest",options:rows().map(q=>({value:q.id,title:q.title,description:questStatus(q).label}))});if(id)select(id,true)}
   const move = (delta:number)=>{const items=rows();if(!items.length)return;const index=Math.max(0,items.findIndex(q=>q.id===selectedID()));select(items[Math.max(0,Math.min(items.length-1,index+delta))].id)}
@@ -563,7 +563,7 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
     <Show when={narrow()}><box flexDirection="row" flexWrap="wrap" columnGap={2} rowGap={0} paddingLeft={1} flexShrink={0}>
       <text fg={C.cyan} onMouseUp={(e:any)=>activate(e,()=>{setAllProjects(!allProjects());setDetail(false)})}>[a] {allProjects()?"All projects":"Current project"}</text>
       <text fg={C.cyan} onMouseUp={(e:any)=>activate(e,()=>void chooseFilter())}>[f] {label(filter())}</text>
-      <For each={["attention","ready","archived"] as QuestFilter[]}>{id=><text fg={filter()===id?C.cyan:C.muted} onMouseUp={(e:any)=>activate(e,()=>{setFilter(id);setDetail(false)})}>{filterQuests(scoped(),id).length} {label(id)}</text>}</For>
+      <For each={["attention","ready","archived"] as QuestFilter[]}>{id=><text fg={filter()===id?C.cyan:C.muted} onMouseUp={(e:any)=>activate(e,()=>{setFilter(id);setDetail(false)})}>{filterQuests(scoped(),id,observation).length} {label(id)}</text>}</For>
     </box></Show>
     <Show when={!allProjects()&&project().error}><text fg={C.orange} wrapMode="word">{project().error}</text></Show>
     <box flexDirection="row" flexGrow={1} flexShrink={1} minHeight={0}>

@@ -7,8 +7,11 @@ const unwrap=(v:any)=>v?.data??v
 export function useWorkerObservations(context:any,runs:()=>QuestSession[]) {
  const [observations,setObservations]=createSignal<Record<string,any>>({})
  createEffect(()=>{
-  const records=runs();let disposed=false,busy=false
-  const refresh=async()=>{if(busy)return;busy=true;try{
+  const records=runs();let disposed=false,busy=false,requested=false
+  let scheduled:ReturnType<typeof setTimeout>|undefined
+  const ids=new Set(records.map(run=>run.openCodeSessionId??run.openCodeSessionID??run.sessionID))
+  const schedule=()=>{if(disposed||scheduled)return;scheduled=setTimeout(()=>{scheduled=undefined;void refresh()},150)}
+  const refresh=async()=>{if(disposed)return;if(busy){requested=true;return}busy=true;try{
    let active:any,activeError:any
    try{if(context.client?.session?.active)active=unwrap(await boundedInspection(signal=>context.client.session.active({signal})))}catch(e){activeError=e}
    const result:Record<string,any>={}
@@ -29,8 +32,11 @@ export function useWorkerObservations(context:any,runs:()=>QuestSession[]) {
     }catch(error){result[key]=observationFailure(error)}
    }))
    if(!disposed)setObservations(result)
-  }finally{busy=false}}
-  void refresh();const timer=setInterval(()=>void refresh(),4000);onCleanup(()=>{disposed=true;clearInterval(timer)})
+  }finally{busy=false;if(requested){requested=false;schedule()}}}
+  // Native events trigger bounded reads; polling also reconciles events missed during reconnect.
+  const stop=context.data?.listen?.(({details}:any)=>{const id=details?.data?.sessionID??details?.data?.info?.sessionID;if(ids.has(id))schedule()})
+  void refresh();const timer=setInterval(()=>void refresh(),4000)
+  onCleanup(()=>{disposed=true;clearInterval(timer);if(scheduled)clearTimeout(scheduled);stop?.()})
  })
  return (run:QuestSession)=>observations()[run.runID??run.callID]??{state:'unknown',reason:'Checking owning host…'}
 }

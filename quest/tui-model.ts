@@ -1,4 +1,4 @@
-import type { Quest } from "./types"
+import type { Quest, QuestSession } from "./types"
 import { LANE_LABEL, boardRows, questBoard, questLane } from "./board"
 import { latestSessionAttempts } from "./session-lineage"
 import { artifactChain, artifactChainSummary, artifactLine } from "./artifacts"
@@ -11,8 +11,11 @@ export const QUEST_FILTERS: { id: QuestFilter; label: string }[] = [
   { id: "attention", label: "Needs attention" }, { id: "verifying", label: "Verifying" },
   { id: "waiting", label: "Waiting/new" }, { id: "archived", label: "Archived" }, { id: "all", label: "All states" },
 ]
-export function filterQuests(quests: Quest[], filter: QuestFilter): Quest[] {
-  const live = (q: Quest) => latestSessionAttempts(q.sessions).some(s => s.state === "executing")
+export type WorkerObservation = (run: QuestSession) => { state: string }
+const unobserved: WorkerObservation = () => ({state: "unknown"})
+const liveQuest = (q: Quest, observation: WorkerObservation) => latestSessionAttempts(q.sessions).some(s => observation(s).state === "running")
+export function filterQuests(quests: Quest[], filter: QuestFilter, observation: WorkerObservation = unobserved): Quest[] {
+  const live = (q: Quest) => liveQuest(q, observation)
   return quests.filter(q => filter === "all" || (filter === "archived" ? questLane(q) === "archived" : questLane(q) !== "archived" && (
     filter === "open" || filter === "active" && live(q) || filter === "ready" && questLane(q) === "ready" ||
     filter === "attention" && questLane(q) === "attention" || filter === "verifying" && questLane(q) === "verifying" ||
@@ -20,9 +23,9 @@ export function filterQuests(quests: Quest[], filter: QuestFilter): Quest[] {
   )))
 }
 /** Lane truth, not one raw non-archived total. Active means a worker executing; attention is reported separately. Done-but-gated (Verifying) has its own bucket; idle assigned/waiting quests are not active. Archived never appears here. */
-export function questLaneCounts(quests: Quest[]): { toTurnIn: number; active: number; attention: number; verifying: number; waitingNew: number } {
+export function questLaneCounts(quests: Quest[], observation: WorkerObservation = unobserved): { toTurnIn: number; active: number; attention: number; verifying: number; waitingNew: number } {
   const lanes = questBoard(quests)
-  const live = (q: Quest) => latestSessionAttempts(q.sessions).some((s) => s.state === "executing")
+  const live = (q: Quest) => liveQuest(q, observation)
   const active = quests.filter((q) => q.state !== "Archived" && live(q)).length
   return {
     toTurnIn: lanes.ready.length,
@@ -38,7 +41,7 @@ export function questIndicator(quests: Quest[]): string {
 }
 export function formatQuestLine(q: Quest): string {
   const turnIn = q.state === "Ready to complete" || q.state === "Complete" ? " · Ready for you to turn in" : ""
-  return `${q.state} ${q.title}${turnIn} (${q.executingCount} running, ${q.deliverables.filter((d) => d.status !== "done").length} left)`
+  return `${q.state} ${q.title}${turnIn} (${q.executingCount} recorded executing, ${q.deliverables.filter((d) => d.status !== "done").length} left)`
 }
 export function renderFrame(quests: Quest[], route: TuiRoute, width: number): Frame {
   const lines = route.type === "detail"
