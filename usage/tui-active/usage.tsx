@@ -65,7 +65,6 @@ function dbg(msg: string): void {
 
 const CONFIG = process.env.OPENCODE_CONFIG_DIR ?? join(homedir(), ".config", "opencode")
 const USAGE_PLANS = join(CONFIG, "usage", "usage-plans.json")
-const TASKS_STATUS = join(CONFIG, "orchestration", "tasks-status.ts")
 const USAGE_STALE_MS = 30_000
 // The collector probes fallback endpoints concurrently, but the Go API still
 // has an 8s request budget. Leave headroom for process startup and JSON I/O;
@@ -106,69 +105,6 @@ type UsageView = {
   blocks: UsageBlock[]
   error?: string
 }
-type SessionEntry = {
-  id: string
-  agent: string | null
-  model: string | null
-  title: string | null
-  state: string
-  minutesAgo: number | null
-  subagent: boolean
-  warn: boolean
-}
-type SessionsView = {
-  updated: string
-  running: SessionEntry[]
-  recent: SessionEntry[]
-  error?: string
-}
-
-function bunExe(): string {
-  const alt = join(homedir(), ".bun", "bin", "bun.exe")
-  return existsSync(alt) ? alt : "bun"
-}
-
-function runBun(script: string, args: string[], timeoutMs: number): Promise<{ ok: boolean; stdout: string }> {
-  return new Promise((resolve) => {
-    let settled = false
-    let child: ReturnType<typeof spawn> | undefined
-    const done = (ok: boolean, stdout: string) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      resolve({ ok, stdout })
-    }
-    const attempt = (cmd: string) => {
-      try {
-        child = spawn(cmd, [script, ...args], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
-        let stdout = ""
-        child.stdout?.on("data", (chunk) => {
-          stdout += String(chunk)
-        })
-        child.once("exit", (code) => done(code === 0, stdout))
-        child.once("error", () => {
-          if (cmd === "bun" && !settled) {
-            const alt = join(homedir(), ".bun", "bin", "bun.exe")
-            if (existsSync(alt)) attempt(alt)
-            else done(false, stdout)
-            return
-          }
-          done(false, stdout)
-        })
-      } catch {
-        done(false, "")
-      }
-    }
-    const timer = setTimeout(() => {
-      try {
-        child?.kill()
-      } catch {}
-      done(false, "")
-    }, timeoutMs)
-    attempt(bunExe() === "bun" ? "bun" : bunExe())
-  })
-}
-
 function readJson(path: string): unknown {
   try {
     return JSON.parse(readFileSync(path, "utf8"))
@@ -333,36 +269,13 @@ async function refreshUsageView(): Promise<UsageView> {
   return cacheToView(cache, !collect.ok)
 }
 
-async function loadSessionsView(): Promise<SessionsView> {
-  const result = await runBun(TASKS_STATUS, ["--json"], COLLECT_AWAIT_MS)
-  const out = result.stdout.trim()
-  if (!out) {
-    return {
-      updated: "",
-      running: [],
-      recent: [],
-      error: result.ok ? "Live session view: no output." : "Live session view unavailable (timed out or failed).",
-    }
-  }
-  try {
-    const parsed = JSON.parse(out) as { updated?: string; running?: SessionEntry[]; recent?: SessionEntry[] }
-    return {
-      updated: typeof parsed.updated === "string" ? parsed.updated : "",
-      running: Array.isArray(parsed.running) ? parsed.running : [],
-      recent: Array.isArray(parsed.recent) ? parsed.recent : [],
-    }
-  } catch {
-    return { updated: "", running: [], recent: [], error: out }
-  }
-}
-
 /**
  * Open a dialog on the live host.
  *
  * beta-18684's ui.dialog is { alert, clear, confirm, prompt, select, set,
  * show } — `replace` is gone. `show(render, onClose?)` is its direct
  * replacement and is what alert/confirm/prompt/select are built on. Guarding
- * on the missing `replace` made every /usage and /running invocation a silent
+ * on the missing `replace` made every usage dialog invocation a silent
  * no-op: the command ran, found no method, and returned.
  */
 function openDialog(context: any, render: () => unknown) {
@@ -554,55 +467,6 @@ function UsageTable(props: { context: any; view: UsageView }) {
   )
 }
 
-function SessionsTable(props: { context: any; view: SessionsView }) {
-  const colors = themeColors(props.context)
-  const rows = [
-    ...props.view.running.map((s) => ({ ...s, kind: "running" as const })),
-    ...props.view.recent.map((s) => ({ ...s, kind: "recent" as const })),
-  ]
-  const ago = (n: number | null) => (n == null ? "—" : `${n}m`)
-  return (
-    <box flexDirection="column" gap={1}>
-      <text fg={colors.muted} wrapMode="none" truncate>
-        {props.view.updated ? `updated ${props.view.updated}` : "live sessions"} · running {props.view.running.length} · recent {props.view.recent.length}
-      </text>
-      <Show when={props.view.error}>
-        <text fg={colors.cap} wrapMode="none" truncate>
-          {props.view.error}
-        </text>
-      </Show>
-      <box flexDirection="row" flexWrap="no-wrap" gap={1} flexShrink={0}>
-        <ColText w={8} align="left" fg={colors.muted} value="state" />
-        <ColText w={18} align="left" fg={colors.muted} value="agent" />
-        <ColText w={22} align="left" fg={colors.muted} value="model" />
-        <ColText w={6} align="right" fg={colors.muted} value="ago" />
-        <ColText w={28} align="left" fg={colors.muted} value="title" />
-      </box>
-      <Show when={rows.length === 0 && !props.view.error}>
-        <text fg={colors.muted} wrapMode="none" truncate>
-          No live sessions in the last 10 minutes.
-        </text>
-      </Show>
-      <For each={rows}>
-        {(row) => (
-          <box flexDirection="row" flexWrap="no-wrap" gap={1} flexShrink={0}>
-            <ColText
-              w={8}
-              align="left"
-              fg={row.warn ? colors.warn : row.kind === "running" ? colors.ok : colors.muted}
-              value={row.kind === "running" ? "running" : row.state}
-            />
-            <ColText w={18} align="left" fg={colors.text} value={row.agent ?? "?"} />
-            <ColText w={22} align="left" fg={colors.text} value={row.model ?? "?"} />
-            <ColText w={6} align="right" fg={colors.text} value={ago(row.minutesAgo)} />
-            <ColText w={28} align="left" fg={colors.text} value={(row.title ?? "?").slice(0, 28)} />
-          </box>
-        )}
-      </For>
-    </box>
-  )
-}
-
 export function ConversationTelemetry(props: { context: any }) {
   const colors = themeColors(props.context)
   const [summary, setSummary] = createSignal<Awaited<ReturnType<typeof getUsageStatus>>>()
@@ -660,53 +524,6 @@ export function UsageDialog(props: { context: any }) {
       <UsageEvidencePanel context={props.context} />
     </scrollbox>
   </box>
-}
-
-function SessionsDialog(props: { context: any }) {
-  const [view, setView] = createSignal<SessionsView | undefined>()
-  const [updating, setUpdating] = createSignal(true)
-  const colors = themeColors(props.context)
-  onMount(() => {
-    void loadSessionsView().then(
-      (next) => {
-        setView(next)
-        setUpdating(false)
-      },
-      (err) => {
-        setView({ updated: "", running: [], recent: [], error: `Failed: ${String(err)}` })
-        setUpdating(false)
-      },
-    )
-  })
-  const sessionLines = () => {
-    const v = view()
-    if (!v) return 3
-    return Math.max(3, 2 + v.running.length + v.recent.length)
-  }
-  return (
-    <box paddingLeft={2} paddingRight={2} gap={0} paddingBottom={1} flexShrink={0}>
-      <box flexDirection="row" justifyContent="space-between" flexWrap="no-wrap" flexShrink={0}>
-        <text fg={colors.text} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
-          Live sessions
-        </text>
-        <box flexDirection="row" gap={1} flexWrap="no-wrap" flexShrink={0}>
-          <Show when={updating()}>
-            <text fg={colors.muted} wrapMode="none" truncate>
-              updating…
-            </text>
-          </Show>
-          <text fg={colors.muted} wrapMode="none" onMouseUp={() => props.context.ui.dialog.clear()}>
-            esc
-          </text>
-        </box>
-      </box>
-      <scrollbox height={contentHeight(sessionLines(), props.context)} scrollbarOptions={{ visible: sessionLines() > 12 }}>
-        <Show when={view()} fallback={<UsageSkeleton colors={colors} />}>
-          <SessionsTable context={props.context} view={view()!} />
-        </Show>
-      </scrollbox>
-    </box>
-  )
 }
 
 // The last measured request context is separate from cumulative conversation usage.
@@ -822,15 +639,6 @@ function UsageCommands(props: { context: any }) {
           suggested: true,
           slash: { name: "usage" },
           run: () => openDialog(props.context, () => <UsageDialog context={props.context} />),
-        },
-        {
-          id: "sessions.show",
-          title: "Live sessions",
-          group: "System",
-          palette: true,
-          suggested: true,
-          slash: { name: "running" },
-          run: () => openDialog(props.context, () => <SessionsDialog context={props.context} />),
         },
         {
           id: "restart.service",

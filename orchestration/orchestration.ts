@@ -16,16 +16,9 @@
  * summarisation, formatting) take their inputs as plain data so they stay
  * testable without a host.
  */
-import { existsSync, readFileSync } from "node:fs"
-import { homedir } from "node:os"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
-import { spawn } from "node:child_process"
-import { ledgerLockStatus, claimCompletionDelivery, suppressCompletionDelivery, recordCompletionDelivered, recordCompletionDeliveryFailed, recordNativeSessionLineage, recordNotification, recordTerminal, trackedChildren, expireExecutionLeases, pendingCompletionEvidence, readLedger, recordSpawn, recordSpawnResult, type CompletionEvidence } from "./orchestration-ledger"
+import { ledgerLockStatus, claimCompletionDelivery, suppressCompletionDelivery, recordCompletionDelivered, recordCompletionDeliveryFailed, recordNativeSessionLineage, recordNotification, recordTerminal, expireExecutionLeases, pendingCompletionEvidence, readLedger, type CompletionEvidence } from "./orchestration-ledger"
 import { injectCompletion } from "./watchdog-inject"
-import { detectProviderFailure, failureMessage, type ProviderFailure } from "../usage/usage-reached"
-import { quotaLaneNotice, spawnLane, forceUsageCollectOnCap } from "../models/model-routing"
-import { usageCache } from "../usage/usage-lib"
+import { detectProviderFailure, failureMessage, USAGE_REACHED, type ProviderFailure } from "../usage/usage-reached"
 
 /**
  * A completion whose parent session no longer exists can never be delivered.
@@ -39,7 +32,12 @@ async function parentSessionGone(sessionApi: { get?: Function }, parentID: strin
     const res = await sessionApi.get({ sessionID: parentID })
     const row = (res as { data?: unknown })?.data ?? res
     return !row
-  } catch { return true }
+  } catch (error) {
+    // Transport/auth/server failures do not prove deletion. Keep the notice retryable.
+    const failure = error as { status?: number; statusCode?: number; response?: { status?: number } }
+    if ((failure?.status ?? failure?.statusCode ?? failure?.response?.status) === 404) return true
+    throw error
+  }
 }
 
 export async function deliverPendingCompletion(sessionApi: { synthetic?: Function; get?: Function }, completion: CompletionEvidence, file?: string): Promise<boolean> {
@@ -57,8 +55,6 @@ export async function deliverPendingCompletion(sessionApi: { synthetic?: Functio
 /** The host emits `interrupted` for a cancelled turn (beta-19059); `cancelled` is the legacy name. */
 const CANCEL_EVENTS = new Set(["session.execution.cancelled", "session.execution.interrupted"])
 
-const HERE = dirname(fileURLToPath(import.meta.url))
-const CONFIG_ROOT = HERE
 
 // ── watchdog: re-inject lost background-subagent completions ────────────────
 // When a Task subagent finishes, the parent (orchestrator) session normally
@@ -136,16 +132,6 @@ function sessionMessages(res: unknown): unknown[] {
   return []
 }
 
-function safeJson(value: unknown): string {
-  try {
-    const s = JSON.stringify(value)
-    if (typeof s !== "string") return ""
-    return s.length > 4000 ? s.slice(0, 4000) : s
-  } catch {
-    return ""
-  }
-}
-
 function messageRole(message: unknown): string {
   const m = (message ?? {}) as Record<string, unknown>
   if (typeof m.type === "string") return m.type
@@ -154,19 +140,6 @@ function messageRole(message: unknown): string {
   if (info && typeof info.role === "string") return info.role
   if (info && typeof info.type === "string") return info.type
   return ""
-}
-
-function eventBlob(event: unknown): string {
-  if (event == null) return ""
-  const evt = event as Record<string, unknown>
-  const chunks: string[] = []
-  if (typeof evt.type === "string") chunks.push(evt.type)
-  const data = evt.data ?? evt.properties
-  if (typeof data === "string") chunks.push(data)
-  else if (data != null) chunks.push(safeJson(data))
-  if (typeof evt.error === "string") chunks.push(evt.error)
-  else if (evt.error != null) chunks.push(safeJson(evt.error))
-  return chunks.join("\n")
 }
 
 /** Only a host execution error is failure evidence; conversation text is not. */
@@ -261,13 +234,8 @@ async function emitSessionText(
 
 async function handleSubagentEvent(event: unknown, sessionApi: any) {
   const { type, sessionID, idle } = eventSessionID(event)
-  const eventSnippet = findProviderFailure(eventBlob(event))?.detail
-  if (!type || !sessionID || !idle) {
-    if (eventSnippet) forceUsageCollectOnCap(eventSnippet)
-    return
-  }
+  if (!type || !sessionID || !idle) return
   const scanned = await childSummary(sessionApi, sessionID, event)
-  if (scanned.providerError) forceUsageCollectOnCap(scanned.providerError)
   const child = await sessionApi.get({ sessionID }).catch((err: unknown) => {
     console.error(`[orchestration] watchdog: session.get(${sessionID}) failed:`, err)
     return undefined
@@ -301,8 +269,7 @@ async function handleSubagentEvent(event: unknown, sessionApi: any) {
   if (notified.has(key) || watchdogState().notifying.has(key)) return
   watchdogState().notifying.add(key)
   try {
-    const completionSummary = [summary, scanned.providerError ? quotaLaneNotice() : undefined].filter(Boolean).join("\n")
-    recordNotification(parentID, callID, sessionID, terminalState, completionSummary)
+    recordNotification(parentID, callID, sessionID, terminalState, summary)
     const completion = pendingCompletionEvidence(parentID).find((entry) => entry.callID === callID)
     if (!completion || await deliverPendingCompletion(sessionApi, completion)) notified.add(key)
   } finally {
@@ -388,108 +355,6 @@ export async function watchSubagentCompletions(ctx: any) {
   }
 }
 
-const TASKS_STATUS = join(dirname(HERE), "tasks-status.ts")
-
-function runTasksStatus(timeoutMs = 10_000): Promise<{ ok: boolean; stdout: string; error?: string }> {
-  return new Promise((resolve) => {
-    let settled = false
-    const done = (result: { ok: boolean; stdout: string; error?: string }) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      resolve(result)
-    }
-    const attempt = (cmd: string): boolean => {
-      try {
-        const child = spawn(cmd, [TASKS_STATUS, "--json"], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
-        let stdout = ""
-        let stderr = ""
-        child.stdout?.on("data", (chunk) => (stdout += String(chunk)))
-        child.stderr?.on("data", (chunk) => (stderr += String(chunk)))
-        child.once("exit", () => done({ ok: true, stdout }))
-        child.once("error", () => {
-          if (cmd === "bun" && !settled) {
-            const alt = join(homedir(), ".bun", "bin", "bun.exe")
-            if (existsSync(alt)) attempt(alt)
-            else done({ ok: false, stdout: "", error: stderr || "bun spawn error" })
-          } else {
-            done({ ok: false, stdout: "", error: stderr || "bun spawn error" })
-          }
-        })
-        return true
-      } catch (error) {
-        done({ ok: false, stdout: "", error: String(error) })
-        return false
-      }
-    }
-    const timer = setTimeout(() => done({ ok: false, stdout: "", error: `timeout after ${timeoutMs}ms` }), timeoutMs)
-    attempt("bun")
-  })
-}
-
-type TaskRec = {
-  id: string
-  parentID?: string | null
-  agent?: string | null
-  model?: string | null
-  title?: string | null
-  state?: string | null
-  minutesAgo?: number | null
-  subagent?: boolean
-  warn?: boolean
-}
-type TasksPayload = { updated?: string; running?: TaskRec[]; recent?: TaskRec[]; requestedBy?: string; tracked?: Array<{ parentID: string; children: Array<{ childID?: string; callID: string; state: string; agent?: string }> }> }
-
-function fmtMinutesAgo(min: number | null | undefined): string {
-  if (min == null || !Number.isFinite(min)) return "?"
-  if (min <= 1) return "just now"
-  return `${Math.round(min)}m ago`
-}
-
-/** Concise text table of running (+ optional recent) sessions. */
-function formatRunningTasks(payload: TasksPayload, includeRecent: boolean): string {
-  const lines: string[] = []
-  const running = payload.running ?? []
-  lines.push(`Live subagent view (${payload.updated ?? new Date().toISOString()}):`)
-  lines.push("")
-  if (!running.length) {
-    lines.push("RUNNING: none (no live executions)")
-  } else {
-    lines.push(`RUNNING (${running.length}):`)
-    for (const t of running) {
-      const parts = [
-        formatAgentLabel(t.agent, t.title),
-        t.model ?? "?",
-        formatTaskDescription(t.title).slice(0, 60),
-        ...(t.subagent && t.parentID ? [`parent ${t.parentID}`] : []),
-        `lastActivity ${fmtMinutesAgo(t.minutesAgo)}`,
-      ]
-      if (t.warn) parts.push("WARN (>30m old - stalled?)")
-      lines.push(`  ${t.id} · ${parts.join(" · ")}`)
-    }
-  }
-  if (includeRecent && payload.recent?.length) {
-    lines.push("")
-    lines.push("RECENT (last 10 sessions, any state):")
-    for (const t of payload.recent) {
-      lines.push(`  ${t.id} · ${t.agent ?? "?"} · state ${t.state ?? "?"} · ${fmtMinutesAgo(t.minutesAgo)} · ${(t.title ?? "?").slice(0, 50)}`)
-    }
-  }
-  const trackedGroups = payload.tracked ?? (payload.requestedBy ? [{ parentID: payload.requestedBy, children: trackedChildren(payload.requestedBy, payload) }] : [])
-  for (const group of trackedGroups) {
-    if (group.children.length) {
-      lines.push("", `TRACKED CHILDREN (durable ledger; parent ${group.parentID}):`)
-      for (const child of group.children) {
-        const id = child.childID ?? `unbound call ${child.callID}`
-        const action = child.state === "running" ? "Not yet — still active" : child.state === "failed" || child.state === "missing-result" ? "INCOMPLETE — resume SAME sessionID" : child.state === "cancelled" ? "CANCELLED — resume SAME sessionID only when explicitly requested" : child.state === "completed" ? "COMPLETED" : child.state === "stopped" ? "STOPPED — not active" : "Not yet — awaiting session binding"
-        lines.push(`  ${id} · ${action}${child.agent ? ` · ${formatAgentLabel(child.agent)}` : ""}`)
-      }
-    }
-  }
-  lines.push("")
-  lines.push("Ground truth = OpenCode DB + ledger (running = live execution / no terminal result, not a 10-min recency window). All sessions agree on this view.")
-  return lines.join("\n")
-}// The ids remain the actual Task targets; these helpers only change presentation.
 const AGENT_DISPLAY_NAMES: Record<string, string> = {
   "claude-code-harness": "Claude Code (Harness)",
   "claude-code": "Claude Code (Harness)",

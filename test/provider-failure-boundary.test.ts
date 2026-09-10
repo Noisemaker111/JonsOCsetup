@@ -14,3 +14,25 @@ test('provider warnings require actual responses and remain scoped to their sess
  expect(detectProviderFailure('HTTP 403 Forbidden')?.kind).toBe('provider')
  expect(detectProviderFailure('insufficient quota')?.kind).toBe('usage')
 })
+
+
+import {mkdtempSync} from 'node:fs'
+import {tmpdir} from 'node:os'
+import {join} from 'node:path'
+import {recordNotification,pendingCompletionEvidence} from '../orchestration/orchestration-ledger'
+import {deliverPendingCompletion} from '../orchestration/orchestration'
+
+test('unreachable parent preserves a durable return until confirmed delivery',async()=>{
+ const file=join(mkdtempSync(join(tmpdir(),'opencode-return-')),'ledger.jsonl')
+ recordNotification('ses_parent','call_worker','ses_child','completed','Finished',file)
+ const completion=pendingCompletionEvidence('ses_parent',file)[0]
+ let deliveries=0
+ await expect(deliverPendingCompletion({get:async()=>{throw new Error('fetch failed')},synthetic:async()=>{deliveries++}},completion,file)).rejects.toThrow('fetch failed')
+ expect(pendingCompletionEvidence('ses_parent',file)).toHaveLength(1)
+ expect(deliveries).toBe(0)
+ const host={get:async()=>({id:'ses_parent'}),synthetic:async()=>{deliveries++}}
+ expect(await deliverPendingCompletion(host,completion,file)).toBe(true)
+ expect(await deliverPendingCompletion(host,completion,file)).toBe(true)
+ expect(deliveries).toBe(1)
+ expect(pendingCompletionEvidence('ses_parent',file)).toHaveLength(0)
+})
