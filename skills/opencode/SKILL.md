@@ -10,8 +10,8 @@ Internals for this repo only. Global rules stay in `AGENTS.md`; the ecosystem ma
 ## Development ownership
 
 Follow `docs/development-workflow.md` for every OpenCode2 change. The user has
-authorized the agent to own coherent commits, ready PRs targeting dev, verified
-merges into dev, and dev activation. Do not ask the user to perform technical
+authorized the agent to own coherent commits, ready PRs targeting agents, verified
+merges into agents, and dev activation. Do not ask the user to perform technical
 review or approve each dev merge. Stable master promotion and mirror publishing
 remain separate explicit actions. Exercise the real flow twice and inspect
 captures and saved outcomes; synthetic providers are not acceptance evidence.
