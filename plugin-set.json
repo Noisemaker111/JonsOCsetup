@@ -59,7 +59,6 @@
     "usage/telemetry-api.ts",
     "quest/api.ts",
     "quest/tool-schema.mjs",
-    "harnesses/opencode-mcp-stdio.mjs",
     "usage/benchmark-evaluation.ts",
     "quest/worker-observation.mjs",
     "quest/giver-public.ts",

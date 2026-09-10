@@ -1,3 +1,5 @@
+> Historical verification record. Its bridge and scenario-test commands have since been removed; current native inspection and verification are documented in development-workflow.md.
+
 # Quest board and worker reliability verification
 
 Verified on Windows on 2026-09-09. Implementation is on `fix/quest-board-reliability`, created from `origin/dev` in the owned `quest-board-reliability` worktree. The old dirty configuration checkout, existing worker worktree, host installation and ordinary channel selection were preserved.

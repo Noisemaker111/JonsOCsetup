@@ -138,6 +138,6 @@ OpenCode2 uses the native Quest tool for worker status, results and dispatch.
 Use quest get with inspect.section runs, and project_route_status for route
 diagnostics. The external-harness MCP bridge is not registered inside OpenCode2:
 standalone hosts do not publish the supporting-host registration it requires.
-Explicit external harness launchers remain its consumer. Worker status uses live
+The obsolete bridge, its generated harness config and CLI adapter were removed. Worker status uses live
 host events and permissions, clears live observations on disconnect, and keeps
 missing or uncertain ownership intact. Historical ledgers are never liveness proof.
