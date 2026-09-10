@@ -141,16 +141,19 @@ const HOST_EVENTS = Symbol.for("opencode-config.quests.host-events")
  * reuses the running subscription instead of stacking a second one.
  */
 export function installQuestEvents(ctx: { event?: { subscribe?: Function }; session?: any; permission?: any }, quests: QuestTracker) {
-  const state = globalThis as { [HOST_EVENTS]?: { installed: boolean; controller: AbortController } }
+  const state = globalThis as { [HOST_EVENTS]?: WeakMap<object, { controller: AbortController }> }
+  const connections = state[HOST_EVENTS] ??= new WeakMap()
+  const owner = ctx.session ?? ctx.event
+  if (!owner) return
   if(ctx.session)registerHostObservation(ctx.session,ctx.permission)
-  if (state[HOST_EVENTS]?.installed) return
+  if (connections.has(owner)) return
   const subscribe = ctx?.event?.subscribe
   if (typeof subscribe !== "function") {
     console.warn("[quests] ctx.event.subscribe unavailable; worker models and turn ends come from the ledger only")
     return
   }
   const controller = new AbortController()
-  state[HOST_EVENTS] = { installed: true, controller }
+  connections.set(owner, { controller })
   const handle = (event: unknown) => { try { if(ctx.session)recordHostObservation(ctx.session,event);quests.onHostEvent(event) } catch (error) { console.error("[quests] host event error:", error) } }
   queueMicrotask(async () => {
     let delay=1000
@@ -166,7 +169,7 @@ export function installQuestEvents(ctx: { event?: { subscribe?: Function }; sess
       await new Promise<void>(done=>{const finish=()=>{clearTimeout(timer);controller.signal.removeEventListener('abort',finish);done()};const timer=setTimeout(finish,delay);timer.unref();controller.signal.addEventListener('abort',finish,{once:true})})
       delay=Math.min(delay*2,30000)
     }
-    if(state[HOST_EVENTS]?.controller===controller)state[HOST_EVENTS]={installed:false,controller}
+    if(connections.get(owner)?.controller===controller)connections.delete(owner)
   })
 }
 

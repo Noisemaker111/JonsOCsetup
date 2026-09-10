@@ -29,8 +29,10 @@ async function reconcile(store:QuestStore,host:any) {
  return observations
 }
 
-const polls=new Map<string,Promise<Record<string,any>>>()
+const clients=new WeakMap<object,Map<string,Promise<Record<string,any>>>>()
 export function reconcileWorkers(store:QuestStore,host:any){
+ let polls=clients.get(host)
+ if(!polls){polls=new Map();clients.set(host,polls)}
  const prior=polls.get(store.runtime);if(prior)return prior
  const promise=reconcile(store,host).finally(()=>{if(polls.get(store.runtime)===promise)polls.delete(store.runtime)})
  polls.set(store.runtime,promise);return promise

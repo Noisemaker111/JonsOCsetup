@@ -171,7 +171,7 @@ export function Footer(props: { context: any }) {
   const observation=useWorkerObservations(props.context,()=>all().flatMap(q=>q.sessions))
   const lines=()=>all().flatMap(quest=>quest.sessions.map(session=>({quest,session}))).sort((a,b)=>b.session.updatedAt.localeCompare(a.session.updatedAt)).slice(0,2)
   const counts = async () => {
-    const picked=await props.context.ui.dialog.select({title:all.error()??"Quest counts · all projects",options:QUEST_FILTERS.filter(f=>f.id!=="all").map(f=>({value:f.id,title:`${filterQuests(all(),f.id).length} ${f.label}`}))})
+    const picked=await props.context.ui.dialog.select({title:all.error()??"Quest counts · all projects",options:QUEST_FILTERS.filter(f=>f.id!=="all").map(f=>({value:f.id,title:`${filterQuests(all(),f.id,observation).length} ${f.label}`}))})
     if(picked)openBoard(props.context,undefined,picked)
   }
   return <box flexDirection="column" flexShrink={1} flexGrow={1} minWidth={0} maxWidth={70}>
@@ -180,7 +180,7 @@ export function Footer(props: { context: any }) {
       <text fg={C.yellow} wrapMode="none" truncate flexShrink={1} onMouseUp={(event:any)=>activate(event,()=>openBoard(props.context))}>Quests · {filterQuests(all(),"open").length} open</text>
       <text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>void counts())}>▾</text>
     </box>
-    <For each={lines()}>{row=><text fg={C.muted} wrapMode="none" truncate onMouseUp={(event:any)=>activate(event,()=>void openWorkerSession(props.context,row.session))}>↳ {observation(row.session).state} · {row.quest.title} · Open worker</text>}</For>
+    <For each={lines()}>{row=><text fg={C.muted} wrapMode="none" truncate onMouseUp={(event:any)=>activate(event,()=>void openWorkerSession(props.context,row.session))}>↳ Open worker · {observation(row.session).state} · {row.quest.title}</text>}</For>
   </box>
 }
 

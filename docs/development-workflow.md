@@ -146,3 +146,9 @@ Session navigation uses the native `/sessions` picker (keyboard and mouse), incl
 its current-host status and project filtering. The old `/running` database scanner
 and duplicate picker are removed. Provider quota comes from the usage/account
 observers; orchestration never stamps another provider capped from event text.
+
+Worker liveness is scoped to the connected host session client. Disconnecting or
+reconciling one client cannot reuse or erase another client's observations. The
+board Active filter requires a confirmed running observation, never a saved
+executing record. Native data events trigger bounded worker inspection; periodic
+reads recover missed events after reconnect. Unknown ownership remains retained.
