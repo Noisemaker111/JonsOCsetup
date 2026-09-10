@@ -399,6 +399,7 @@ function ContractDetail(props: { context: any; store: QuestStore; quest: () => Q
  let scroll:ScrollBoxRenderable|undefined
  const sessions=()=>props.quest().sessions
  const links=()=>view().artifacts.filter(a=>/https:\/\/[^/]+\/[^/]+\/[^/]+\/pull\/\d+/.test(a.uri??''))
+ const rewards=()=>artifactChain(view().artifacts.filter(a=>!links().includes(a)))
  const open=async()=>{const rows=sessions();const key=rows.length===1?rows[0].callID:await props.context.ui.dialog.select({title:'Quest worker sessions',options:rows.map(s=>({value:s.callID,title:workerLabel(s),description:observation(s).state+' · '+(s.task??'assigned work')}))});const run=rows.find(s=>s.callID===key);if(run)await openWorkerSession(props.context,run)}
  const expandedWorker=()=>expandedRun()??sessions().at(-1)?.callID
  const toggleWorker=()=>{const run=sessions().at(-1);if(run)setExpandedRun(expandedWorker()===run.callID?'':run.callID)}
@@ -429,7 +430,10 @@ function ContractDetail(props: { context: any; store: QuestStore; quest: () => Q
   <scrollbox ref={scroll} flexGrow={1} flexShrink={1} minHeight={0} scrollX={false}>
    <box flexDirection="column" flexShrink={0} minHeight="100%" gap={0} paddingRight={1}>
      <text fg={C.text} attributes={TextAttributes.BOLD}>PULL REQUESTS <span fg={C.muted}>({links().length})</span></text>
-     <Show when={links().length} fallback={<text fg={C.dim}>No pull requests recorded</text>}><For each={links()}>{a=><text fg={C.cyan} wrapMode="word"><a href={a.uri!}>{a.name} · {a.uri}</a></text>}</For></Show>
+     <Show when={links().length} fallback={<text fg={C.dim}>No pull requests recorded</text>}><For each={links()}>{a=><box flexDirection="row" gap={1} flexShrink={0}>
+      <text fg={C.cyan} width={9} flexShrink={0}><a href={a.uri!}>↗ #{a.uri!.match(/\/pull\/(\d+)/)?.[1]}</a></text>
+      <text fg={C.text} flexGrow={1} flexShrink={1} wrapMode="none" truncate><a href={a.uri!}>{a.name.replace(/^Dev PR #\d+\s*[—–-]\s*/,'')}</a></text>
+     </box>}</For></Show>
      <Rule/>
      <text fg={C.text} attributes={TextAttributes.BOLD} onMouseUp={(e:any)=>activate(e,()=>setDescriptionOpen(!descriptionOpen()))}>DESCRIPTION <span fg={C.cyan}>· [d] {descriptionOpen()?"Collapse":"Expand"}</span></text>
      <text fg={C.text} wrapMode="word">{descriptionOpen()?view().description:fitTitle(view().description,Math.max(160,(props.width()*0.65)*3))}</text>
@@ -442,13 +446,13 @@ function ContractDetail(props: { context: any; store: QuestStore; quest: () => Q
     <box flexGrow={1} minHeight={1}/><Rule/>
      <box flexDirection={props.width()>=150?'row':'column'} gap={2} flexShrink={0}>
       <box flexDirection="column" flexBasis="36%" flexGrow={1} flexShrink={1} minWidth={0} border borderColor={C.line} paddingLeft={1} paddingRight={1}>
-       <text fg={C.text} attributes={TextAttributes.BOLD}>QUEST REWARDS <span fg={C.muted}>({view().artifacts.length})</span></text>
-       <Show when={view().reward} fallback={<text fg={C.dim}>No reward recorded</text>}>{reward=><text fg={C.text} wrapMode="word">{reward()}</text>}</Show>
+       <text fg={C.text} attributes={TextAttributes.BOLD}>QUEST REWARDS <span fg={C.muted}>({rewards().length})</span></text>
+       <Show when={view().reward} fallback={<text fg={C.dim}>No reward recorded</text>}>{reward=><text fg={C.text} wrapMode="word">{fitTitle(reward(),200)}</text>}</Show>
        <box flexDirection="row" flexWrap="wrap" gap={1}>
-        <For each={view().artifacts}>{artifact=>{
+        <For each={rewards()}>{artifact=>{
          const preview=createMemo(()=>artifactPreview(artifact,[props.quest().project?.root,...sessions().map(s=>s.worktree??s.scope?.worktree),questAssetsDir(props.store.projectRoot,props.quest().id)].filter((x):x is string=>typeof x==='string'),props.store.projectRoot))
-         return <box flexDirection="column" minWidth={18} flexGrow={1} flexShrink={1} border borderColor={C.line} paddingLeft={1} paddingRight={1}>
-          <text fg={C.cyan} wrapMode="word"><a href={preview().uri??artifact.uri}>▣ {artifact.name}</a></text>
+         return <box flexDirection="column" width={14} minWidth={12} maxWidth={32} flexGrow={1} flexShrink={1} border borderColor={C.line} paddingLeft={1} paddingRight={1}>
+          <text fg={C.cyan} wrapMode="none" truncate><a href={preview().uri??artifact.uri}>▣ {artifact.name}</a></text>
           <For each={preview().lines}>{line=><text fg={C.muted} wrapMode="none" truncate>{line}</text>}</For>
           <text fg={C.dim} wrapMode="none" truncate>{artifact.label??preview().kind}</text>
          </box>

@@ -24,7 +24,7 @@ test('recorded artifact paths cannot preview outside their workspace through rel
 test('image cards show measured dimensions rather than invented thumbnails',()=>{
  const root=mkdtempSync(join(tmpdir(),'quest-preview-png-'));try{
   const bytes=Buffer.alloc(24);Buffer.from([137,80,78,71,13,10,26,10]).copy(bytes);bytes.writeUInt32BE(1600,16);bytes.writeUInt32BE(900,20);writeFileSync(join(root,'capture.png'),bytes)
-  expect(artifactPreview(artifact('capture.png'),[root])).toMatchObject({kind:'Image',lines:['PNG 1600 × 900','Open image to view']})
+  expect(artifactPreview(artifact('capture.png'),[root])).toMatchObject({kind:'Image',lines:['1600×900','View image ↗']})
  }finally{rmSync(root,{recursive:true,force:true})}
 })
 

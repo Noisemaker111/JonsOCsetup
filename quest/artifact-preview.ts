@@ -19,7 +19,7 @@ export function artifactPreview(artifact:QuestArtifact,roots:string[],relativeBa
    const fd=openSync(file,'r'),bytes=Buffer.alloc(4096);let n:number
    try{n=readSync(fd,bytes,0,bytes.length,0)}finally{closeSync(fd)}
    const data=bytes.subarray(0,n),uri=pathToFileURL(file).href,extension=extname(file).toLowerCase()
-   if(extension==='.png'&&data.length>=24&&data.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))return {kind:'Image',lines:['PNG '+data.readUInt32BE(16)+' × '+data.readUInt32BE(20),'Open image to view'],uri}
+   if(extension==='.png'&&data.length>=24&&data.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))return {kind:'Image',lines:[data.readUInt32BE(16)+'×'+data.readUInt32BE(20),'View image ↗'],uri}
    if(!/\.(txt|md|log|diff|patch|ts|tsx|js|jsx|mjs|cjs|css|html|json|ya?ml|ps1|toml|xml|csv)$/.test(extension)||data.includes(0))return {kind:'File',lines:['Open recorded artifact'],uri}
    const lines=data.toString('utf8').split(/\r?\n/).filter(line=>line.trim()).slice(0,4).map(line=>redact(line,100))
    return {kind:'Text',lines:lines.length?lines:['Empty file'],uri}
