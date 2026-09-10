@@ -11,7 +11,7 @@ import { assertConfiguredModel } from "./access-policy"
  *
  * The plugin wiring lives in plugins-active/models.ts.
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { homedir } from "node:os"
 import { fileURLToPath } from "node:url"
@@ -23,9 +23,7 @@ import {
   type UsageCache,
   usageCache,
   usageAgeMs,
-  USAGE_CACHE_FILE,
   USAGE_STALE_MS,
-  startUsageCollector,
   usageWindowResetAt,
   windowCapped,
 } from "../usage/usage-lib"
@@ -157,16 +155,6 @@ const QUOTA_AUTHORITY_REQUIRED = new Set(["opencode-go"])
  */
 export const QUOTA_LANE = { lane: "go-quota", providerID: "opencode-go" } as const
 
-/**
- * The one line to show when the subscription-backed lane is spent, or nothing
- * when it is not. Three callers each derived this themselves from a cap probe
- * plus a message builder, which is why the wording drifted between them.
- */
-export function quotaLaneNotice(usage?: UsageCache): string | undefined {
-  const cap = sourceCapHit(QUOTA_LANE.providerID, usage)
-  return cap.hit ? capMessage(QUOTA_LANE.providerID, cap) : undefined
-}
-
 const XAI_NEVER_MSG = "Never use xai/* (metered). Grok = cliproxyapi/grok-4.6 (SuperGrok via CLIProxyAPI on 127.0.0.1:8317)."
 
 /**
@@ -205,46 +193,7 @@ function demeterXai(fav: Fav): Fav {
   return { providerID: "cliproxyapi", modelID: fav.modelID }
 }
 
-/** Read-modify-write apiCapHit on the opencode-go source only. Does not rebuild the cache. */
-function markGoApiCapHit(detail?: string) {
-  try {
-    const parsed = readJson(USAGE_CACHE_FILE)
-    let cache: UsageCache
-    if (parsed && typeof parsed === "object" && Array.isArray((parsed as UsageCache).sources)) {
-      cache = parsed as UsageCache
-    } else if (!existsSync(USAGE_CACHE_FILE)) {
-      cache = { updated: new Date().toISOString(), sources: [] }
-    } else {
-      console.warn("[models] usage-cache.json unreadable; not stamping apiCapHit")
-      return
-    }
-    let src = cache.sources.find((s) => s.id === "opencode-go")
-    if (!src) {
-      src = { id: "opencode-go" }
-      cache.sources.unshift(src)
-    }
-    src.apiCapHit = true
-    if (detail) src.apiCapDetail = detail.slice(0, 240)
-    cache.updated = new Date().toISOString()
-    writeFileSync(USAGE_CACHE_FILE, JSON.stringify(cache, null, 2))
-  } catch (error) {
-    console.warn("[models] failed to stamp apiCapHit on usage-cache.json", error)
-  }
-}
-
-/** Child/session 402: stamp the shared cache immediately, then force a collector run. */
-export function forceUsageCollectOnCap(detail: string) {
-  markGoApiCapHit(detail)
-  void startUsageCollector({ force: true })
-    .then(() => {
-      if (!sourceCapHit("opencode-go").hit) markGoApiCapHit(detail)
-    })
-    .catch((error) => {
-      console.warn("[models] force usage collect after provider error failed", error)
-    })
-}
-
-// ---- shared live-session view (self-contained; spawns tasks-status.ts) ----
+// ---- model profile helpers ----
 function slug(value: string) {
   return value
     .toLowerCase()

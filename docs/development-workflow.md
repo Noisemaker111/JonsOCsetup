@@ -141,3 +141,8 @@ standalone hosts do not publish the supporting-host registration it requires.
 The obsolete bridge, its generated harness config and CLI adapter were removed. Worker status uses live
 host events and permissions, clears live observations on disconnect, and keeps
 missing or uncertain ownership intact. Historical ledgers are never liveness proof.
+
+Session navigation uses the native `/sessions` picker (keyboard and mouse), including
+its current-host status and project filtering. The old `/running` database scanner
+and duplicate picker are removed. Provider quota comes from the usage/account
+observers; orchestration never stamps another provider capped from event text.

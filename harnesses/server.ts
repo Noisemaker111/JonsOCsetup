@@ -42,8 +42,8 @@ import {
 // Routing, quota and the roster now live in model-routing.ts. Re-exported so
 // existing importers keep one entry point while the plugin split lands.
 import {
-  favoritesFromJsonc, favoritesFromProfiles, fallbackFavoritesFromAgents, forceUsageCollectOnCap,
-  QUOTA_LANE, quotaLaneNotice, mergeFavs, nextHealthyFallback, pickModel,
+  favoritesFromJsonc, favoritesFromProfiles, fallbackFavoritesFromAgents,
+  QUOTA_LANE, mergeFavs, nextHealthyFallback, pickModel,
   readFavorites, spawnLane, systemPart, enforceSessionModelChange,
 } from "../models/model-routing"
 export * from "../models/model-routing"
