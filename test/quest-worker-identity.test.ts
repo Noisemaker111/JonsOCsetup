@@ -49,7 +49,7 @@ test('workspace snapshots preserve tracked ignored files without importing ignor
  const root=mkdtempSync(join(tmpdir(),'quest-snapshot-')),repo=join(root,'source')
  mkdirSync(repo);const git=(...args:string[])=>{const result=spawnSync('git',['-C',repo,...args],{encoding:'utf8',windowsHide:true});if(result.status!==0)throw Error(result.stderr);return result.stdout}
  try{
-  git('init');git('config','user.name','Snapshot Test');git('config','user.email','snapshot@example.invalid')
+  git('init');git('config','core.autocrlf','false');git('config','user.name','Snapshot Test');git('config','user.email','snapshot@example.invalid')
   writeFileSync(join(repo,'.gitignore'),'ignored/\n.claude/\n');mkdirSync(join(repo,'ignored'));writeFileSync(join(repo,'ignored','tracked.txt'),'original\n');writeFileSync(join(repo,'removed.txt'),'remove me\n')
   git('add','.gitignore','removed.txt');git('add','--force','ignored/tracked.txt');git('commit','-m','initial')
   writeFileSync(join(repo,'ignored','tracked.txt'),'updated\n');writeFileSync(join(repo,'ignored','private.txt'),'must stay outside snapshot\n');writeFileSync(join(repo,'new.txt'),'new content\n');git('rm','removed.txt')
