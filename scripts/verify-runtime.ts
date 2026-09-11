@@ -18,7 +18,9 @@ mkdirSync(project, { recursive: true })
 const database = process.env.OPENCODE_DB ?? join(homedir(), ".local/share/opencode/opencode.db")
 const marker = `Runtime acceptance ${Date.now()}`
 new QuestStore(project).create({ id: "01j00000000000000000000999", title: marker, objective: "Isolated runtime verification fixture", kind: "investigation", project: projectIdentity(project) })
-const env = { ...process.env, OPENCODE_QUEST_ROOT: project, OPENCODE_ORCHESTRATION_LEDGER: join(run, "orchestration.jsonl"), CLAUDE_CODE_BRIDGE_PORT: String(await freePort()) }
+// OPENCODE_DB is deliberately the real database: this check finds the session it just started
+// by reading it back. Telemetry and state had no such reason and were writing real files.
+const env = { ...process.env, OPENCODE_QUEST_ROOT: project, OPENCODE_ORCHESTRATION_LEDGER: join(run, "orchestration.jsonl"), OPENCODE_TELEMETRY_FILE: join(run, "requests.jsonl"), XDG_STATE_HOME: join(run, "state"), CLAUDE_CODE_BRIDGE_PORT: String(await freePort()) }
 const setup = await createTestRenderer({ width: 140, height: 45 })
 const terminal = new EmbeddedTerminalRenderable(setup.renderer, { id: "runtime", width: 140, height: 45, cols: 140, rows: 45, maxScrollback: 100000 })
 setup.renderer.root.add(terminal)

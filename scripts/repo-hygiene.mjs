@@ -17,6 +17,7 @@
  * of the repository, and a property nobody checks is a property that drifts.
  */
 import { spawnSync } from "node:child_process"
+import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -57,6 +58,30 @@ for (const patch of git("ls-files", "*.patch", "*.diff")) {
     `${patch} patches only paths this repository does not track, so it can never apply:\n${list(missing)}\n` +
     "    Track the source it fixes, or delete the patch.")
 }
+
+// A harness that starts a host must redirect every real home or none of them. A partial redirect is
+// a check writing into real data, and it is indistinguishable from real work until someone reads the
+// board: eight "Trim greeting input" fixtures reached the live quest ledger from a .visual-e2e
+// sample root that way, and five scripts were still redirecting a subset when that was found.
+const HOMES = ["OPENCODE_DB", "OPENCODE_QUEST_ROOT", "OPENCODE_ORCHESTRATION_LEDGER", "OPENCODE_TELEMETRY_FILE", "XDG_STATE_HOME"]
+// verify-runtime reads the real database back to find the session it just started; that is the
+// point of the check, and it redirects everything else.
+const READS_REAL_DATABASE = new Set(["scripts/verify-runtime.ts"])
+const partial = []
+for (const file of git("ls-files", "scripts/*.ts", "scripts/*.mjs")) {
+  const text = readFileSync(resolve(root, file), "utf8")
+  // Setting the variable is what matters; a file that merely names it in prose or a README template
+  // is not a harness, and plugin-package.ts documents the name inside a generated readme.
+  const sets = home => new RegExp(`${home}\\s*[:=]`).test(text)
+  if (!sets("OPENCODE_QUEST_ROOT")) continue
+  const allowed = READS_REAL_DATABASE.has(file) ? HOMES.filter(h => h !== "OPENCODE_DB") : HOMES
+  const missing = allowed.filter(home => !sets(home))
+  if (missing.length) partial.push(`${file} redirects the quest ledger but not ${missing.join(", ")}`)
+}
+if (partial.length) failures.push(
+  `${partial.length} harness(es) redirect only some of the host's real homes:\n${list(partial)}\n` +
+  "    A check that redirects a subset writes into the rest. Redirect all of them, or add the file\n" +
+  "    to READS_REAL_DATABASE with the reason it needs a real one.")
 
 if (failures.length) {
   console.error("repo hygiene\n")
