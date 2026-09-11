@@ -32,7 +32,12 @@ canvas.renderer.root.add(terminal);terminal.focus()
 // into the evidence directory. It still starts its own session, so it never types into a
 // conversation someone already has open. See scripts/drive-isolation.ts for the table.
 const env=driveEnvironment({base:process.env,root,out,live:process.argv.includes('--live'),bridgePort:await freePort()})
-const child=spawn('node',[join(root,'scripts/opencode-runtime.mjs'),'--config-root',root,'--json',...(process.argv.includes('--auto')?['--auto']:[]),'--cwd',cwd,'--model',model,'--agent',option('--agent')??'quest-giver','--cols',String(cols),'--rows',String(rows)],{cwd:root,env,windowsHide:true,stdio:['pipe','pipe','pipe']})
+// --session opens an existing conversation instead of a new one. The Quest Giver is a single
+// registered session by design, so a drive that needs the giver's own tools has to be that session:
+// a fresh one is refused with "Continue in your existing Quest Giver" and can only chat.
+const session=option('--session')
+if(session!==undefined&&!/^ses_[A-Za-z0-9_-]+$/.test(session))throw Error('--session takes a ses_ identifier')
+const child=spawn('node',[join(root,'scripts/opencode-runtime.mjs'),'--config-root',root,'--json',...(process.argv.includes('--auto')?['--auto']:[]),'--cwd',cwd,'--model',model,'--agent',option('--agent')??'quest-giver',...(session?['--session',session]:[]),'--cols',String(cols),'--rows',String(rows)],{cwd:root,env,windowsHide:true,stdio:['pipe','pipe','pipe']})
 const send=(data:string)=>child.stdin.write(JSON.stringify({type:'write',data:Buffer.from(data).toString('base64')})+'\n')
 terminal.onData=data=>send(Buffer.from(data).toString())
 let buffer='',seen=0,busy=false,done=false,stopping=false
