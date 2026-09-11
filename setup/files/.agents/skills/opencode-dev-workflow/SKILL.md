@@ -39,3 +39,11 @@ Read the project-root MEMORY.md at the start and after context loss; maintain
 concise durable decisions and verified lessons there using ordinary file tools.
 For hub work, use C:/Users/Jk101/Projects/opencode-hub/MEMORY.md. Quests own task
 progress. These project-specific verification rules do not govern other projects.
+
+
+After merge and dev verification, leave the owned task checkout, preserve its
+review evidence outside it, then use the selected release's `worktree:cleanup
+finish --repo <main checkout> --worktree <finished checkout>`. This declares the
+owner and child processes finished. Inspect the result; retained reasons are not
+successful deletion. Never finish another session's checkout. See the development
+workflow's Worktree retirement section for the event-driven retry and retention rules.
