@@ -92,28 +92,40 @@ export function driveIdentity(input: { attaching: boolean; model?: string; agent
 /**
  * What counts as this run's work finishing.
  *
- * In a sandbox every Quest is new, so "any completed worker session" could only mean this run's. On
- * the real board it means "any worker that ever succeeded", and it fires immediately: a live drive
- * asked to dispatch a step of Quest 7f2d0f45 reported ok after 49s with zero tokens and the step
- * still pending, because a session from 2026-09-06 on that same Quest was marked completed.
+ * Two wrong answers preceded this one, both of them a guess standing in for a comparison.
  *
- * So a live condition has to name something that did not exist when the prompt was sent. Sessions
- * carry `updatedAt`; a step does not, but the `stage-state` event that set it does. A step that
- * merely moved is not a step that finished, so both halves are required.
+ * First: "some Quest has a completed worker session". In a sandbox that can only be this run's; on
+ * the real board it means any worker that ever succeeded, and it fired at once on a session from
+ * 2026-09-06. Second: pairing "some step is done" with "a stage-state event landed since the
+ * prompt". Those two need not be the same step -- a Quest with one long-finished step and one that
+ * just moved to `working` satisfies both, which is exactly how a run reported success 126s in while
+ * the step it asked for was still being worked.
+ *
+ * The comparison the guesses were approximating is simply: take a baseline when the prompt is sent,
+ * and look for a record that was not finished then and is now. No event type, no timestamp on a
+ * record that carries none.
  */
 export type QuestRecord = {
-  stages?: { status?: string }[]
-  sessions?: { state?: string; updatedAt?: string }[]
-  history?: { type?: string; at?: string }[]
+  id?: string
+  stages?: { id?: string; status?: string }[]
+  sessions?: { runID?: string; state?: string }[]
 }
 
-export function conditionMet(input: { condition: "quest-step-done" | "worker-completed"; live: boolean; promptAt: number; quests: QuestRecord[] }): boolean {
-  const since = (value: unknown) => { const at = Date.parse(String(value ?? "")); return Number.isFinite(at) && at >= input.promptAt }
-  return input.quests.some(quest => {
-    if (input.condition === "worker-completed")
-      return (quest.sessions ?? []).some(s => s.state === "completed" && (!input.live || since(s.updatedAt)))
-    const done = (quest.stages ?? []).some(s => s.status === "done")
-    if (!done) return false
-    return !input.live || (quest.history ?? []).some(e => e?.type === "stage-state" && since(e.at))
-  })
+/** Which step and worker records were already finished, keyed so a later pass can tell them apart. */
+export function finishedBaseline(quests: QuestRecord[]): Set<string> {
+  const finished = new Set<string>()
+  for (const quest of quests) {
+    for (const stage of quest.stages ?? []) if (stage.status === "done") finished.add(`${quest.id}/stage/${stage.id}`)
+    for (const session of quest.sessions ?? []) if (session.state === "completed") finished.add(`${quest.id}/run/${session.runID}`)
+  }
+  return finished
+}
+
+export function conditionMet(input: { condition: "quest-step-done" | "worker-completed"; live: boolean; baseline: Set<string>; quests: QuestRecord[] }): boolean {
+  // A sandbox starts empty, so everything present is this run's and the baseline is empty anyway;
+  // the same comparison serves both and there is no mode-specific branch to get wrong.
+  return input.quests.some(quest =>
+    input.condition === "worker-completed"
+      ? (quest.sessions ?? []).some(s => s.state === "completed" && !input.baseline.has(`${quest.id}/run/${s.runID}`))
+      : (quest.stages ?? []).some(s => s.status === "done" && !input.baseline.has(`${quest.id}/stage/${s.id}`)))
 }
