@@ -5,17 +5,22 @@
  * estimated. Composition is attributed from the stored parts -- injected instructions, prompts,
  * tool calls and tool results -- because that is the part a change can actually shrink. Estimates
  * are labelled as estimates and reconciled against the recorded totals rather than replacing them.
+ *
+ * The reading and the attribution live in context-graph/context-graph.ts, which the /context-graph
+ * TUI screen reads through as well, so the screen and this command cannot report different numbers.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import { join, resolve } from "node:path"
 import { Database } from "bun:sqlite"
+import { readSessionContexts } from "../context-graph/context-graph"
 
 const option = (name: string) => { const i = process.argv.indexOf(name); return i < 0 ? undefined : process.argv[i + 1] }
 if (process.argv.includes("--help")) {
   console.log(`bun scripts/context-audit.ts [--db <host.db>] [--session <id>] [--json] [--top <n>]
 
   Without --db, audits the newest session database under the activated dev release.
-  Reports per-turn recorded tokens and an attributed breakdown of what was sent.`)
+  Reports per-turn recorded tokens and an attributed breakdown of what was sent.
+  The same report is a live screen in the TUI: /context-graph.`)
   process.exit(0)
 }
 
@@ -39,28 +44,11 @@ function newestDatabase(): string {
 }
 
 const file = resolve(option("--db") ?? newestDatabase())
-const db = new Database(file, { readonly: true })
-const tokens = (chars: number) => Math.round(chars / 4)
 const bar = (share: number, width = 46) => "█".repeat(Math.max(share > 0 ? 1 : 0, Math.round(share * width)))
-
-/** Injected system context is shared by hash, so attribute each blob once per session that holds it. */
-const blobs = db.query("select hash,value from instruction_blob").all() as { hash: string; value: string }[]
-const states = db.query("select session_id,current_values from instruction_state").all() as { session_id: string; current_values: string }[]
-const describe = (value: string) => {
-  const text = value.startsWith('"') ? (() => { try { return JSON.parse(value) as string } catch { return value } })() : value
-  if (text.startsWith("<env>")) return "env header"
-  if (/^[A-Z][a-z]{2} [A-Z][a-z]{2} \d/.test(text)) return "date"
-  try {
-    const parsed = JSON.parse(text)
-    if (Array.isArray(parsed) && parsed[0]?.path) return "instruction files (" + parsed.length + ")"
-    if (Array.isArray(parsed) && parsed[0]?.id) return "skills catalog (" + parsed.length + ")"
-    if (parsed?.namespaces) return `tool namespaces (${parsed.shown}/${parsed.total} shown)`
-  } catch {}
-  return "instruction blob"
-}
 
 /** Spend concentrates in a few metered calls, and the same model is often already on a subscription. */
 if (process.argv.includes("--spend")) {
+  const db = new Database(file, { readonly: true })
   const perModel = new Map<string, { input: number; cost: number }>()
   for (const row of db.query("select data from session_message where type='assistant'").all() as any[]) {
     let message: any
@@ -74,6 +62,7 @@ if (process.argv.includes("--spend")) {
     seen.cost += message.cost ?? 0
     perModel.set(key, seen)
   }
+  db.close()
   const subscriptionLanes = ["opencode", "opencode-go", "openai", "grok-sub"]
   const bare = (key: string) => key.split("/").slice(1).join("/").split("/").pop() ?? key
   const owned = new Set<string>()
@@ -92,63 +81,17 @@ if (process.argv.includes("--spend")) {
   process.exit(0)
 }
 
-const sessions = db.query("select id,title,agent,cost,tokens_input,tokens_output from session_v2").all() as any[]
-const only = option("--session")
-const report: any[] = []
-
-for (const session of sessions.filter(s => !only || s.id === only)) {
-  const messages = db.query("select type,seq,data from session_message where session_id=? order by seq").all(session.id) as any[]
-  const turns: any[] = []
-  const buckets = new Map<string, number>()
-  const add = (key: string, chars: number) => buckets.set(key, (buckets.get(key) ?? 0) + chars)
-
-  const state = states.find(s => s.session_id === session.id)
-  if (state) {
-    let held: string[] = []
-    try { held = Object.values(JSON.parse(state.current_values) as Record<string, string>) } catch {}
-    for (const hash of held) {
-      const blob = blobs.find(b => b.hash === hash)
-      if (blob) add("instructions: " + describe(blob.value), blob.value.length)
-    }
-  }
-
-  for (const message of messages) {
-    const data = JSON.parse(message.data)
-    if (message.type === "user") { add("user prompts", String(data.text ?? "").length); continue }
-    const used = data.tokens ?? {}
-    if (used.input || used.cache?.read) turns.push({
-      seq: message.seq, input: used.input ?? 0, cached: used.cache?.read ?? 0,
-      output: used.output ?? 0, reasoning: used.reasoning ?? 0, cost: +(data.cost ?? 0).toFixed(5),
-    })
-    for (const part of data.content ?? []) {
-      if (part.type === "text") add("assistant text", String(part.text ?? "").length)
-      else if (part.type === "reasoning") add("assistant reasoning", String(part.text ?? "").length)
-      else if (part.type === "tool") {
-        // A tool part carries the call and its result together in state: input is what the model
-        // wrote, content is what came back. They shrink for different reasons, so split them.
-        const state = part.state ?? {}
-        const name = part.name ?? "unknown"
-        if (state.input !== undefined) add("tool call in: " + name, JSON.stringify(state.input).length)
-        if (state.content !== undefined) add("tool result: " + name, JSON.stringify(state.content).length)
-        // Stored for the TUI only. aisdk toolResultPart builds the model message from the result,
-        // never from state.metadata, so counting it as context overstates what was actually sent.
-        if (state.metadata !== undefined) add("[stored, not sent] metadata: " + name, JSON.stringify(state.metadata).length)
-      }
-      else add("part: " + part.type, JSON.stringify(part).length)
-    }
-  }
-
-  const rows = [...buckets.entries()].map(([label, chars]) => ({ label, chars, tokens: tokens(chars) })).sort((a, b) => b.chars - a.chars)
-  const storedOnly = (label: string) => label.startsWith("[stored, not sent]")
-  const estimated = rows.filter(r => !storedOnly(r.label)).reduce((n, r) => n + r.tokens, 0)
-  const stored = rows.filter(r => storedOnly(r.label)).reduce((n, r) => n + r.tokens, 0)
-  report.push({
-    session: session.id, agent: session.agent, title: String(session.title ?? "").slice(0, 60),
-    recorded: { input: session.tokens_input, output: session.tokens_output, cost: +(session.cost ?? 0).toFixed(4) },
-    coldStartTokens: turns[0]?.input ?? 0,
-    turns, attributed: rows, estimatedTokens: estimated, storedOnlyTokens: stored,
-  })
-}
+const report = readSessionContexts({ file, sessionID: option("--session") }).sessions.map(session => ({
+  session: session.sessionID,
+  agent: session.agent,
+  title: session.title.slice(0, 60),
+  recorded: session.recorded,
+  coldStartTokens: session.coldStartTokens,
+  turns: session.turns,
+  attributed: session.slices.map(slice => ({ label: slice.label, chars: slice.chars, tokens: slice.tokens })),
+  estimatedTokens: session.sentTokens,
+  storedOnlyTokens: session.storedOnlyTokens,
+}))
 
 if (process.argv.includes("--json")) { console.log(JSON.stringify(report, null, 2)); process.exit(0) }
 

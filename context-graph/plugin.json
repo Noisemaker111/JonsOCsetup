@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "name": "opencode-context-graph",
+  "description": "Where the live session's tokens went, as a TUI screen",
+  "tui": "context-graph/tui-active/context-graph.tsx",
+  "assets": [
+    "context-graph/context-graph.ts"
+  ]
+}

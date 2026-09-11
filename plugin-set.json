@@ -11,10 +11,13 @@
   "tuiEntrypoints": [
     "usage/tui-active/usage.tsx",
     "quest/tui-active/quests.tsx",
-    "composer/tui-active/composer.tsx"
+    "composer/tui-active/composer.tsx",
+    "context-graph/tui-active/context-graph.tsx"
   ],
   "entrypointOwners": {
     "composer/tui-active/composer.tsx": "composer",
+    "context-graph/tui-active/context-graph.tsx": "context-graph",
+    "tui-bootstrap/context-graph/tui.tsx": "context-graph",
     "tui-bootstrap/composer/tui.tsx": "composer",
     "project-router/server.ts": "project-router",
     "plugins-active/models.ts": "models",
@@ -84,6 +87,7 @@
     "papercut/plugin.json",
     "harnesses/plugin.json",
     "project-router/plugin.json",
-    "composer/plugin.json"
+    "composer/plugin.json",
+    "context-graph/plugin.json"
   ]
 }
