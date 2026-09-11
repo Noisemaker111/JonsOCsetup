@@ -1,6 +1,6 @@
-import {cleanupQuests} from "./cleanup"
 #!/usr/bin/env bun
 import { QuestStore } from "./store"
+import { cleanupQuests } from "./cleanup"
 import { questRoot } from "./root"
 import { generateQuestIndex, readAllQuests } from "./index"
 import { requestFingerprint } from "./privacy"
