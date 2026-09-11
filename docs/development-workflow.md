@@ -148,6 +148,14 @@ or use `ocs`. Install these PATH commands once with
 `node scripts/install-channel-shortcuts.mjs`. Both accept `--cwd <project>`. Switching launch channels does not stop existing
 terminals. Each terminal has a separate concrete launch configuration.
 
+A launch and a retirement never interleave: both take `.channels/retirement.lock`,
+which records the process that holds it. A launch reclaims that lock when the owning
+process is gone, or when the hold passes fifteen minutes -- far past any real pass --
+and says on stderr what it took and why, keeping the removed record in
+`.channels/lock-reclaims`. A hold that is live and recent is never taken; retry
+instead. Release-use leases under `.channels/release-users` are cleared by retirement
+once their release root is gone.
+
 The installed shortcuts prepare the selected configuration, then launch the native
 host directly in the existing console. They do not run the PTY supervisor or
 forward terminal input/output. Configuration selection finishes before host launch.
