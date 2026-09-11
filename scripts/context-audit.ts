@@ -97,19 +97,23 @@ for (const session of sessions.filter(s => !only || s.id === only)) {
         const name = part.name ?? "unknown"
         if (state.input !== undefined) add("tool call in: " + name, JSON.stringify(state.input).length)
         if (state.content !== undefined) add("tool result: " + name, JSON.stringify(state.content).length)
-        if (state.metadata !== undefined) add("tool metadata: " + name, JSON.stringify(state.metadata).length)
+        // Stored for the TUI only. aisdk toolResultPart builds the model message from the result,
+        // never from state.metadata, so counting it as context overstates what was actually sent.
+        if (state.metadata !== undefined) add("[stored, not sent] metadata: " + name, JSON.stringify(state.metadata).length)
       }
       else add("part: " + part.type, JSON.stringify(part).length)
     }
   }
 
   const rows = [...buckets.entries()].map(([label, chars]) => ({ label, chars, tokens: tokens(chars) })).sort((a, b) => b.chars - a.chars)
-  const estimated = rows.reduce((n, r) => n + r.tokens, 0)
+  const storedOnly = (label: string) => label.startsWith("[stored, not sent]")
+  const estimated = rows.filter(r => !storedOnly(r.label)).reduce((n, r) => n + r.tokens, 0)
+  const stored = rows.filter(r => storedOnly(r.label)).reduce((n, r) => n + r.tokens, 0)
   report.push({
     session: session.id, agent: session.agent, title: String(session.title ?? "").slice(0, 60),
     recorded: { input: session.tokens_input, output: session.tokens_output, cost: +(session.cost ?? 0).toFixed(4) },
     coldStartTokens: turns[0]?.input ?? 0,
-    turns, attributed: rows, estimatedTokens: estimated,
+    turns, attributed: rows, estimatedTokens: estimated, storedOnlyTokens: stored,
   })
 }
 
@@ -126,7 +130,7 @@ for (const entry of report) {
     if (entry.turns.length > 10) console.log(`    ... ${entry.turns.length - 10} more turns`)
   }
   const total = entry.estimatedTokens || 1
-  console.log(`  attributed ~${entry.estimatedTokens} tok:`)
+  console.log(`  sent ~${entry.estimatedTokens} tok` + (entry.storedOnlyTokens ? ` (plus ${entry.storedOnlyTokens} tok stored for the TUI, never sent)` : "") + `:`)
   for (const row of entry.attributed.slice(0, limit)) {
     const share = row.tokens / total
     console.log(`    ${String(row.tokens).padStart(6)} tok ${String(Math.round(share * 100)).padStart(3)}%  ${bar(share)}  ${row.label}`)
