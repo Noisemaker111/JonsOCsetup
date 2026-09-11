@@ -19,7 +19,11 @@ const policy=JSON.parse(readFileSync(join(root,'models/dispatch-policy.json'),'u
 // giver model, fails the whole gate when that account is spent even though other routes are free.
 const snapshot=await getAccountUsage()
 const usable=(r:any)=>snapshot.accounts.some((a:any)=>a.id===r.accountID&&a.state==='available')
-const ordered=[policy.request.primaryRouteID,...(policy.request.fallback?.routeIDs??[]),...(policy.request.allowedRouteIDs??[])]
+// Verify on the lane the channel actually ships on when it has capacity: a route can hold quota
+// and still be unusable here, and the activated model is the one already proven against this host.
+const activated=(()=>{try{const c=JSON.parse(readFileSync(join(root,"..","..","dev.json"),"utf8"));return String(c.model??"")}catch{return ""}})()
+const activatedID=policy.routes.find((r:any)=>activated&&activated.startsWith(r.providerID+"/"+r.modelID))?.id
+const ordered=[activatedID,policy.request.primaryRouteID,...(policy.request.fallback?.routeIDs??[]),...(policy.request.allowedRouteIDs??[])].filter(Boolean)
 const route=ordered.map((id:string)=>policy.routes.find((r:any)=>r.id===id)).find((r:any)=>r&&usable(r))
 if(!route)throw Error('No authorized route has available capacity; this check cannot produce real dispatch evidence')
 const holds=()=>policy.billing[route.accountID]==='subscription'&&policy.request.subscriptionConcurrency==='unlimited'?[]:JSON.parse(readFileSync(reservations,'utf8')).reservations.filter((r:any)=>r.accountID===route.accountID&&r.exclusive&&['active','unknown'].includes(r.state))
