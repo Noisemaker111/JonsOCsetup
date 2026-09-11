@@ -13,7 +13,7 @@ import { spawn, spawnSync } from "node:child_process"
 import { existsSync, readFileSync, appendFileSync, readdirSync, rmSync, statSync } from "node:fs"
 import { join, resolve } from "node:path"
 import { Database } from "bun:sqlite"
-import { driveSession, conditionMet, finishedBaseline, type QuestRecord } from "./drive-isolation"
+import { driveSession, conditionMet, finishedBaseline, knownRuns, inFlightWorkers, type QuestRecord } from "./drive-isolation"
 
 type Condition = "reply" | "quest-step-done" | "worker-completed"
 const option = (name: string) => { const i = process.argv.indexOf(name); return i < 0 ? undefined : process.argv[i + 1] }
@@ -33,6 +33,8 @@ if (flag("--help") || (!option("--ask") && !flag("--test-change"))) {
   --keep               Keep the evidence directory and any worker worktree.
   --deny-permissions   Do not auto-approve permission prompts; capture and fail instead.
   --allow-expensive    Permit a route over $1/Mtok input; only for checks about that model.
+  --worker-grace <s>   How long to hold the host open for workers this run started. Default 1800.
+  --no-worker-grace    Stop as soon as the wait ends, stranding any worker still running.
   --live               Drive the real ledger and session database instead of a sandbox. Use this
                        when another harness wants the Quest Giver to do actual work, not a check.
                        Attaches to the registered Quest Giver session, because a new one cannot
@@ -238,6 +240,8 @@ const records = (): QuestRecord[] => allQuests().map(q => ({
 // this run caused; see finishedBaseline in scripts/drive-isolation.ts for the two wrong answers
 // this replaces.
 const baseline = finishedBaseline(records())
+// Every run the board already carried, so a worker this drive caused is recognisable later.
+const runsBefore = knownRuns(records())
 const satisfied = () => {
   if (condition === "reply") return sessionRows().some(s => s.agent === "quest-giver" && (s.tokens_output ?? 0) > 0 && s.idle_outcome && (!live || (s.time_updated ?? 0) >= promptAt))
   return conditionMet({ condition, live, baseline, quests: records() })
@@ -290,6 +294,34 @@ const report: Record<string, unknown> = {
   quests: quests().map(q => ({ title: field(q, "title")?.replace(/"/g, ""), state: field(q, "state")?.replace(/"/g, ""), steps: (parse(q, "stages") ?? []).map((s: any) => `${s.id}:${s.status}`) })),
   evidence: out,
 }
+
+/**
+ * Do not stop while work this drive caused is still running.
+ *
+ * The host takes its workers with it, so an unconditional stop strands whatever the giver had just
+ * launched. That is not theoretical: two workers on the OVH VPS Quest were killed this way, one of
+ * them after reading 502,165 input tokens of real investigation, and none of it reached the step.
+ *
+ * The wait is bounded and the bound is reported. A drive that gives up still says which workers it
+ * left running rather than stopping quietly and leaving a step reading "working" over nothing.
+ */
+const workerGraceMs = Number(option("--worker-grace") ?? 1800) * 1000
+let stranded: ReturnType<typeof inFlightWorkers> = []
+if (!flag("--no-worker-grace")) {
+  const graceUntil = Date.now() + workerGraceMs
+  for (;;) {
+    stranded = inFlightWorkers({ quests: records(), known: runsBefore })
+    if (!stranded.length || childExit !== undefined) break
+    if (Date.now() > graceUntil) {
+      log(`giving up on ${stranded.length} worker(s) still running after ${workerGraceMs / 1000}s: ` +
+        stranded.map(w => `${w.runID} (${w.state})`).join(", "))
+      break
+    }
+    log(`holding the host open for ${stranded.length} worker(s) this run started: ` + stranded.map(w => `${w.runID} (${w.state})`).join(", "))
+    await sleep(10000)
+  }
+}
+report.workersStillRunning = stranded
 
 send({ action: "stop" })
 await until("driver shutdown", () => childExit !== undefined, 60000).catch(() => undefined)
