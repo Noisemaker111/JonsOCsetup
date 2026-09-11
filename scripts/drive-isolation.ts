@@ -67,3 +67,24 @@ export function driveSession(input: { live: boolean; pinned?: string; newSession
   const row = input.registered
   return row?.state === "bound" && typeof row.sessionID === "string" && SESSION_ID.test(row.sessionID) ? row.sessionID : undefined
 }
+
+/**
+ * Which model and agent a drive imposes on the conversation it opens.
+ *
+ * A new session needs both chosen for it. An existing one already has them, and they belong to
+ * whoever owns that conversation. Attaching to the registered Quest Giver with the channel's model
+ * rewrote its lane; the forced turn then failed on an exhausted account, the host recovered by
+ * switching to the replacement model's default agent, Build, and `session_v2.agent` recorded that --
+ * which made the single registered giver fail its own eligibility check and left every quest tool
+ * answering "The user giver must be a verified root Quest Giver".
+ */
+export function driveIdentity(input: { attaching: boolean; model?: string; agent?: string; chose: (flag: string) => boolean }): string[] {
+  if (!input.attaching) {
+    if (!input.model) throw new Error("Required: --model")
+    return ["--model", input.model, "--agent", input.agent ?? "quest-giver"]
+  }
+  return [
+    ...(input.chose("--model") && input.model ? ["--model", input.model] : []),
+    ...(input.chose("--agent") && input.agent ? ["--agent", input.agent] : []),
+  ]
+}

@@ -7,7 +7,7 @@ import {spawn} from 'node:child_process'
 import {mkdirSync,readFileSync,writeFileSync,appendFileSync,existsSync} from 'node:fs'
 import {join,resolve} from 'node:path'
 import {freePort} from './plugin-deploy'
-import {driveEnvironment} from './drive-isolation'
+import {driveEnvironment,driveIdentity} from './drive-isolation'
 
 const option=(name:string)=>{const i=process.argv.indexOf(name);return i<0?undefined:process.argv[i+1]}
 if(process.argv.includes('--help')){
@@ -15,7 +15,9 @@ if(process.argv.includes('--help')){
  console.log('Append one JSON command per line to commands.jsonl: paste {text}; key {name,ctrl?,shift?,meta?}; click {x,y,button?}; scroll {x,y,direction}; capture {name}; stop. Coordinates are 1-based terminal cells. Paste does not submit; send key name=return separately. Captures render actual terminal output, never app source.')
  process.exit(0)
 }
-for(const key of ['--config-root','--cwd','--model','--out'])if(!option(key))throw Error('Required: '+key)
+// A model is required to start a conversation and meaningless to impose on one that exists.
+for(const key of ['--config-root','--cwd','--out'])if(!option(key))throw Error('Required: '+key)
+if(!option('--model')&&!option('--session'))throw Error('Required: --model')
 const root=resolve(option('--config-root')!),cwd=resolve(option('--cwd')!),out=resolve(option('--out')!),model=option('--model')!
 if(existsSync(out))throw Error('Choose a new evidence directory; existing sessions and captures are preserved')
 const cols=Number(option('--cols')??140),rows=Number(option('--rows')??48)
@@ -37,7 +39,18 @@ const env=driveEnvironment({base:process.env,root,out,live:process.argv.includes
 // a fresh one is refused with "Continue in your existing Quest Giver" and can only chat.
 const session=option('--session')
 if(session!==undefined&&!/^ses_[A-Za-z0-9_-]+$/.test(session))throw Error('--session takes a ses_ identifier')
-const child=spawn('node',[join(root,'scripts/opencode-runtime.mjs'),'--config-root',root,'--json',...(process.argv.includes('--auto')?['--auto']:[]),'--cwd',cwd,'--model',model,'--agent',option('--agent')??'quest-giver',...(session?['--session',session]:[]),'--cols',String(cols),'--rows',String(rows)],{cwd:root,env,windowsHide:true,stdio:['pipe','pipe','pipe']})
+/**
+ * A new session needs a model and an agent chosen for it. An existing one already has both, and
+ * they are the owner's, not the driver's: attaching to Jon's registered Quest Giver with --model and
+ * --agent rewrote that conversation's lane, and when the forced turn failed on an exhausted account
+ * the host recovered by switching the session to the replacement model's default agent, Build --
+ * which made the single registered giver ineligible for every quest tool it owns.
+ *
+ * So a drive that opens an existing conversation carries neither, unless the caller passed them
+ * itself and therefore means to change that session.
+ */
+const identity=driveIdentity({attaching:!!session,model:option('--model'),agent:option('--agent'),chose:name=>process.argv.includes(name)})
+const child=spawn('node',[join(root,'scripts/opencode-runtime.mjs'),'--config-root',root,'--json',...(process.argv.includes('--auto')?['--auto']:[]),'--cwd',cwd,...identity,...(session?['--session',session]:[]),'--cols',String(cols),'--rows',String(rows)],{cwd:root,env,windowsHide:true,stdio:['pipe','pipe','pipe']})
 const send=(data:string)=>child.stdin.write(JSON.stringify({type:'write',data:Buffer.from(data).toString('base64')})+'\n')
 terminal.onData=data=>send(Buffer.from(data).toString())
 let buffer='',seen=0,busy=false,done=false,stopping=false
