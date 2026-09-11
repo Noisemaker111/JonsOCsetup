@@ -157,9 +157,17 @@ instead. Release-use leases under `.channels/release-users` are cleared by retir
 once their release root is gone.
 
 The installed shortcuts prepare the selected configuration, then launch the native
-host directly in the existing console. They do not run the PTY supervisor or
-forward terminal input/output. Configuration selection finishes before host launch.
-The managed runtime remains an explicit automation harness, not an interactive shortcut.
+host directly in the existing console. Configuration selection finishes before host launch.
+
+`runtime-channel start` has the same property. It launches attached: the supervisor
+runs in the shell's own node process and the host inherits that console, so the app
+reads the real terminal size, sees every resize, uses the terminal's own `TERM`, and
+paints to the screen directly. The supervisor never touches stdin, and the console
+interrupt belongs to the host. Only `--json` keeps the relayed pty, where output
+becomes transcript events and input arrives as JSON writes; that is the mode
+`scripts/drive-opencode.ts` and the verification scripts drive. Both modes build the
+same launch root, pin the same generation, set the same `OPENCODE_*` environment,
+hold the same release lease and write the same load receipt.
 
 ### Hub editing source
 
