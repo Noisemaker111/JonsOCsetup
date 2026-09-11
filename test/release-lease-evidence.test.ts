@@ -29,7 +29,7 @@ function stage(lease:{pid:number;startedAt:string}){
 const retire=(home:string,env:Record<string,string>={})=>{
  const run=spawnSync(process.execPath,['-e',`import(${JSON.stringify(script)}).then(m=>console.log(JSON.stringify(m.retireReleases(${JSON.stringify(home)}))))`],
   {env:{...process.env,HOME:home,USERPROFILE:home,...env},encoding:'utf8',windowsHide:true})
- return JSON.parse(run.stdout||'[]')
+ try{return JSON.parse(run.stdout)}catch{throw Error(`retireReleases did not report: status ${run.status} ${run.stderr||run.error?.message||'no output'}`)}
 }
 const leaseOf=(file:string)=>JSON.parse(readFileSync(file,'utf8'))
 /** A pid that is provably gone: the process is waited for before its number is used. */
@@ -85,13 +85,12 @@ test('a release lease is closed only when the machine shows nothing that launch 
    expect(leaseOf(file).endedBy.judged.join(' ')).toContain('the number was handed on')
   }
 
-  // 4. Refused, not assumed: with no process listing there is no evidence either way, and
-  //    "nothing matched" must never be reached by never looking.
+  // 4. Refused, not assumed: a lease that cannot name what it owns is not evidence of absence.
+  //    Nothing on the machine can be matched against it, so it stays open and says why.
   {
-   const {home,root,file}=stage({pid:deadPid(),startedAt:new Date(Date.now()-3600_000).toISOString()});homes.push(home)
-   const missing=process.platform==='win32'?{SystemRoot:join(home,'no-such-windows')}:{PATH:join(home,'no-such-bin')}
-   const blind=reason(retire(home,missing),root)
-   expect(blind).toContain('could not be listed')
+   const {home,root,file}=stage({pid:0,startedAt:'whenever'});homes.push(home)
+   const blind=reason(retire(home),root)
+   expect(blind).toContain('names no usable owner')
    expect(leaseOf(file).endedAt).toBeUndefined()
   }
 
