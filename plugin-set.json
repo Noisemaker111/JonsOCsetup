@@ -12,12 +12,15 @@
     "usage/tui-active/usage.tsx",
     "quest/tui-active/quests.tsx",
     "composer/tui-active/composer.tsx",
-    "context-graph/tui-active/context-graph.tsx"
+    "context-graph/tui-active/context-graph.tsx",
+    "duration-graph/tui-active/duration-graph.tsx"
   ],
   "entrypointOwners": {
     "composer/tui-active/composer.tsx": "composer",
     "context-graph/tui-active/context-graph.tsx": "context-graph",
     "tui-bootstrap/context-graph/tui.tsx": "context-graph",
+    "duration-graph/tui-active/duration-graph.tsx": "duration-graph",
+    "tui-bootstrap/duration-graph/tui.tsx": "duration-graph",
     "tui-bootstrap/composer/tui.tsx": "composer",
     "project-router/server.ts": "project-router",
     "plugins-active/models.ts": "models",
@@ -66,7 +69,8 @@
     "usage/benchmark-evaluation.ts",
     "quest/worker-observation.mjs",
     "quest/giver-public.ts",
-    "quest/giver-registry.mjs"
+    "quest/giver-registry.mjs",
+    "context-graph/context-graph.ts"
   ],
   "_helperComment": "Imported by a listed entrypoint, not loaded directly by the host. claude-code-session and harness-run are started from favorite-router's isolated component list.",
   "helpersOutsideDiscovery": [
@@ -88,6 +92,7 @@
     "harnesses/plugin.json",
     "project-router/plugin.json",
     "composer/plugin.json",
-    "context-graph/plugin.json"
+    "context-graph/plugin.json",
+    "duration-graph/plugin.json"
   ]
 }
