@@ -1,4 +1,9 @@
 import { test, expect } from "bun:test"
+import { join } from "node:path"
+// Derivation reads the user's installed access policy, and fails closed to no candidates when it
+// cannot. Point it at this repository's own policy so the check is about the veto rules and not
+// about whose home directory the checkout happens to sit in.
+process.env.OPENCODE_ACCESS_POLICY = join(import.meta.dir, "..", "models", "access-policy.json")
 import { readBenchmarkTable } from "../models/benchmark-table"
 import { deriveBenchmarkRoutes } from "../models/live-routes"
 import { planRoutes, type Account, type Route } from "../models/route-planner"
