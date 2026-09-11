@@ -1,10 +1,9 @@
 import {singleUserGiver,selectGiverProject,succeedUserGiver} from '../quest/giver-public'
 import { define } from '@opencode-ai/plugin/v2/promise'
-import { routerQuestInventory, routerWorker, routerReturnSources } from '../quest/router-public'
+import { routerQuestInventory, routerWorker } from '../quest/router-public'
 import { createGoalFacade } from '../quest/goal-public'
 import { DiscoveryHost, RouterError, redact } from './host'
 import { emptySelection, resolveTargets, verifyTarget, revalidate, instructions, targetKey, type Selection, type Target } from './resolution'
-import { RouteReturns } from './returns'
 import { Onboarding } from './onboarding'
 import { routeFeedback } from '../quest/route-public'
 import {RouterMemory} from './memory'
@@ -18,7 +17,6 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
   const state = (id:string)=>memory.selection(id)
   const save = (id: string, selection: Selection) => ctx.storage.set('selection/' + id, selection)
   const worker = (id: string) => routerWorker(id).length > 0
-  const returns=new RouteReturns(ctx.storage,ctx.session,id=>discovery.messages(id))
   const goals = createGoalFacade(ctx.session)
   const known = ()=>memory.known()
   const register = (targets:Target[])=>memory.register(targets)
@@ -114,18 +112,14 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
     await ctx.session.synthetic({ sessionID, text: JSON.stringify(result) })
   } }))
   await ctx.session.hook?.('prompt',async(event:any)=>{if(event.metadata?.projectRouterGoal!==true&&event.metadata?.projectRouterReturn!==true&&event.metadata?.questWorkerReturn!==true)await goals.steer(event.sessionID)})
-  const returnTimer=setInterval(()=>void returns.tick().catch(error=>console.error('[project-router] return check failed',error)),5000);returnTimer.unref()
   const abort=new AbortController()
   if(ctx.event?.subscribe)void(async()=>{try{const stream=await ctx.event.subscribe({signal:abort.signal});goals.trigger('live');for await(const event of stream){
     if(!/^session\.execution\.(succeeded|failed|interrupted)$/.test(event.type))continue
     const data=event.data??event.properties??{},id=event.id??data.executionID
     if(typeof data.sessionID==='string'&&typeof id==='string'){
       await goals.event(data.sessionID,id,event.type==='session.execution.succeeded')
-      try{await returns.event(data.sessionID,id,event.type.slice('session.execution.'.length))
-      for(const source of routerReturnSources(data.sessionID))await returns.event(source.sessionID,id,event.type.slice('session.execution.'.length),source.detail)
-      }catch(error){console.error('[project-router] return notification failed',error)}
     }
   }goals.trigger('ended')}catch{goals.trigger('failed')}})()
-  return () => {abort.abort();clearInterval(returnTimer);goals.dispose()}
+  return () => {abort.abort();goals.dispose()}
 }
 export default define({ id: 'project-router', setup: installProjectRouter })
