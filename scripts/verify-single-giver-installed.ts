@@ -12,11 +12,20 @@ import {join,resolve} from 'node:path'
 import {QuestStore} from '../quest/store'
 import {projectIdentity} from '../quest/project'
 import {freePort} from './plugin-deploy'
+import {getAccountUsage} from '../usage/account-api'
 const root=resolve(process.argv[2]),reservations=resolve(process.argv[3]),output=join(root,'.visual-e2e','installed-single-giver-'+Date.now())
-const policy=JSON.parse(readFileSync(join(root,'models/dispatch-policy.json'),'utf8')),route=policy.routes.find((r:any)=>r.id===policy.request.primaryRouteID)
+const policy=JSON.parse(readFileSync(join(root,'models/dispatch-policy.json'),'utf8'))
+// The check must run on a lane that has capacity. Pinning the primary route, or a hardcoded
+// giver model, fails the whole gate when that account is spent even though other routes are free.
+const snapshot=await getAccountUsage()
+const usable=(r:any)=>snapshot.accounts.some((a:any)=>a.id===r.accountID&&a.state==='available')
+const ordered=[policy.request.primaryRouteID,...(policy.request.fallback?.routeIDs??[]),...(policy.request.allowedRouteIDs??[])]
+const route=ordered.map((id:string)=>policy.routes.find((r:any)=>r.id===id)).find((r:any)=>r&&usable(r))
+if(!route)throw Error('No authorized route has available capacity; this check cannot produce real dispatch evidence')
 const holds=()=>policy.billing[route.accountID]==='subscription'&&policy.request.subscriptionConcurrency==='unlimited'?[]:JSON.parse(readFileSync(reservations,'utf8')).reservations.filter((r:any)=>r.accountID===route.accountID&&r.exclusive&&['active','unknown'].includes(r.state))
 if(holds().length)throw Error('Existing uncertain account ownership blocks this successful dispatch check; inspect it first')
-const project=projectIdentity(root),model='cliproxyapi/gpt-5.6-luna#medium',workerModel=route.providerID+'/'+route.modelID+'#'+route.reasoning
+const workerModel=route.providerID+'/'+route.modelID+'#'+route.reasoning
+const project=projectIdentity(root),model=process.env.OPENCODE_VERIFY_GIVER_MODEL??workerModel
 const sourceCommit=JSON.parse(readFileSync(join(root,'plugin-activation.json'),'utf8')).evidence.sourceCommit
 mkdirSync(output,{recursive:true});const report:any={ok:false,scope:'Real configured worker dispatch, persisted step and terminal outcome, automatic giver return, native worker navigation',root,sourceCommit,model,workerModel,runs:[]}
 const sleep=(ms:number)=>new Promise(r=>setTimeout(r,ms))
