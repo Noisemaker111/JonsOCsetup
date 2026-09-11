@@ -37,6 +37,19 @@ if (flag("--help") || (!option("--ask") && !flag("--test-change"))) {
   process.exit(0)
 }
 
+/**
+ * A drive is a check by default, so the host gets its own database and ledger and the real data
+ * cannot be touched. --live keeps the host's real homes instead, for the other case: another
+ * harness asking the Quest Giver to do actual work on the actual board.
+ *
+ * --test-change writes an edit and then deletes the worker worktrees its quests name. On the real
+ * ledger those worktrees are other sessions' work, so the two never combine. This is checked before
+ * anything is resolved, because an incompatible pair of flags is wrong on a machine with no release
+ * activated just as surely as on one with a release running.
+ */
+const live = flag("--live")
+if (live && flag("--test-change")) throw new Error("--test-change writes and then deletes; it never runs against the real ledger. Drop --live or drop --test-change.")
+
 const started = Date.now()
 const log = (...parts: unknown[]) => console.error(...parts)
 const configRoot = resolve(import.meta.dir, "..")
@@ -89,17 +102,10 @@ const ask = option("--ask") ?? `Create one Quest for this project and dispatch O
 const commands = join(out, "commands.jsonl")
 const send = (value: unknown) => appendFileSync(commands, JSON.stringify(value) + "\n")
 
-/**
- * A drive is a check by default, so the host gets its own database and ledger and the real data
- * cannot be touched. That isolation is also why a drive could not do real work: the Quest Giver
- * opened onto an empty ledger, could not find the Quest it was asked about, said so, and created a
- * duplicate in the sandbox instead. --live keeps the host's real homes so the giver sees the actual
- * board. It still starts its own session, so it never types into a conversation already open.
- */
-const live = flag("--live")
-// --test-change deletes the worker worktrees it finds and then the evidence directory. Pointed at
-// the real ledger those worktrees belong to other people's work, so the two modes never combine.
-if (live && flag("--test-change")) throw new Error("--test-change writes and then deletes; it never runs against the real ledger. Drop --live or drop --test-change.")
+// Isolation is why a drive could not do real work: asked to dispatch a step of an existing Quest,
+// the giver opened onto an empty ledger, said the Quest did not exist, and created a duplicate in
+// the sandbox instead. The host still starts its own session either way, so a live drive never
+// types into a conversation already open. See scripts/drive-isolation.ts for what each mode sets.
 const child = spawn("bun", [join(release, "scripts", "drive-opencode.ts"), "--config-root", release, "--cwd", cwd,
   "--model", model, "--out", out, "--cols", "200", "--rows", "60", ...(live ? ["--live"] : [])], { cwd: release, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
 let childExit: number | undefined
