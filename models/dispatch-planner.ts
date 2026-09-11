@@ -5,6 +5,7 @@ import { readCalibrations,accountRegime,updateBurnControls,readQuotaObservations
 import { assertConfiguredModel } from "./access-policy"
 import { accountsForRoute, relevantAccountWindows } from "../usage/account-api"
 import { readFileSync } from "node:fs"
+import { homedir } from "node:os"
 import type { AccountSnapshot } from "../usage/account-types"
 import { getAccountUsage, ACCOUNT_USAGE_FILE } from "../usage/account-api"
 import { RouteReservations } from "./route-reservations"
@@ -42,6 +43,20 @@ export function resolveDispatchSelector(policy: DispatchPolicy, selector: string
  if(!reasoning)return {code:'REASONING_REQUIRED',candidates}
  return {code:'ROUTE_CONFIGURED',candidates,route:{id:'chosen-'+providerID+'-'+modelID+'-'+reasoning,accountID:linked[0].id,providerID,modelID,harness:'native',agent:'worker',reasoning,serviceTier:'default',verified:true,admission:'configured-choice',evidence:[],quotaPerTask:{}}}
 }
+/** A route that answered an error when probed is not a candidate, however much quota it holds. */
+function unusableRoutes(maxAgeMs = 6 * 60 * 60 * 1000, now = Date.now()): Map<string, string> {
+  const file = process.env.OPENCODE_ROUTE_HEALTH ?? join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "opencode", "route-health.json")
+  const found = new Map<string, string>()
+  try {
+    const health = JSON.parse(readFileSync(file, "utf8"))
+    const at = Date.parse(health?.at)
+    // Stale health is not evidence of breakage; a route recovers without anyone rewriting the file.
+    if (!Number.isFinite(at) || now - at > maxAgeMs) return found
+    for (const row of health.results ?? []) if (row?.state === "unusable" && row.routeID) found.set(row.routeID, String(row.reason ?? "probe failed"))
+  } catch {}
+  return found
+}
+
 /** User policy supplies routes and thresholds; live balances replace offline snapshots. */
 export async function reserveDispatch(input:{runID:string;model?:string;policyFile:string;reservationFile:string;now?:number},loadUsage:typeof getAccountUsage=getAccountUsage) {
  let policy:DispatchPolicy
@@ -57,6 +72,8 @@ export async function reserveDispatch(input:{runID:string;model?:string;policyFi
   if(!policy.routes.some(r=>r.id===explicitRouteID))policy.routes=[...policy.routes,result.route]
   if(!(policy.request.allowedRouteIDs??[]).includes(explicitRouteID))policy.request={...policy.request,allowedRouteIDs:[...(policy.request.allowedRouteIDs??[]),explicitRouteID]}
  }
+ const unusable=unusableRoutes()
+ for(const route of policy.routes){const probed=unusable.get(route.id);if(probed){route.verified=false;route.outcomeIssue={task:policy.request.task,reason:"Probed unusable: "+probed.slice(0,160)}}}
  for(const route of policy.routes){if(route.admission==="configured-choice")assertConfiguredModel({providerID:route.providerID,id:route.modelID});const linked=accountsForRoute(snapshot,route.providerID,route.modelID);if(linked.length!==1||linked[0].id!==route.accountID)route.verified=false}
  const pacing=updateBurnControls(snapshot.accounts,readQuotaObservations(ACCOUNT_USAGE_FILE+".observations").observations,now)
  const accounts:PlannerInput["accounts"]=snapshot.accounts.filter(a=>policy.routes.some(r=>r.accountID===a.id)).map(a=>({id:a.id,pacing:pacing.find(p=>p.accountID===a.id),billing:policy.billing[a.id],authenticated:a.state!=="auth-required"&&a.connections.length>0,observedAt:a.observedAt??"",capacity:a.state==="available"?"available":a.state==="exhausted"?"exhausted":"unknown",windows:a.windows.filter(w=>(w.scope==="shared"||w.scope==="model")&&!(w.state==="available"&&(w.remainingPercent==null||!w.resetAt))).map(w=>({id:w.id,...(w.scope==="model"?{routeIDs:policy.routes.filter(r=>r.accountID===a.id&&relevantAccountWindows(a,r.modelID).includes(w)).map(r=>r.id)}:{}),remaining:w.state==="unknown"?NaN:w.state==="exhausted"?0:w.remainingPercent??NaN,reserved:0,resetAt:w.resetAt??"",periodSeconds:w.durationSeconds??undefined}))}))

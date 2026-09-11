@@ -1,4 +1,4 @@
-import {singleUserGiver,selectGiverProject} from '../quest/giver-public'
+import {singleUserGiver,selectGiverProject,succeedUserGiver} from '../quest/giver-public'
 import { define } from '@opencode-ai/plugin/v2/promise'
 import { routerQuestInventory, routerWorker, routerReturnSources } from '../quest/router-public'
 import { createGoalFacade } from '../quest/goal-public'
@@ -49,8 +49,16 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
       if (result.state === 'clarify') { selection.asked = true; await save(context.sessionID, selection) }
       return { ...result, revision: selection.revision }
     }) },
-    { name: 'project_select', description: 'Explicitly select/pin/correct a project or multiple targets; register an alias or forget selection/alias. Invalidates old route revisions. Does not start work.', input: schema({ action: { enum: ['select', 'pin', 'correct', 'alias', 'forget'] }, selectors, alias: { type: 'string', minLength: 1, maxLength: 80 } }, ['action']), execute: async (input, context) => memory.selectionChange(context.sessionID,async()=>{
+    { name: 'project_select', description: 'Explicitly select/pin/correct a project or multiple targets; register an alias, forget selection/alias, or succeed a Quest Giver whose context is spent. Invalidates old route revisions. Does not start work.', input: schema({ action: { enum: ['select', 'pin', 'correct', 'alias', 'forget', 'succeed-giver'] }, selectors, alias: { type: 'string', minLength: 1, maxLength: 80 } }, ['action']), execute: async (input, context) => memory.selectionChange(context.sessionID,async()=>{
       if (worker(context.sessionID)) throw new RouterError('WORKER_DELEGATION_DENIED', 'Workers retain their assigned destination')
+      // Succeeding the giver is the one action the current giver may take about itself, so it is
+      // handled before the guard that would send every other request back to the bound session.
+      if (input.action === 'succeed-giver') {
+        const released = succeedUserGiver()
+        return { released: released ?? null, next: released
+          ? 'Released. Start a new session and it becomes your Quest Giver; the old conversation and its Quests are untouched.'
+          : 'No giver was bound; the next session becomes your Quest Giver.' }
+      }
       const giver=await singleUserGiver(ctx.session,context.sessionID)
       if(giver.id!==context.sessionID)throw new RouterError('SINGLE_GIVER_REQUIRED','Continue in your existing Quest Giver: '+giver.id)
       const selection = await state(context.sessionID)
