@@ -74,6 +74,10 @@ export function refusalNotice(input:{model:{providerID?:string;id?:string;modelI
  * cost, no requests.jsonl. The refusal has to reach the transcript, so it is posted as a synthetic
  * message. The turn is still unwinding when the hook throws, so a first attempt can conflict with
  * the busy session; an undelivered refusal is the defect itself, so delivery is retried.
+ *
+ * It must also wake the session. Posted with `resume: false` the notice was durable and invisible:
+ * the row sat in `session_inbox` and never reached the screen, which is the same silence in a
+ * different place. Waking cannot loop, because a session is told a given thing exactly once.
  */
 export const ANNOUNCE_DELAYS_MS=[0,250,750,1750] as const
 export function announcer(sessionApi:{synthetic?:Function}|undefined,delays:readonly number[]=ANNOUNCE_DELAYS_MS){
@@ -87,7 +91,7 @@ export function announcer(sessionApi:{synthetic?:Function}|undefined,delays:read
       let last:unknown
       for(const delay of delays){
         if(delay>0)await new Promise(resolve=>setTimeout(resolve,delay))
-        try{await sessionApi.synthetic!({sessionID,text,resume:false});return}catch(error){last=error}
+        try{await sessionApi.synthetic!({sessionID,text});return}catch(error){last=error}
       }
       console.error("[models] could not deliver a refused-request notice to",sessionID,last,text)
     })()
