@@ -58,19 +58,15 @@ conflict.
 
 ## Standing decisions
 
-For OpenCode2 changes, follow the isolated dev workflow in the hub AGENTS.md and opencode-dev-workflow skill. Jon authorizes verified PR merges into agents and dev activation without another approval; complete that loop instead of stopping at mergeable or asking Jon to merge. This scoped standing authorization overrides generic merge-approval instructions. No default model — choose on task, usage, speed and correctness; an
-explicit choice is final; report an unavailable route instead of substituting, and apply a ban to
-reviewers, fallbacks and resumes too. No patched fork of OpenCode: changes go upstream as
-contributions, never into a private run-fork, and never into the T3 upstream fork.
+No default model — choose on task, usage, speed and correctness; an explicit choice is final;
+report an unavailable route instead of substituting, and apply a ban to reviewers, fallbacks and
+resumes too. No patched fork of OpenCode: changes go upstream as contributions, never into a private
+run-fork, and never into the T3 upstream fork.
 
-For JonsOCsetup changes, follow `docs/development-workflow.md`: use the actual
-installed app for every change, retain concise core tests of production logic, remove obsolete compatibility
-paths, and search for and remove superseded code and instructions before finishing.
-Read the project-root MEMORY.md at the start and after context loss; maintain
-concise durable decisions and verified lessons there using ordinary file tools.
-For hub work, use C:/Users/Jk101/Projects/opencode-hub/MEMORY.md. Quests own task
-progress. These project-specific verification rules do not govern other projects.
+Read C:/Users/Jk101/.agents/user-verification.md before implementation. Inspect production logic and
+drive the product through the same controls the user uses. Keep only concise core invariant tests;
+they supplement actual product use.
 
-Read C:/Users/Jk101/.agents/user-verification.md before implementation. Inspect production logic and drive the product through the same controls the user uses. Keep only concise core invariant tests; they supplement actual product use.
-
-For this configuration repository, follow [Agents and Main](docs/development-workflow.md): use `sb agents` in an owned checkout and isolated worktrees for implementation. Authorized maintainers' agents integrate into `agents` after actual-product verification and CI. Stable is `master` (use `git switch master` and `git pull --ff-only origin master` in an owned checkout); `sb main` applies only to repositories named main. Only Jon personally merges stable, and release preparation starts only when he requests it.
+Working on OpenCode itself? Its dev loop, branch policy, standing merge authorization, memory and
+verification rules live in the hub AGENTS.md and docs/development-workflow.md, which load when you
+are there. They are not repeated here, because every session in every project pays for this file.
