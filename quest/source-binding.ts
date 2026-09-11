@@ -45,7 +45,9 @@ export function editingSource(context:{project:ProjectIdentity;directory:string}
     if(path.split('/').some(part=>part==='..'||!part)||isAbsolute(path)||path.includes(String.fromCharCode(92)))throw Error('Invalid mapped source scope')
     return path
   })
-  return {...selected,files:translated}
+  // The workspace root is the mapped subdirectory, so a brief written in hub-relative
+  // paths does not resolve inside it. Carry the prefix so dispatch can say so.
+  return {...selected,files:translated,scopePrefix:prefix}
 }
 
 /** Worker membership grants ledger access only at the runtime's verified owned checkout. */
