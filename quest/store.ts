@@ -70,7 +70,10 @@ export class QuestStore {
     try {
       const raw = readFileSync(file, "utf8"), parsed = parseQuestMarkdown(raw); if (!parsed.quest || parsed.readonly) throw new Error(`Quest is read-only: ${parsed.errors.join("; ")}`)
       const current = readEvents(this.runtime, id).reduce(reduceQuest, parsed.quest)
-      if (options.expectedRevision !== undefined && current.revision !== options.expectedRevision) throw new Error("Quest changed since migration preview; preview again")
+      // Optimistic concurrency for every caller, not just migration preview: the compare happens
+      // inside this Quest's lock, so of two writers holding the same snapshot exactly one commits.
+      // The message names both revisions because the loser has to re-read and decide again.
+      if (options.expectedRevision !== undefined && current.revision !== options.expectedRevision) throw new Error(`Quest ${id} changed since it was read: expected revision ${options.expectedRevision}, found ${current.revision}; re-read and retry`)
       if (options.backupContract) {
         const backup = join(this.runtime, "contract-backups", `${id}-${current.revision}.json`)
         mkdirSync(dirname(backup), { recursive: true })
