@@ -18,6 +18,7 @@ Quota = official estimated requests per 5h / week / month at typical Go token mi
 | Muse Spark 1.2 Contributor | `muse-spark-1.2-contributor` | 45,300 | 113,300 | 226,600 | $0.10/$0.20 | Fallback. DeepSWE 1.2 xhigh 55% ±2%. Same train-on-prompts deal. |
 | MiMo-V2.5 | `mimo-v2.5` | 30,100 | 75,200 | 150,400 | $0.14/$0.28 | Near-unlimited grunt. Weaker than Muse/GLM-Flash. |
 | LongCat-2.0 | `longcat-2.0` | 11,400 | 28,600 | 57,200 | $0.30/$1.20 | Bulk filler. |
+| DeepSeek V4.1 Flash | `deepseek-v4.1-flash` | — | — | — | — | Released **2026-09-10**, after this pull. Confirmed against models.dev on 2026-09-11: provider `opencode-go`, id `deepseek-v4.1-flash`, name “DeepSeek V4.1 Flash”, efforts low/high/max. The dev channel runs it. Quotas not re-pulled. |
 | DeepSeek V4 Flash | `deepseek-v4-flash` | 7,600 | 18,900 | 37,800 | $0.22/$0.66 off-peak | DeepSWE max 53%. Peak hours cost 2x (01–04 and 06–10 UTC weekdays). |
 | Qwen3.8 Flash | `qwen3.8-flash` | 5,400 | 13,500 | 27,000 | $0.15/$0.47 | New 2026-08-26. Cheap flash. |
 | ~~Hy3~~ | `hy3` | 4,300 | 10,750 | 21,500 | $0.14/$0.58 | **NEVER. Jon ban 2026-09-02.** Still in the API dump. Do not pick. |
@@ -53,6 +54,26 @@ Quota = official estimated requests per 5h / week / month at typical Go token mi
 ## Deprecated / do not pick (still in the 34-id API dump)
 
 `grok-4.5`, `glm-5`, `kimi-k2.5`, `minimax-m2.5`, `qwen3.5-plus`, `mimo-v2-pro`, `mimo-v2-omni`, `hy3`, `hy3-preview`, `hy4-preview`. Hy is banned, not a fallback.
+
+## Three catalogs, only one of which decides
+
+A Go model id existing is not the same as this machine being able to route to it. Three separate
+caches carry the lineup and they go stale independently:
+
+| Cache | Written by | What it decides |
+|---|---|---|
+| `~/.cache/opencode/models.json` | the host, from `https://models.opencode.ai`, refreshed on a 5-minute schedule | **the only one that decides whether a route exists.** A model missing here cannot be selected, and the host silently binds a different one instead |
+| `~/.local/state/opencode/models-dev.json` | `models/live-routes.ts`, 6h TTL, `OPENCODE_MODELS_DEV_CACHE` | which models automatic dispatch may derive candidates from |
+| `models/models-cache.json` | `bun models/favorite-agents.ts sync` | offline cost/context figures for `model-profiles.json` |
+
+On 2026-09-11 the first was cached before `deepseek-v4.1-flash` shipped and the third was still the
+2026-09-04 pull, while the second was current. A launch on `opencode-go/deepseek-v4.1-flash#high`
+was therefore bound to `openrouter/deepseek/deepseek-v4.1-flash` — the composer's fallback, not a
+same-name twin: a launch on `opencode-go/zzz-not-a-real-model` landed on exactly the same model.
+The access policy has no `openrouter` route, so the request was refused, the turn died and the
+prompt was lost with nothing on screen. `models/access-policy.ts` now says both things in the
+conversation: that the session is bound to a model the launch did not ask for, and that a refused
+request means nothing was sent.
 
 ## Go routing (inside this meter)
 
