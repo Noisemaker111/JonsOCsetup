@@ -59,6 +59,39 @@ const describe = (value: string) => {
   return "instruction blob"
 }
 
+/** Spend concentrates in a few metered calls, and the same model is often already on a subscription. */
+if (process.argv.includes("--spend")) {
+  const perModel = new Map<string, { input: number; cost: number }>()
+  for (const row of db.query("select data from session_message where type='assistant'").all() as any[]) {
+    let message: any
+    try { message = JSON.parse(row.data) } catch { continue }
+    const used = message.tokens ?? {}
+    if (used.input === undefined) continue
+    const model = message.model ?? {}
+    const key = String(model.providerID) + "/" + String(model.modelID ?? model.id)
+    const seen = perModel.get(key) ?? { input: 0, cost: 0 }
+    seen.input += used.input ?? 0
+    seen.cost += message.cost ?? 0
+    perModel.set(key, seen)
+  }
+  const subscriptionLanes = ["opencode", "opencode-go", "openai", "grok-sub"]
+  const bare = (key: string) => key.split("/").slice(1).join("/").split("/").pop() ?? key
+  const owned = new Set<string>()
+  for (const key of perModel.keys()) if (subscriptionLanes.includes(key.split("/")[0])) owned.add(bare(key))
+  const paid = [...perModel.entries()].filter(([, v]) => v.cost > 0).sort((a, b) => b[1].cost - a[1].cost)
+  console.log("spend by model\n")
+  let avoidable = 0
+  for (const [key, value] of paid.slice(0, 12)) {
+    // A subscription-lane model is not its own cheaper alternative; only a metered call can move.
+    const twin = !subscriptionLanes.includes(key.split("/")[0]) && owned.has(bare(key))
+    if (twin) avoidable += value.cost
+    const rate = value.input ? value.cost / (value.input / 1e6) : 0
+    console.log(`  $${value.cost.toFixed(2).padStart(7)}  ${String(value.input).padStart(12)} tok  $${rate.toFixed(2).padStart(9)}/Mtok  ${key}${twin ? "   <- same model is on a subscription lane" : ""}`)
+  }
+  console.log(`\n  $${avoidable.toFixed(2)} of metered spend went to models already available on a subscription lane.`)
+  process.exit(0)
+}
+
 const sessions = db.query("select id,title,agent,cost,tokens_input,tokens_output from session_v2").all() as any[]
 const only = option("--session")
 const report: any[] = []
