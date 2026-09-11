@@ -5,6 +5,8 @@ import { readCalibrations,accountRegime,updateBurnControls,readQuotaObservations
 import { assertConfiguredModel } from "./access-policy"
 import { accountsForRoute, relevantAccountWindows } from "../usage/account-api"
 import { liveDispatchRoutes } from "./live-routes"
+import { recordedRouteCosts, withRecordedCosts } from "./route-cost"
+import { applyTaskDemand, classifyDispatch, describeDemand, validateTaskDemands, type DispatchFacts, type TaskDemands } from "./task-demand"
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import type { AccountSnapshot } from "../usage/account-types"
@@ -15,7 +17,7 @@ import type { PlannerInput,Route,RoutingRequest } from "./route-planner"
 export const configuredDispatchPolicyFile=()=>process.env.OPENCODE_DISPATCH_POLICY??join(import.meta.dir,"dispatch-policy.json")
 /** Explicit fixture/host pin keeps isolated Quest storage on shared atomic account admission. */
 export function dispatchReservationFile(runtimeRoot:string){const pin=process.env.OPENCODE_ROUTE_RESERVATIONS;if(pin&&!isAbsolute(pin))throw new Error('OPENCODE_ROUTE_RESERVATIONS must be absolute');return pin??join(runtimeRoot,'route-reservations.json')}
-export type DispatchPolicy = { version:1; outcomesFile?:string; calibration?:DispatchForecasts; request:Omit<RoutingRequest,"now"|"explicitRouteID">; routes:Route[]; billing:Record<string,PlannerInput["accounts"][number]["billing"]>; bootstrapByProject:Record<string,string[]>; commandsByProject?:Record<string,Record<string,import("../quest/command-runtime").CommandSpec>> }
+export type DispatchPolicy = { version:1; outcomesFile?:string; calibration?:DispatchForecasts; request:Omit<RoutingRequest,"now"|"explicitRouteID">&{byTask?:TaskDemands}; routes:Route[]; billing:Record<string,PlannerInput["accounts"][number]["billing"]>; bootstrapByProject:Record<string,string[]>; commandsByProject?:Record<string,Record<string,import("../quest/command-runtime").CommandSpec>> }
 export type SelectorResult={code:string;route?:Route;candidates:{selector:string;model:string;accountID:string;serviceTier:string}[]}
 /** Shared model-facing exact selector. `route:<id>` includes account and service identity.
  *  A selector the user typed is itself the authorization: it resolves against every registered
@@ -64,11 +66,18 @@ function unusableRoutes(maxAgeMs = 6 * 60 * 60 * 1000, now = Date.now()) {
   return { byRoute, byModel }
 }
 
-/** User policy supplies routes and thresholds; live balances replace offline snapshots. */
-export async function reserveDispatch(input:{runID:string;model?:string;policyFile:string;reservationFile:string;now?:number},loadUsage:typeof getAccountUsage=getAccountUsage) {
+/**
+ * Everything a dispatch ranks, assembled from live inputs.
+ *
+ * `reserveDispatch` and `scripts/route-plan.ts dispatch` both go through here so the plan a person
+ * can print is the plan a worker is actually launched on, rather than a second implementation of
+ * the same join that drifts from it.
+ */
+export async function dispatchPlanInput(input:{model?:string;policyFile:string;now?:number}&DispatchFacts,loadUsage:typeof getAccountUsage=getAccountUsage) {
  let policy:DispatchPolicy
  try{policy=JSON.parse(readFileSync(input.policyFile,"utf8"))}catch{throw new Error("Configure the dispatch policy with authorized routes, quality evidence, budgets and project bootstrap before running a Quest")}
  if(policy.version!==1||!Array.isArray(policy.routes)||!policy.request?.allowedRouteIDs?.length)throw new Error("Invalid dispatch policy: version 1 and an explicit route allowlist are required")
+ validateTaskDemands(policy.request.byTask)
  const snapshot=await loadUsage({refresh:true}),now=input.now??Date.now()
  // The policy file no longer decides which models exist. It contributes curated routes, the
  // billing arrangements and the thresholds; the rest of the candidate pool is joined live from
@@ -76,7 +85,11 @@ export async function reserveDispatch(input:{runID:string;model?:string;policyFi
  const live=await liveDispatchRoutes(policy,snapshot,now)
  policy.routes=[...live.curated,...live.derived]
  const allowed=[...new Set([...(policy.request.allowedRouteIDs??[]),...live.derived.map(r=>r.id)])]
- policy.request={...policy.request,allowedRouteIDs:allowed}
+ // What kind of work this is, and therefore how much published accuracy it may trade for a cheaper
+ // effort. The class is resolved from the dispatch itself, never from the policy file, and an
+ // unclassified dispatch lands on the same demand every dispatch already ran under.
+ const classification=classifyDispatch(input)
+ policy.request={...applyTaskDemand(policy.request,policy.request.byTask,classification.task),allowedRouteIDs:allowed}
  // A configured default still wins while it is admissible. Everything else it can fall back to is
  // now whatever is live and ranked, instead of a second list somebody had to keep in step.
  const alternatives=allowed.filter(id=>id!==policy.request.primaryRouteID)
@@ -98,10 +111,25 @@ export async function reserveDispatch(input:{runID:string;model?:string;policyFi
  const unbilled=accounts.filter(a=>!a.billing).map(a=>a.id)
  if(unbilled.length)throw new Error("Dispatch policy must identify billing for connected accounts: "+unbilled.join(", "))
  const observedRoutes=policy.outcomesFile?measuredOutcomeRoutes(policy.routes,JSON.parse(readFileSync(isAbsolute(policy.outcomesFile)?policy.outcomesFile:join(dirname(input.policyFile),policy.outcomesFile),"utf8")) as MeasuredOutcomes).routes:policy.routes
- const routes=calibratedRoutes(observedRoutes,readCalibrations().calibrations,Object.fromEntries(snapshot.accounts.map(a=>[a.id,accountRegime(a)])),policy.calibration,now)
- const ledger=new RouteReservations(input.reservationFile),result=ledger.reserve(input.runID,{request:{...policy.request,now:new Date(now).toISOString(),explicitRouteID},routes,accounts})
- if(!result.reservation)throw new Error(result.decision?.summary+": "+result.decision?.excluded.map(x=>x.routeID+" "+x.reasons.join(", ")).join("; ")+" | candidates: "+live.diagnostics.join(" | "))
- const route=policy.routes.find(r=>r.id===result.reservation!.routeID)
+ // Recorded per-effort consumption from the host's own request records. It orders the routes that
+ // already cleared the quality demand; it never admits or excludes one, so an unreadable database
+ // is not a dispatch failure.
+ const recorded=recordedRouteCosts({now})
+ const routes=withRecordedCosts(calibratedRoutes(observedRoutes,readCalibrations().calibrations,Object.fromEntries(snapshot.accounts.map(a=>[a.id,accountRegime(a)])),policy.calibration,now),recorded.costs)
+ const request={...policy.request,now:new Date(now).toISOString(),explicitRouteID}
+ const diagnostics=[...live.diagnostics,describeDemand(classification,request),
+  recorded.source==="unavailable"?"recorded route cost unavailable ("+recorded.error+"); efforts rank on the published board alone"
+  :"recorded route cost for "+Object.keys(recorded.costs).length+" route identities ("+recorded.source+")"]
+ return {policy,request,routes,accounts,snapshot,live,classification,diagnostics,explicitRouteID}
+}
+
+/** User policy supplies routes and thresholds; live balances replace offline snapshots. */
+export async function reserveDispatch(input:{runID:string;model?:string;policyFile:string;reservationFile:string;now?:number}&DispatchFacts,loadUsage:typeof getAccountUsage=getAccountUsage) {
+ const plan=await dispatchPlanInput(input,loadUsage)
+ const ledger=new RouteReservations(input.reservationFile),result=ledger.reserve(input.runID,{request:plan.request,routes:plan.routes,accounts:plan.accounts})
+ if(!result.reservation)throw new Error(result.decision?.summary+": "+result.decision?.excluded.map(x=>x.routeID+" "+x.reasons.join(", ")).join("; ")+" | candidates: "+plan.diagnostics.join(" | "))
+ const route=plan.policy.routes.find(r=>r.id===result.reservation!.routeID)
  if(!route)throw new Error("Reserved route was removed; reconcile the existing run before retrying")
- return {route,bootstrapByProject:policy.bootstrapByProject??{},ledger,decision:result.decision,candidates:{derived:live.derived.length,curated:live.curated.length,catalog:live.catalog.source,diagnostics:live.diagnostics}}
+ const decision=result.decision?{...result.decision,summary:result.decision.summary+"; "+describeDemand(plan.classification,plan.request)}:result.decision
+ return {route,bootstrapByProject:plan.policy.bootstrapByProject??{},ledger,decision,classification:plan.classification,candidates:{derived:plan.live.derived.length,curated:plan.live.curated.length,catalog:plan.live.catalog.source,diagnostics:plan.diagnostics}}
 }
