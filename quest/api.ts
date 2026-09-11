@@ -94,6 +94,11 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
     update(id: string, input: UpdateQuest) {
       keys(input, ["title", "description", "reward", "steps", "artifacts", "archive"])
       const q = getOwned(id)
+      // Admission alone left the record renameable: driven against the create-only guard, the giver
+      // took the refusal, created a readable Quest, then patched it back to the refused wording.
+      // Only the text this call writes is judged, so an older badly-named Quest stays editable.
+      const rewritten = namingProblems({ title: input.title, objective: input.description, steps: input.steps })
+      if (rewritten.length) throw new QuestError("UNREADABLE_QUEST", "Nothing was saved. " + rewritten.join(" ") + " Retry the update with wording the Quest can be read by.")
       const patch: Record<string, unknown> = {}
       for (const key of ["title", "description", "reward"] as const) if (input[key] !== undefined) {
         if (typeof input[key] !== "string" || (key !== "reward" && !input[key]!.trim())) throw new QuestError("INVALID_INPUT", key + " must be text")

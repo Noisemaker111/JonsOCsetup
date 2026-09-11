@@ -22,5 +22,6 @@ it depends on, not a timestamp nothing will mark stale once it passes.
 **Steps** — a step title says what this task's work is and what will be checkable when it is done.
 `Implementation` / `Verification` / `Integration` is a lifecycle template, not this Quest's plan.
 
-`create` refuses a bare lifecycle title, a bare lifecycle step title, and an objective opening with
-the speaker. Everything else here is yours to get right.
+`create` and `update` both refuse a bare lifecycle title, a bare lifecycle step title, and an
+objective opening with the speaker — renaming a Quest into one is refused too. Everything else here
+is yours to get right.
