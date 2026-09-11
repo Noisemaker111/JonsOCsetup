@@ -21,7 +21,9 @@ function file(target){
  entries.push({source,target:target.replaceAll('\\','/'),sha256:hash(bytes),importedFrom:target.replaceAll('\\','/')})
 }
 function tree(target){if(!existsSync(join(home,target)))return;for(const e of readdirSync(join(home,target),{withFileTypes:true})){if(['node_modules','.git','__pycache__'].includes(e.name))continue;const path=join(target,e.name);if(e.isDirectory())tree(path);else if(e.isSymbolicLink()){omitted.push({path,reason:'nested link requires explicit mapping'})}else file(path)}}
-for(const path of ['Projects/opencode-hub/AGENTS.md','Projects/opencode-hub/CLAUDE.md','.agents/matt-pocock.md','.agents/.skill-lock.json','.agents/plugins/marketplace.json','.codex/AGENTS.md'])file(path)
+// .agents/quest.mjs and its filing alias are the shared Quest board's entry point for every
+// harness; untracked they would exist only on this machine, which is how quest-draft.mjs lived.
+for(const path of ['Projects/opencode-hub/AGENTS.md','Projects/opencode-hub/CLAUDE.md','.agents/matt-pocock.md','.agents/.skill-lock.json','.agents/plugins/marketplace.json','.agents/quest.mjs','.agents/quest-draft.mjs','.codex/AGENTS.md'])file(path)
 for(const path of ['.agents/scripts','.agents/docs','.codex/skills/convex-deploy-guard'])tree(path)
 for(const e of readdirSync(join(home,'.agents/skills'),{withFileTypes:true})){const p='.agents/skills/'+e.name;if(statSync(join(home,p)).isDirectory())tree(p);else file(p)}
 // Disabled skills stay disabled but remain reproducible source, including their licenses.

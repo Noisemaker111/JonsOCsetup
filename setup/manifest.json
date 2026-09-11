@@ -5,7 +5,7 @@
     {
       "source": "setup/files/Projects/opencode-hub/AGENTS.md",
       "target": "Projects/opencode-hub/AGENTS.md",
-      "sha256": "6d06ca3c914ff36978e859df15c1c74b56bc361b4bd810e14a8bb81cbf3b54ca",
+      "sha256": "3c29d832a66f7bbb2ed93692cbef5cec01e9fa3fa9dfc66ec1db79eb6abb263d",
       "importedFrom": "Projects/opencode-hub/AGENTS.md"
     },
     {
@@ -31,6 +31,18 @@
       "target": ".agents/plugins/marketplace.json",
       "sha256": "99b4fd68fbf4fa1d0d95a626f0aca0af1033b4381e9c233a60963c91b706e945",
       "importedFrom": ".agents/plugins/marketplace.json"
+    },
+    {
+      "source": "setup/files/.agents/quest.mjs",
+      "target": ".agents/quest.mjs",
+      "sha256": "0b8098bfe14f7f78e7da15ee83c8edbec638827e6816647c7ad5b48479d2d07f",
+      "importedFrom": ".agents/quest.mjs"
+    },
+    {
+      "source": "setup/files/.agents/quest-draft.mjs",
+      "target": ".agents/quest-draft.mjs",
+      "sha256": "ac162541f5b9379bb28604c41bb243e8606582b685999b6a5462f18c1093a77a",
+      "importedFrom": ".agents/quest-draft.mjs"
     },
     {
       "source": "setup/files/.codex/AGENTS.md",
