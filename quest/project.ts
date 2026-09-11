@@ -1,5 +1,5 @@
 import { realpathSync, statSync } from "node:fs"
-import { isAbsolute, resolve } from "node:path"
+import { isAbsolute, join, resolve } from "node:path"
 import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
 
@@ -35,11 +35,38 @@ export function verifySourceBinding(context:{project:ProjectIdentity;directory?:
   const project=projectIdentity(directory)
   if(project.id!==context.project.id||physicalDirectory(project.root)!==physicalDirectory(context.project.root))throw new Error("Source checkout belongs to a different project")
 }
+/**
+ * The owning main worktree of a physical directory, as Git reports it.
+ *
+ * Resolving it costs two `git` processes, and on this checkout `worktree list --porcelain` walks
+ * dozens of worktrees: 120 ms a call measured against `~/.config/opencode`, 27 ms against a plain
+ * repo. One `project_route` resolves the same directory at least twice (`revalidate`, then
+ * `selectUserGiverProject`) and the router calls it again per target on every other operation.
+ *
+ * The answer changes when the directory stops being a repository, gains or loses a linked
+ * worktree, or is repaired onto a different main checkout -- all of which rewrite the `.git` entry
+ * the cache is keyed on, so a changed repository misses on the very next call. The 5 s ceiling
+ * bounds anything that could change the answer without touching that entry. Neither is a guess
+ * about how often the repository moves: a stale entry can only survive a change Git did not
+ * record, for at most one turn.
+ */
+const GIT_IDENTITY_MAX_AGE_MS = 5_000
+const identityCache = new Map<string, { at: number; stamp: string; root: string }>()
+const gitStamp = (root: string) => {
+  try { const info = statSync(join(root, ".git")); return info.mtimeMs + ":" + info.size + ":" + (info.isDirectory() ? "d" : "f") } catch { return "absent" }
+}
+/** Test seam: a suite that rewrites a repository inside one 5 s window needs this. */
+export function clearProjectIdentityCache() { identityCache.clear() }
+
 /** Resolve only the trusted session directory; the ledger is never an input. */
 export function projectIdentity(directory: string): ProjectIdentity {
   if (typeof directory !== "string" || !isAbsolute(directory)) throw new Error("Project requires an absolute trusted session directory")
-  let root = physicalDirectory(directory)
+  const queried = physicalDirectory(directory)
+  let root = queried
   if (!statSync(root).isDirectory()) throw new Error("Project directory is unavailable")
+  const stamp = gitStamp(queried), now = Date.now()
+  const cached = identityCache.get(queried)
+  if (cached && cached.stamp === stamp && now - cached.at < GIT_IDENTITY_MAX_AGE_MS) return { id: identityHash(cached.root), root: cached.root }
   const git = identityGit(root,["rev-parse", "--is-inside-work-tree"])
   if (git.status === 0 && git.stdout.trim() === "true") {
     const listing = identityGit(root,["worktree", "list", "--porcelain", "-z"])
@@ -50,6 +77,9 @@ export function projectIdentity(directory: string): ProjectIdentity {
   } else if (git.error || (git.status !== 0 && !/not a git repository/i.test(git.stderr))) {
     throw new Error("Cannot establish Git project identity; check repository access")
   }
-  const key = process.platform === "win32" ? resolve(root).toLowerCase() : resolve(root)
-  return { id: createHash("sha256").update(key).digest("hex"), root }
+  // Entries are only ever useful for 5 s, so anything older is dropped rather than accumulated.
+  if (identityCache.size > 64) for (const [key, entry] of identityCache) if (now - entry.at >= GIT_IDENTITY_MAX_AGE_MS) identityCache.delete(key)
+  identityCache.set(queried, { at: now, stamp, root })
+  return { id: identityHash(root), root }
 }
+const identityHash = (root: string) => createHash("sha256").update(process.platform === "win32" ? resolve(root).toLowerCase() : resolve(root)).digest("hex")
