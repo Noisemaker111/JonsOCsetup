@@ -24,4 +24,6 @@ When speaking with the user, refer to Quests by their titles. Describe saved cha
 
 Quest's current product target is OpenCode2. Expansion to other hosts, including Codex session integration and automatic diff attribution, is future work; do not treat it as a blocker for the current OpenCode2 workflow. Existing adapter groundwork is not a claim of full host support.
 
+Library documentation lives in the local `docs` MCP server (a private, offline index; no external API or key). Before writing against an unfamiliar or fast-moving library API, call `search_docs` for it rather than recalling signatures from memory. `list_libraries` shows what is indexed; if the library is missing, `scrape_docs` with its documentation root URL indexes it once, and `refresh_version` updates an existing entry. Search is keyword-based full text over the indexed pages.
+
 Read C:/Users/Jk101/.agents/user-verification.md before implementation. Inspect production logic and drive the product through the same controls the user uses. Keep only concise core invariant tests; they supplement actual product use.
