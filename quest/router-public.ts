@@ -20,11 +20,3 @@ export function routerQuestInventory() {
 export function routerWorker(sessionID: string) {
   return routerQuestInventory().flatMap(q => q.workers.filter(w => w.sessionID === sessionID).map(w => ({ questID: q.id, ...w })))
 }
-
-/** Worker terminal events retain the destination giver as the return address. */
-export function routerReturnSources(sessionID:string){
- return readAllQuests(questRoot(),{includeArchived:false}).flatMap(row=>{
-  const q=row.quest,run=q?.sessions.find(r=>r.sessionID===sessionID||r.openCodeSessionId===sessionID)
-  return q&&run&&q.integrationOwner?[{sessionID:q.integrationOwner,detail:{quest:q.title,workerSessionID:sessionID,state:run.state,steps:q.stages.map(s=>({title:s.title,status:s.status})),result:run.result}}]:[]
- })
-}
