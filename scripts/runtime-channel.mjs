@@ -4,7 +4,7 @@ import {retryFinishedWorktrees} from './worktree-cleanup.mjs'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, realpathSync } from 'node:fs'
 import { join, resolve, dirname } from 'node:path'
 import { spawnSync, spawn } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { homedir } from 'node:os'
 import { createHash } from 'node:crypto'
 const source = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -65,5 +65,15 @@ if(action==='prepare'){
   const root=channel==='stable'?runtimeHome:read(join(registry,'dev.json')).root
   const env=envFor(root,channel)
   if(channel==='dev'&&!args.includes('--model'))args.push('--model',read(join(registry,'dev.json')).model)
-  await run('node',[join(source,'scripts/opencode-runtime.mjs'),'--config-root',root,...args],process.cwd(),env)
+  const supervisor=join(source,'scripts/opencode-runtime.mjs')
+  // Automation wants the relayed transcript on this process's pipes, so it keeps its own node.
+  // An interactive start runs the supervisor here instead: one process between the console and
+  // the host, and the console it hands down is the one the user is actually looking at.
+  if(args.includes('--json'))await run('node',[supervisor,'--config-root',root,...args],process.cwd(),env)
+  else{
+   for(const key of Object.keys(process.env))if(!(key in env))delete process.env[key]
+   Object.assign(process.env,env)
+   process.argv=[process.argv[0],supervisor,'--config-root',root,...args]
+   await import(pathToFileURL(supervisor).href)
+  }
 }else throw Error('Unknown channel action')
