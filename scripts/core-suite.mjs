@@ -56,5 +56,9 @@ if (rejected.length) {
 }
 if (!included.length) { console.error("No core tests declared; the suite cannot be empty."); process.exit(1) }
 
-const run = spawnSync("bun", ["test", ...included.map(e => join("test", e.name))], { cwd: root, stdio: "inherit", windowsHide: true })
+// Bun defaults to a 5s per-test timeout. Several core invariants shell out to git, which on a
+// checkout carrying dozens of worktrees takes longer than that here while passing in CI — a red
+// local run that says nothing about the code. Generous but bounded, and overridable.
+const timeout = process.env.OPENCODE_CORE_TIMEOUT ?? "90000"
+const run = spawnSync("bun", ["test", "--timeout", timeout, ...included.map(e => join("test", e.name))], { cwd: root, stdio: "inherit", windowsHide: true })
 process.exit(run.status ?? 1)
