@@ -76,6 +76,7 @@ const share = (ms: number) => timedSpanMs ? percent(ms / timedSpanMs) : "0.0%"
 console.log(`database  ${file}`)
 console.log(`executes  ${totals.executes}  (${totals.timed} timed, ${totals.untimed} with no recorded inner spans)`)
 console.log(`span      ${seconds(totals.spanMs)} total, of which ${seconds(timedSpanMs)} is in timed executes`)
+if (totals.aborted) console.log(`aborted   ${totals.aborted} interrupted executes covering ${seconds(totals.abortedMs)}, excluded above: the host stamps their end when the abort lands, so the span is how long the call was abandoned, not work`)
 console.log(`\nwhere a timed execute's span goes`)
 console.log(`  inner tool calls  ${seconds(totals.attributedMs).padStart(9)}  ${share(totals.attributedMs).padStart(6)}  merged, so parallel calls are counted once`)
 console.log(`  runtime startup   ${seconds(totals.startupMs).padStart(9)}  ${share(totals.startupMs).padStart(6)}  the window opening to the first call`)
@@ -109,7 +110,7 @@ if (flag("--solo")) {
     console.log(`  ${tool.tool.padEnd(26)} ${String(tool.n).padStart(5)} ${seconds(tool.totalMs).padStart(19)} ${(tool.medianMs + "ms").padStart(9)} ${(tool.p95Ms + "ms").padStart(9)} ${(tool.maxMs + "ms").padStart(9)}`)
 }
 
-const untimedSpans = spans.filter((span: ExecuteSpan) => !span.timed)
+const untimedSpans = spans.filter((span: ExecuteSpan) => !span.timed && !span.aborted)
 if (untimedSpans.length) {
   const group = (label: string, pick: (span: ExecuteSpan) => boolean) => {
     const rows = untimedSpans.filter(pick)

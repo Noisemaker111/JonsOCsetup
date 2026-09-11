@@ -28,7 +28,12 @@ const usable=(r:any)=>snapshot.accounts.some((a:any)=>a.id===r.accountID&&a.stat
 // Verify on the lane the channel actually ships on when it has capacity: a route can hold quota
 // and still be unusable here, and the activated model is the one already proven against this host.
 const activated=(()=>{try{const c=JSON.parse(readFileSync(join(root,"..","..","dev.json"),"utf8"));return String(c.model??"")}catch{return ""}})()
-const activatedID=candidates.find((r:any)=>activated&&activated.startsWith(r.providerID+"/"+r.modelID))?.id
+// Reasoning effort is part of route identity, so match the whole thing. Matching on provider/model
+// alone returned whichever effort happened to sit first in the candidate list: with dev.json
+// recording deepseek-v4.1-flash#high, the gate ran both the giver and the worker at #max, which is
+// the most expensive lane for this model and not the one the channel ships. Verification runs on the
+// lane that was actually prepared, or it falls through to the policy's primary route as before.
+const activatedID=candidates.find((r:any)=>activated&&activated===r.providerID+"/"+r.modelID+"#"+r.reasoning)?.id
 const ordered=[activatedID,policy.request.primaryRouteID,...(policy.request.allowedRouteIDs??[]),...live.derived.map(r=>r.id)].filter(Boolean)
 const route=ordered.map((id:string)=>candidates.find((r:any)=>r.id===id)).find((r:any)=>r&&usable(r))
 if(!route)throw Error('No authorized route has available capacity; this check cannot produce real dispatch evidence')
@@ -54,6 +59,17 @@ const fixtures=[1,2].map(number=>{const directory=join(fixture,'project-'+number
  child.stdout.on('data',chunk=>{buffer+=chunk;for(;;){const n=buffer.indexOf('\n');if(n<0)break;const line=buffer.slice(0,n);buffer=buffer.slice(n+1);try{const e=JSON.parse(line);if(e.type==='data'){const raw=Buffer.from(e.data,'base64').toString();appendFileSync(join(output,'terminal.ansi'),raw);terminal.write(raw);}else events.push(e)}catch{errors+=line}}});child.stderr.on('data',x=>errors+=x);child.on('exit',()=>exited=true)
  const send=(data:string)=>{appendFileSync(join(output,'input.jsonl'),JSON.stringify({at:new Date().toISOString(),data})+'\n');return child.stdin.write(JSON.stringify({type:'write',data:Buffer.from(data).toString('base64')})+'\n')};terminal.onData=data=>send(Buffer.from(data).toString())
  const frame=async()=>{await setup.renderOnce();return terminal.screen().text}
+ /**
+  * Two classes of wait, and the default only ever suited one of them. 60s is generous for a UI
+  * transition -- a composer appearing, a board rendering -- and far too tight for a model turn: on
+  * 2026-09-11 the gate failed the merged candidate with "Quest created: timed out" because the giver
+  * spent a single 56.9s thought on a max-reasoning lane before it made any call at all. Measured over
+  * 24,232 recorded assistant turns the p90 turn is 31.8s, and a high-effort lane reading a long gate
+  * instruction sits well past that, so a wait that spans a model turn gets the same bound the gate
+  * already gives worker completion. This is headroom for a turn that is working, not a slower gate:
+  * every wait returns the moment its condition holds.
+  */
+ const MODEL_TURN=240000
  async function wait(label:string,check:()=>any,timeout=60000){const end=Date.now()+timeout;while(Date.now()<end){if(await check())return;if(exited)throw Error(label+': host exited '+errors);await sleep(300)}throw Error(label+': timed out')}
  async function capture(name:string){await setup.renderOnce();const path=join(dir,name+'.png');writeFileSync(path,new Resvg(frameToSvg(setup.captureSpans(),name,HOST_PALETTE),{font:{loadSystemFonts:true}}).render().asPng());writeFileSync(join(dir,name+'.txt'),await frame());row.screenshots.push(path)}
  async function key(name:string,sequence:string){send(Buffer.from(terminal.encodeKey(new KeyEvent({name,sequence,raw:sequence,ctrl:false,meta:false,shift:false,option:false,number:false,eventType:'press',source:'raw'}))).toString());await sleep(350)}
@@ -70,7 +86,7 @@ const fixtures=[1,2].map(number=>{const directory=join(fixture,'project-'+number
     const file=join(store.runtime,'user-giver.json');if(!existsSync(file))return false
     const binding=JSON.parse(readFileSync(file,'utf8'));report.giverSessionID=giver.id;report.firstDiscussion=binding.state==='bound'&&binding.sessionID===giver.id&&readAllQuests(store.projectRoot).length===0
     return report.firstDiscussion
-  })
+  },MODEL_TURN)
   report.loads=row.loads;await capture('registered-discussion')
   for(number=1;number<=2;number++){
    if(holds().length)throw Error('Existing account ownership; no duplicate worker')
@@ -80,9 +96,9 @@ const fixtures=[1,2].map(number=>{const directory=join(fixture,'project-'+number
    await capture('submitted-request')
    await wait('giver persisted',()=>{if(!existsSync(database))return false;db??=new Database(database,{readonly:true});const found:any=db.query("select id from session_v2 where agent='quest-giver' and parent_id is null order by time_created asc").get();report.giverSessionID??=found?.id;row.sessionID=report.giverSessionID;return !!row.sessionID})
    let q:any
-   await wait('Quest created',()=>{q=readAllQuests(store.projectRoot).find(r=>r.quest?.title==='Installed single giver project '+number)?.quest;return !!q})
+   await wait('Quest created',()=>{q=readAllQuests(store.projectRoot).find(r=>r.quest?.title==='Installed single giver project '+number)?.quest;return !!q},MODEL_TURN)
   let sibling:any
-  await wait('both workers bound',()=>{sibling=readAllQuests(store.projectRoot).find(r=>r.quest?.title==='Installed concurrent sibling '+number)?.quest;return !!store.read(q.id)?.sessions[0]?.sessionID&&!!sibling?.sessions[0]?.sessionID})
+  await wait('both workers bound',()=>{sibling=readAllQuests(store.projectRoot).find(r=>r.quest?.title==='Installed concurrent sibling '+number)?.quest;return !!store.read(q.id)?.sessions[0]?.sessionID&&!!sibling?.sessions[0]?.sessionID},MODEL_TURN)
   await command('/quests');await wait('live board',async()=>(await frame()).includes('Search quests'));{await key('q','q');await wait('Quest picker',async()=>(await frame()).includes('Select Quest'));await command(q.title);}await wait('selected assigned Quest',async()=>(await frame()).split('\n').some(line=>line.indexOf(q.title)>35));await wait('confirmed running',async()=>(await frame()).includes('RUNNING · Saved: executing'));await capture('worker-running');const firstCheck=(await frame()).match(/Checked: ([^\n]+)/)?.[1];await sleep(4500);await capture('worker-activity-update');row.liveUpdates=firstCheck!==(await frame()).match(/Checked: ([^\n]+)/)?.[1]
   await key('n','n');await wait('native composer dialog',async()=>(await frame()).includes('Nudge Quest Giver'));await capture('composer');await key('escape','\x1b');row.composer=true
   await wait('automatic worker response',()=>{const all:any[]=db!.query('select type,data from session_message where session_id=? order by seq').all(row.sessionID);const messages=all.map(r=>({type:r.type,...JSON.parse(r.data)}));row.messages=messages.map(m=>({...m,content:m.content?.filter((p:any)=>p.type!=='reasoning')}));const at=messages.findIndex(m=>m.type==='user'&&JSON.stringify(m).includes('Automatic Quest worker update')&&JSON.stringify(m).includes(q.title));row.automaticReturn=at>=0&&messages.slice(at+1).some(m=>m.type==='assistant'&&m.time?.completed&&m.finish==='stop');return row.automaticReturn},240000)

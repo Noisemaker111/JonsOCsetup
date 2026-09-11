@@ -16,9 +16,12 @@
  *
  * What it cannot cover, and does not pretend to: when an execute fails or is interrupted the host
  * returns the error instead of a result, so there is no metadata to write onto and those spans stay
- * unattributed. On this installation that is 3 parts out of 1,571 — but they carry 5,891 s of the
- * 7,724 s total wall, so `execute-attribution.ts` counts them as unattributed rather than quietly
- * leaving them out of the denominator.
+ * untimed. That gap is why an interrupted execute has to be named rather than measured — its
+ * `time.completed` is stamped when the abort landed, so its span is the age of an abandoned call.
+ * On this installation three such parts out of 1,571 carried 5,890.6 s of a 7,724.4 s total, and
+ * one of them had an uninterrupted twin that ran the identical program in 45.9 s.
+ * `execute-attribution.ts` therefore reports interrupted spans as `abortedMs`, outside the
+ * execution denominator.
  */
 import type { InnerCallRecord } from "./execute-attribution"
 

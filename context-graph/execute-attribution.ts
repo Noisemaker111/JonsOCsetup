@@ -21,6 +21,10 @@
  *  - **The remainder is reported, not distributed.** Whatever the union does not cover is
  *    `unaccountedMs`: Code Mode runtime startup, the model's own JavaScript between calls, and
  *    result serialisation. It is named, never spread over the tools that happen to be there.
+ *  - **An interrupted execute is not execution.** The host stamps `time.completed` when the abort
+ *    lands, so an abandoned call's span grows with how long nobody came back to it. Two such parts
+ *    held 76% of this installation's entire Code Mode wall clock; they are reported as `abortedMs`
+ *    and kept out of the span every other figure is a share of.
  *
  * `scripts/execute-attribution.ts` and any duration screen read through this module so a screen and
  * the command it was verified against cannot report different numbers.
@@ -74,7 +78,20 @@ export type ExecuteSpan = {
   tailMs: number
   /** False when the part carries no timed spans: a failed execute, a search-only one, or one that predates the timing plugin. */
   timed: boolean
+  /**
+   * The host recorded this execute as interrupted rather than finished.
+   *
+   * Its `time.completed` is stamped when the abort landed, not when work stopped, so the span is
+   * the age of an abandoned call and charging it as execution is wrong by orders of magnitude.
+   * On this installation three such parts out of 1,571 carried 5,890.6 s of a 7,724.4 s total --
+   * 76% of "all Code Mode time" -- while an uninterrupted twin of one of them ran the identical
+   * program in 45.9 s. The executes that actually ran total 1,833.8 s.
+   */
+  aborted: boolean
 }
+
+/** The host writes `{type:"aborted"}` on a tool part it interrupted; nothing else sets that type. */
+const isAborted = (part: any) => part?.state?.status === "error" && part?.state?.error?.type === "aborted"
 
 export type InnerToolStat = {
   tool: string
@@ -96,6 +113,11 @@ export type AttributionTotals = {
   untimedCalls: Record<string, number>
   /** Untimed calls the metadata records as errors: rejected by the runtime before any host tool ran. */
   untimedRejected: number
+  /** Executes the host interrupted. Their span is the age of an abandoned call, not execution. */
+  aborted: number
+  /** Wall clock those interrupted spans cover, kept as its own figure and never inside `spanMs`. */
+  abortedMs: number
+  /** Span of the executes that actually ran to a result. Interrupted ones are not in it. */
   spanMs: number
   attributedMs: number
   unaccountedMs: number
@@ -182,6 +204,7 @@ export function attributeExecutePart(part: any, sessionID: string, seq: number):
     betweenMs: inner.length ? durationMs - attributedMs - startupMs - tailMs : 0,
     tailMs,
     timed: inner.length > 0,
+    aborted: isAborted(part),
   }
 }
 
@@ -237,7 +260,11 @@ export function innerToolStats(spans: ExecuteSpan[]): InnerToolStat[] {
  * miss, and `coverageOfAll` reports the version that does, so neither number can flatter the
  * other. An untimed execute is still carried in `spanMs` and `unaccountedMs`.
  */
-export function attributionTotals(spans: ExecuteSpan[]): AttributionTotals {
+export function attributionTotals(all: ExecuteSpan[]): AttributionTotals {
+  // An interrupted execute's `completed` is when the abort landed. Leaving it in the denominator
+  // makes two abandoned calls look like the whole cost of Code Mode, so it is counted as itself.
+  const abortedSpans = all.filter(span => span.aborted)
+  const spans = all.filter(span => !span.aborted)
   const timed = spans.filter(span => span.timed)
   const spanMs = spans.reduce((n, span) => n + span.durationMs, 0)
   const attributedMs = spans.reduce((n, span) => n + span.attributedMs, 0)
@@ -255,6 +282,8 @@ export function attributionTotals(spans: ExecuteSpan[]): AttributionTotals {
     untimed: spans.length - timed.length,
     untimedCalls,
     untimedRejected,
+    aborted: abortedSpans.length,
+    abortedMs: abortedSpans.reduce((n, span) => n + span.durationMs, 0),
     spanMs,
     attributedMs,
     unaccountedMs: spanMs - attributedMs,

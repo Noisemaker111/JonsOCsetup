@@ -51,4 +51,10 @@ against the runtime's own catalog and never reaches a host tool; a call the runt
 own signature check is recorded `error` without ever being dispatched; and a failed execute returns
 the error instead of a result, so there is no metadata to write on at all.
 
+An execute the host interrupted is the fourth, and it is excluded rather than named-and-counted.
+The host stamps `time.completed` when the abort lands, so the span measures how long nobody came
+back to an abandoned call. Three such parts on this installation carried 5,890.6s of a 7,724.4s
+total — 76% of "all Code Mode time" — while an uninterrupted twin of one of them ran the identical
+program in 45.9s. They are reported as `abortedMs`, and the remaining executes total 1,833.8s.
+
 `scripts/execute-attribution.ts` reads through this module, as any duration view should.
