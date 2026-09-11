@@ -7,6 +7,7 @@ import { normalizeArtifact } from "./artifacts"
 import { acquireLock } from "./locking"
 import { redact } from "./privacy"
 import { questRequestFingerprint, unresolvedDuplicate } from "./duplicates"
+import { namingProblems } from "./naming"
 import type { ProjectIdentity } from "./project"
 import type { Quest, QuestStageStatus } from "./types"
 import { TASK_CLASSES } from "../models/task-demand"
@@ -77,6 +78,10 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
       // One tool call admits one Quest. A redelivered call returns what it already created.
       const admitted = store.read(id)
       if (admitted) return questView(admitted)
+      // Jk reads the Quest, not the conversation that made it. A record that cannot say what it is
+      // is refused here rather than discouraged in a prompt, which this repo has watched fail twice.
+      const unreadable = namingProblems({ title: input.title, objective: input.description, steps: input.steps })
+      if (unreadable.length) throw new QuestError("UNREADABLE_QUEST", "No Quest was created. " + unreadable.join(" ") + " Retry create with the corrected wording; the request itself does not change.")
       const fingerprint = questRequestFingerprint({ projectID: context.project.id, title: input.title, objective: input.description })
       const duplicate = unresolvedDuplicate(readAllQuests(store.projectRoot).flatMap(x => x.quest ? [x.quest] : []), { projectID: context.project.id, title: input.title, objective: input.description, fingerprint })
       // A failed dispatch does not consume the request. Re-stating it as a second Quest
