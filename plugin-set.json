@@ -6,7 +6,8 @@
     "quest/server.ts",
     "harnesses/server.ts",
     "usage/server.ts",
-    "project-router/server.ts"
+    "project-router/server.ts",
+    "context-graph/server.ts"
   ],
   "tuiEntrypoints": [
     "usage/tui-active/usage.tsx",
@@ -35,7 +36,8 @@
     "plugins-active/papercut-memory.ts": "papercut",
     "models/server.ts": "models",
     "quest/server.ts": "quests",
-    "harnesses/server.ts": "harness"
+    "harnesses/server.ts": "harness",
+    "context-graph/server.ts": "context-graph"
   },
   "publicSurfaces": [
     "project-router/executable.mjs",
@@ -70,7 +72,8 @@
     "quest/worker-observation.mjs",
     "quest/giver-public.ts",
     "quest/giver-registry.mjs",
-    "context-graph/context-graph.ts"
+    "context-graph/context-graph.ts",
+    "context-graph/execute-attribution.ts"
   ],
   "_helperComment": "Imported by a listed entrypoint, not loaded directly by the host. claude-code-session and harness-run are started from favorite-router's isolated component list.",
   "helpersOutsideDiscovery": [
@@ -82,7 +85,8 @@
     "plugins-active/claude-code-session.ts",
     "plugins-active/claude-code-task.ts",
     "plugins-active/harness-run.ts",
-    "orchestration/orchestration.ts"
+    "orchestration/orchestration.ts",
+    "context-graph/execute-timing.ts"
   ],
   "packages": [
     "usage/plugin.json",

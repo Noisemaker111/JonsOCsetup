@@ -28,6 +28,7 @@
     "setup:install": "node scripts/install-setup.mjs --apply",
     "runtime:drive": "bun scripts/drive-opencode.ts",
     "check:core": "node scripts/core-suite.mjs",
+    "check:repo": "node scripts/repo-hygiene.mjs",
     "worktree:cleanup": "node scripts/worktree-cleanup.mjs"
   }
 }
