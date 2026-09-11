@@ -9,7 +9,7 @@ const launch = JSON.stringify({ agents: { "quest-giver": { model: "opencode-go/d
 
 test("a refused request and a substituted model both reach the conversation, not just the log", async () => {
   const hooks: Record<string, Function> = {}
-  const posted: { sessionID: string; text: string; resume?: boolean }[] = []
+  const posted: { sessionID: string; text: string; description?: string; resume?: boolean }[] = []
   const session = {
     hook: async (name: string, callback: Function) => { hooks[name] = callback },
     synthetic: async (input: any) => { posted.push(input) },
@@ -27,9 +27,12 @@ test("a refused request and a substituted model both reach the conversation, not
     expect(posted[0].sessionID).toBe("ses_giver")
     expect(posted[0].text).toContain("openrouter/deepseek/deepseek-v4.1-flash")
     expect(posted[0].text).toContain("opencode-go/deepseek-v4.1-flash")
-    // The notice has to wake the session. Posted with resume:false it was durable and invisible --
-    // the row sat in session_inbox and never reached the screen, which is the same silence moved.
+    // Two things decide whether the notice is seen, and the first candidate got both wrong.
+    // resume:false left the row sitting in session_inbox, and a synthetic message with no
+    // description is not projected into a timeline notice at all (isNotice, session-ui), so it was
+    // durable, promoted and still invisible.
     expect(posted[0].resume).toBeUndefined()
+    expect(posted[0].description).toBe(posted[0].text)
 
     // The refusal still blocks the request -- the fix is that the user is told, never that the
     // forbidden route is allowed through.
