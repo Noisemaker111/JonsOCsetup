@@ -1,6 +1,6 @@
 import { inspectHostExecutable } from '../project-router/executable.mjs'
 /** Immutable-generation plugin promotion selected by one atomic pointer. */
-import { closeSync, copyFileSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs"
+import { closeSync, copyFileSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { basename, dirname, join, resolve } from "node:path"
 import { homedir } from "node:os"
 import { spawn } from "node:child_process"
@@ -9,6 +9,7 @@ import { validateConfiguredPlugins } from "../plugin-health"
 import { parse as parseJson5 } from "json5"
 import { hiddenExecFileSync } from "./windows-process"
 import { repositoryBoundaries } from "./headless-guard"
+import { withLockAsync } from "./evidence-lock.mjs"
 
 export type Activation = { schema: 2; activeGeneration: string; lastKnownGood: string; candidateGeneration?: string; updated: string; evidence?: unknown; failure?: unknown }
 export const activationPath = (root: string) => join(root, "plugin-activation.json")
@@ -59,7 +60,15 @@ export const exhausted = inconclusive
 function atomicJson(path: string, value: unknown) { mkdirSync(dirname(path), { recursive: true }); const tmp=`${path}.${process.pid}.tmp`; const fd=openSync(tmp,"w"); try { writeFileSync(fd,JSON.stringify(value,null,2)+"\n"); fsyncSync(fd) } finally { closeSync(fd) }; renameSync(tmp,path) }
 function readActivation(root: string): Activation { try { const x=JSON.parse(readFileSync(activationPath(root),"utf8")); if(x.schema===2&&/^[\w.-]+$/.test(x.activeGeneration))return x } catch{}; return {schema:2,activeGeneration:"gen-current",lastKnownGood:"gen-current",updated:new Date().toISOString()} }
 function copyTree(src:string,dst:string,relative:string,boundaries:Set<string>){mkdirSync(dst,{recursive:true});for(const n of readdirSync(src)){const next=relative+"/"+n;if(boundaries.has(next)||[".git","node_modules"].includes(n))continue;const a=join(src,n),b=join(dst,n),info=lstatSync(a);if(info.isSymbolicLink())throw new Error(`Cannot stage source link: ${next}`);if(info.isDirectory())copyTree(a,b,next,boundaries);else copyFileSync(a,b)}}
-function lock<T>(root:string,fn:()=>Promise<T>):Promise<T>{const l=join(root,".plugin-promote.lock");try{mkdirSync(l)}catch(e){if((e as any).code==="EEXIST"&&Date.now()-statSync(l).mtimeMs>120000){rmSync(l,{recursive:true,force:true});mkdirSync(l)}else throw new Error("plugin promotion already in progress")};return fn().finally(()=>rmSync(l,{recursive:true,force:true}))}
+/**
+ * Promotion holds the same evidence-driven lock the release registry holds, for the same reason.
+ * This was a bare directory reclaimed on `Date.now()-mtime>120000`: an age, which takes the lock
+ * from a promotion still copying trees and validating a host against a 180s timeout, records
+ * nothing about who held it, and tells nobody it happened. It is the shape that stranded every
+ * launch behind the retirement lock for four hours on 2026-09-11.
+ */
+const promotionLock=(root:string)=>({path:join(root,".plugin-promote.lock"),label:"deploy-lock",subject:"a plugin",activity:"Plugin promotion"})
+function lock<T>(root:string,fn:()=>Promise<T>):Promise<T>{return withLockAsync(promotionLock(root),"promotion",fn)}
 function hiddenRun(exe:string,args:string[],cwd:string,env:NodeJS.ProcessEnv,timeout=30000){return new Promise<{code:number;out:string}>((done)=>{const p=spawn(exe,args,{cwd,env,shell:false,windowsHide:true,stdio:["ignore","pipe","pipe"]});let out="";p.stdout.on("data",x=>out=(out+x).slice(-8000));p.stderr.on("data",x=>out=(out+x).slice(-8000));const t=setTimeout(()=>{p.kill();done({code:124,out:`${out}
 [timeout after ${timeout}ms]`})},timeout);p.once("close",c=>{clearTimeout(t);done({code:c??1,out})});p.once("error",e=>{clearTimeout(t);done({code:1,out:String(e)})})})}
 export async function validateCandidate(root:string,candidate:string){
