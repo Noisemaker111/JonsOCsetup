@@ -8,7 +8,18 @@ import {questRoot} from './root'
 const unwrap=(v:any)=>v?.data??v
 const worker=(store:QuestStore,id:string)=>readAllQuests(store.projectRoot,{includeArchived:true}).some(r=>r.quest?.sessions.some(s=>(s.openCodeSessionId??s.sessionID)===id))
 export const userGiverID=(store=new QuestStore(questRoot()))=>readUserGiver(store.runtime)?.sessionID as string|undefined
-function eligible(store:QuestStore,row:any){if(!row?.id?.startsWith('ses_')||row.parentID||row.parent_id||worker(store,row.id)||row.agent!=='quest-giver')throw new QuestError('GIVER_IDENTITY_INVALID','The user giver must be a verified root Quest Giver, never an execution worker')}
+/**
+ * What a conversation has to be to hold the giver binding: a root conversation of the user's own,
+ * never an execution worker. This is identity, and it does not change while the conversation lives.
+ */
+function rootConversation(store:QuestStore,row:any){if(!row?.id?.startsWith('ses_')||row.parentID||row.parent_id||worker(store,row.id))throw new QuestError('GIVER_IDENTITY_INVALID','The user giver must be a verified root conversation, never an execution worker')}
+/**
+ * What elects one. The quest-giver agent is how a conversation becomes the giver; after that the
+ * binding is the session, not the agent its composer happens to be set to. Sending one message
+ * through another agent rewrites the session's agent, and requiring it here un-elected the bound
+ * giver mid-conversation and left the whole board with none.
+ */
+function eligible(store:QuestStore,row:any){rootConversation(store,row);if(row.agent!=='quest-giver')throw new QuestError('GIVER_IDENTITY_INVALID','A Quest Giver is elected from a conversation opened with the quest-giver agent')}
 export async function bindUserGiver(store:QuestStore,host:any,sessionID:string){
  const row=unwrap(await host.get({sessionID}));if(row?.id!==sessionID)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different giver');eligible(store,row)
  const lock=acquireLock(store.runtime,'user-giver',{timeoutMs:0})
@@ -16,7 +27,7 @@ export async function bindUserGiver(store:QuestStore,host:any,sessionID:string){
 }
 export async function ensureUserGiver(store:QuestStore,host:any,currentID?:string,directory=process.cwd()){
  const prior=readUserGiver(store.runtime)
- if(prior){if(prior.state!=='bound')throw new QuestError('GIVER_OUTCOME_UNKNOWN','Giver creation is uncertain; inspect the existing session before retrying');const row=unwrap(await host.get({sessionID:prior.sessionID}));if(row?.id!==prior.sessionID)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different giver');eligible(store,row);return row}
+ if(prior){if(prior.state!=='bound')throw new QuestError('GIVER_OUTCOME_UNKNOWN','Giver creation is uncertain; inspect the existing session before retrying');const row=unwrap(await host.get({sessionID:prior.sessionID}));if(row?.id!==prior.sessionID)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different giver');rootConversation(store,row);return row}
  if(currentID){const row=unwrap(await host.get({sessionID:currentID}));if(row?.id!==currentID)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different session');if(row?.agent==='quest-giver'&&!worker(store,row.id)&&!row.parentID)return bindUserGiver(store,host,row.id)}
  const ids=[...new Set(readAllQuests(store.projectRoot,{includeArchived:true}).flatMap(r=>r.quest?.integrationOwner?.startsWith('ses_')?[r.quest.integrationOwner]:[]))]
  const candidates:any[]=[]
@@ -51,7 +62,7 @@ export function selectUserGiverProject(store:QuestStore,sessionID:string,targets
 export function giverContext(store:QuestStore,session:any,requestID:string,questID?:string):QuestContext {
  const registered=readUserGiver(store.runtime),origin=physicalDirectory(session.location.directory)
  if(!registered||registered.sessionID!==session.id)return {sessionID:session.id,requestID,directory:origin,project:projectIdentity(origin)}
- eligible(store,session)
+ rootConversation(store,session)
  const q=questID?store.read(questID):undefined,selected=registered.selection?.targets??[]
  if(!q&&selected.length>1)throw new QuestError('PROJECT_SELECTION_REQUIRED','Select one project for this Quest; all Quests stay with the same giver')
  const directory=q?physicalDirectory((q.extensions.giverSourceDirectory as string)??q.project!.root):selected[0]?.directory??origin
@@ -61,7 +72,7 @@ export function giverContext(store:QuestStore,session:any,requestID:string,quest
 export function verifyGiverBinding(store:QuestStore,context:QuestContext,session:any){
  if(!context.giverDirectory)return verifySourceBinding(context,session?.location?.directory)
  if(userGiverID(store)!==context.sessionID||session?.id!==context.sessionID||physicalDirectory(session.location.directory)!==physicalDirectory(context.giverDirectory))throw new QuestError('GIVER_BINDING_CHANGED','The user giver changed; inspect before dispatch')
- eligible(store,session);verifySourceBinding(context,context.directory!)
+ rootConversation(store,session);verifySourceBinding(context,context.directory!)
 }
 
 /** Register the native first conversation even when its first turn is only discussion. */

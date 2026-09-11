@@ -1,6 +1,6 @@
 /**
- * @core-prevents one historical Quest record whose owner is a worker session or a session the host no longer has making the whole board giverless, so no Quest on it can be assigned an execution session at all
- * @core-observed Driving the real ledger on 2026-09-11 to dispatch a blocked Quest step, every Quest Giver session opened onto a modal and the composer never took input: first "Error: The user giver must be a verified root Quest Giver, never an execution worker" for ses_f94bf1cf5ffeGUqvREwNUfafj1 ("Pipeline smoke haiku worker"), recorded as one archived smoke Quest's owner and as another Quest's worker session, then "[object Object]" for ses_f72b5a2e8ffeRFAq1r8COVN5hx, which is recorded as an owner and is not in opencode.db. Both sort before the 20 real givers also recorded.
+ * @core-prevents the board losing its one Quest Giver over something that says nothing about which conversation it is -- a historical owner record that is a worker or a deleted session, or the agent the bound giver's composer was last set to -- leaving no Quest on it assignable to an execution session
+ * @core-observed Driving the real ledger on 2026-09-11 to dispatch a blocked Quest step, every Quest Giver session opened onto a modal and the composer never took input: first "Error: The user giver must be a verified root Quest Giver, never an execution worker" for ses_f94bf1cf5ffeGUqvREwNUfafj1 ("Pipeline smoke haiku worker"), recorded as one archived smoke Quest's owner and as another Quest's worker session, then "[object Object]" for ses_f72b5a2e8ffeRFAq1r8COVN5hx, recorded as an owner and absent from opencode.db. Both sort before the 20 real givers recorded. After the scan reconnected ses_f78f74a45ffe21wnaHpKGppeNw, one message sent from its composer under the Build agent rewrote session_v2.agent to "build" and the same modal came back on a conversation that was still the giver.
  */
 import { test, expect } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
@@ -42,5 +42,14 @@ test("a recorded owner that is not a giver is passed over, not raised, so the bo
     expect(bound.id).toBe(real)
     expect(asked).toContain(worker)
     expect(asked).toContain(deleted)
+
+    // One message sent through another agent rewrites the session's agent. The binding is the
+    // conversation, so it survives that; it is still a root session and still not a worker.
+    rows[real].agent = "build"
+    expect((await ensureUserGiver(store, host)).id).toBe(real)
+
+    // What it must not survive: that conversation turning out to be an execution worker.
+    quest(store, "01j000000000000000000000a4", "Something dispatched into the giver session", real, real)
+    expect(ensureUserGiver(store, host)).rejects.toThrow("never an execution worker")
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
