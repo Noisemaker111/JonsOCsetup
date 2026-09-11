@@ -13,6 +13,7 @@ import { spawn, spawnSync } from "node:child_process"
 import { existsSync, readFileSync, appendFileSync, readdirSync, rmSync, statSync } from "node:fs"
 import { join, resolve } from "node:path"
 import { Database } from "bun:sqlite"
+import { driveSession } from "./drive-isolation"
 
 type Condition = "reply" | "quest-step-done" | "worker-completed"
 const option = (name: string) => { const i = process.argv.indexOf(name); return i < 0 ? undefined : process.argv[i + 1] }
@@ -33,7 +34,11 @@ if (flag("--help") || (!option("--ask") && !flag("--test-change"))) {
   --deny-permissions   Do not auto-approve permission prompts; capture and fail instead.
   --allow-expensive    Permit a route over $1/Mtok input; only for checks about that model.
   --live               Drive the real ledger and session database instead of a sandbox. Use this
-                       when another harness wants the Quest Giver to do actual work, not a check.`)
+                       when another harness wants the Quest Giver to do actual work, not a check.
+                       Attaches to the registered Quest Giver session, because a new one cannot
+                       dispatch: the giver is a single registered session by design.
+  --session <ses_…>    Attach to this conversation instead of the registered giver.
+  --new-session        Start a fresh conversation under --live. It can talk, not dispatch.`)
   process.exit(0)
 }
 
@@ -48,6 +53,12 @@ if (flag("--help") || (!option("--ask") && !flag("--test-change"))) {
  * activated just as surely as on one with a release running.
  */
 const live = flag("--live")
+
+// A live drive opens the registered Quest Giver, because a new session cannot dispatch; see
+// driveSession in scripts/drive-isolation.ts for why.
+const giverRegistry = join(process.env.USERPROFILE ?? process.env.HOME ?? ".", ".opencode", ".quest-runtime", "user-giver.json")
+const registered = (() => { try { return JSON.parse(readFileSync(giverRegistry, "utf8")) } catch { return undefined } })()
+const attach = driveSession({ live, pinned: option("--session"), newSession: flag("--new-session"), registered })
 if (live && flag("--test-change")) throw new Error("--test-change writes and then deletes; it never runs against the real ledger. Drop --live or drop --test-change.")
 
 const started = Date.now()
@@ -107,7 +118,8 @@ const send = (value: unknown) => appendFileSync(commands, JSON.stringify(value) 
 // the sandbox instead. The host still starts its own session either way, so a live drive never
 // types into a conversation already open. See scripts/drive-isolation.ts for what each mode sets.
 const child = spawn("bun", [join(release, "scripts", "drive-opencode.ts"), "--config-root", release, "--cwd", cwd,
-  "--model", model, "--out", out, "--cols", "200", "--rows", "60", ...(live ? ["--live"] : [])], { cwd: release, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
+  "--model", model, "--out", out, "--cols", "200", "--rows", "60",
+  ...(live ? ["--live"] : []), ...(attach ? ["--session", attach] : [])], { cwd: release, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
 let childExit: number | undefined
 const driverLog: string[] = []
 child.on("exit", code => { childExit = code ?? 0 })
