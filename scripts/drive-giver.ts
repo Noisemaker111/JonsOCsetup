@@ -165,8 +165,14 @@ function sessionRows() {
 }
 
 await until("the driver to open its command channel", () => existsSync(commands), 180000)
+/**
+ * A live drive lands in the giver conversation that already exists, and that screen has no empty
+ * composer placeholder -- it carries the giver banner above the composer instead. Waiting only for
+ * "Ask anything" timed every live drive out on a composer that was ready the whole time.
+ */
+const composerReady = (frame: string) => frame.includes("Ask anything") || frame.includes("YOUR QUEST GIVER")
 for (let attempt = 0; ; attempt++) {
-  if ((await capture("ready-" + attempt)).includes("Ask anything")) break
+  if (composerReady(await capture("ready-" + attempt))) break
   if (attempt >= 29) throw new Error("Composer never became ready; evidence in " + out)
   await sleep(4000)
 }
