@@ -20,8 +20,23 @@ export async function ensureUserGiver(store:QuestStore,host:any,currentID?:strin
  if(currentID){const row=unwrap(await host.get({sessionID:currentID}));if(row?.id!==currentID)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different session');if(row?.agent==='quest-giver'&&!worker(store,row.id)&&!row.parentID)return bindUserGiver(store,host,row.id)}
  const ids=[...new Set(readAllQuests(store.projectRoot,{includeArchived:true}).flatMap(r=>r.quest?.integrationOwner?.startsWith('ses_')?[r.quest.integrationOwner]:[]))]
  const candidates:any[]=[]
- for(const id of ids){try{const row=unwrap(await host.get({sessionID:id}));if(row?.id!==id)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different recorded giver');eligible(store,row);candidates.push(row)}catch(e){if((e as any)?.status!==404)throw e}}
- if(ids.length&&!candidates.length)throw new QuestError('GIVER_UNREACHABLE','Recorded giver is not reachable on this host; reconnect it instead of creating another')
+ // A scan for a giver among recorded owners, so a recorded owner that is not one is passed over
+ // the way a deleted one already is. Some of those records name a worker session or a subsession;
+ // raising on the first of them makes one line of history the reason the whole board has no giver
+ // and nothing can be dispatched. Eligibility is still hard where it decides something: the
+ // session actually bound, below and in bindUserGiver.
+ let reached=0
+ for(const id of ids){
+  let row:any
+  try{row=unwrap(await host.get({sessionID:id}))}catch(e){if((e as any)?.status===404)continue;throw e}
+  if(row?.id!==id)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different recorded giver')
+  reached++
+  try{eligible(store,row)}catch{continue}
+  candidates.push(row)
+ }
+ // Refusing to create a second giver is about a giver that exists and this host cannot see. When
+ // every recorded owner answered and none of them is a giver, there is nothing to reconnect to.
+ if(ids.length&&!candidates.length&&!reached)throw new QuestError('GIVER_UNREACHABLE','Recorded giver is not reachable on this host; reconnect it instead of creating another')
  if(candidates.length){candidates.sort((a,b)=>(Date.parse(b.time?.updated)||Number(b.time?.updated)||0)-(Date.parse(a.time?.updated)||Number(a.time?.updated)||0));return bindUserGiver(store,host,candidates[0].id)}
  const lock=acquireLock(store.runtime,'user-giver',{timeoutMs:0})
  try{if(readUserGiver(store.runtime))throw new QuestError('GIVER_CREATION_BUSY','Another request is establishing your giver; refresh');saveUserGiver(store.runtime,{state:'launching'});try{const created=unwrap(await host.create({title:'Quest Giver',agent:'quest-giver',location:{directory:physicalDirectory(directory)}})),row=unwrap(await host.get({sessionID:created?.id}));if(row?.id!==created?.id)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different created giver');eligible(store,row);saveUserGiver(store.runtime,{state:'bound',sessionID:row.id,directory:physicalDirectory(row.location.directory),model:row.model});return row}catch(error){saveUserGiver(store.runtime,{state:'unknown',reason:String(error)});throw error}}finally{lock.release()}
