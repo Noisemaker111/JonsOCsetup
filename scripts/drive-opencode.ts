@@ -7,10 +7,11 @@ import {spawn} from 'node:child_process'
 import {mkdirSync,readFileSync,writeFileSync,appendFileSync,existsSync} from 'node:fs'
 import {join,resolve} from 'node:path'
 import {freePort} from './plugin-deploy'
+import {driveEnvironment} from './drive-isolation'
 
 const option=(name:string)=>{const i=process.argv.indexOf(name);return i<0?undefined:process.argv[i+1]}
 if(process.argv.includes('--help')){
- console.log('bun run runtime:drive -- --config-root <prepared release> --cwd <project> --model <exact route> --out <new evidence directory> [--agent quest-giver] [--auto]')
+ console.log('bun run runtime:drive -- --config-root <prepared release> --cwd <project> --model <exact route> --out <new evidence directory> [--agent quest-giver] [--auto] [--live]')
  console.log('Append one JSON command per line to commands.jsonl: paste {text}; key {name,ctrl?,shift?,meta?}; click {x,y,button?}; scroll {x,y,direction}; capture {name}; stop. Coordinates are 1-based terminal cells. Paste does not submit; send key name=return separately. Captures render actual terminal output, never app source.')
  process.exit(0)
 }
@@ -25,7 +26,12 @@ const queue=join(out,'commands.jsonl');writeFileSync(queue,'')
 const canvas=await createTestRenderer({width:cols,height:rows})
 const terminal=new EmbeddedTerminalRenderable(canvas.renderer,{id:'host',width:cols,height:rows,cols,rows,maxScrollback:100000})
 canvas.renderer.root.add(terminal);terminal.focus()
-const env={...process.env,OPENCODE_CONFIG_DIR:root,OPENCODE_CONFIG_PROJECT_DISABLE:'1',OPENCODE_RELEASE_CHANNEL:'dev',OPENCODE_DB:join(out,'host.db'),OPENCODE_QUEST_ROOT:join(out,'quests'),OPENCODE_ORCHESTRATION_LEDGER:join(out,'orchestration.jsonl'),OPENCODE_TELEMETRY_FILE:join(out,'requests.jsonl'),XDG_STATE_HOME:join(out,'state'),OPENCODE_DISABLE_AUTOUPDATE:'1',CLAUDE_CODE_BRIDGE_PORT:String(await freePort())}
+// Isolated by default: a drive is usually a check, and a check must not write into the real session
+// database, quest ledger or orchestration log. --live is the opposite case -- another harness asking
+// the Quest Giver to do actual work -- so it keeps the host's real homes and only captures frames
+// into the evidence directory. It still starts its own session, so it never types into a
+// conversation someone already has open. See scripts/drive-isolation.ts for the table.
+const env=driveEnvironment({base:process.env,root,out,live:process.argv.includes('--live'),bridgePort:await freePort()})
 const child=spawn('node',[join(root,'scripts/opencode-runtime.mjs'),'--config-root',root,'--json',...(process.argv.includes('--auto')?['--auto']:[]),'--cwd',cwd,'--model',model,'--agent',option('--agent')??'quest-giver','--cols',String(cols),'--rows',String(rows)],{cwd:root,env,windowsHide:true,stdio:['pipe','pipe','pipe']})
 const send=(data:string)=>child.stdin.write(JSON.stringify({type:'write',data:Buffer.from(data).toString('base64')})+'\n')
 terminal.onData=data=>send(Buffer.from(data).toString())
