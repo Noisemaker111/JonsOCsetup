@@ -169,8 +169,13 @@ await until("the driver to open its command channel", () => existsSync(commands)
  * A live drive lands in the giver conversation that already exists, and that screen has no empty
  * composer placeholder -- it carries the giver banner above the composer instead. Waiting only for
  * "Ask anything" timed every live drive out on a composer that was ready the whole time.
+ *
+ * Until that session's location finishes resolving, the composer is replaced by the recovery panel
+ * rather than merely disabled, and keystrokes go to its button. Booting location services at a
+ * directory with many worktrees took 17s here, so this is a wait, not a failure.
  */
-const composerReady = (frame: string) => frame.includes("Ask anything") || frame.includes("YOUR QUEST GIVER")
+const composerReady = (frame: string) =>
+  !frame.includes("Session location unavailable") && (frame.includes("Ask anything") || frame.includes("YOUR QUEST GIVER"))
 for (let attempt = 0; ; attempt++) {
   if (composerReady(await capture("ready-" + attempt))) break
   if (attempt >= 29) throw new Error("Composer never became ready; evidence in " + out)
