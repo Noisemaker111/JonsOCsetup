@@ -7,15 +7,18 @@ import {spawn} from 'node:child_process'
 import {mkdirSync,readFileSync,writeFileSync,appendFileSync,existsSync} from 'node:fs'
 import {join,resolve} from 'node:path'
 import {freePort} from './plugin-deploy'
-import {driveEnvironment} from './drive-isolation'
+import {driveEnvironment,driveIdentity} from './drive-isolation'
 
 const option=(name:string)=>{const i=process.argv.indexOf(name);return i<0?undefined:process.argv[i+1]}
 if(process.argv.includes('--help')){
  console.log('bun run runtime:drive -- --config-root <prepared release> --cwd <project> --model <exact route> --out <new evidence directory> [--agent quest-giver] [--auto] [--live]')
- console.log('Append one JSON command per line to commands.jsonl: paste {text}; key {name,ctrl?,shift?,meta?}; click {x,y,button?}; scroll {x,y,direction}; capture {name}; stop. Coordinates are 1-based terminal cells. Paste does not submit; send key name=return separately. Captures render actual terminal output, never app source.')
+ console.log('Append one JSON command per line to commands.jsonl: paste {text}; key {name,ctrl?,shift?,option?,meta?}; raw {hex}; click {x,y,button?}; scroll {x,y,direction}; capture {name}; stop. Coordinates are 1-based terminal cells. Paste does not submit; send key name=return separately. Captures render actual terminal output, never app source.')
+ console.log('key encodes through this embedded terminal, which answers the host\'s kitty keyboard query and then reports modifiers, so key never reproduces a terminal that lacks that protocol. raw {hex} writes the exact bytes such a terminal sends -- Windows Terminal Ctrl-Backspace is raw {"hex":"08"} and ordinary Backspace raw {"hex":"7f"}.')
  process.exit(0)
 }
-for(const key of ['--config-root','--cwd','--model','--out'])if(!option(key))throw Error('Required: '+key)
+// A model is required to start a conversation and meaningless to impose on one that exists.
+for(const key of ['--config-root','--cwd','--out'])if(!option(key))throw Error('Required: '+key)
+if(!option('--model')&&!option('--session'))throw Error('Required: --model')
 const root=resolve(option('--config-root')!),cwd=resolve(option('--cwd')!),out=resolve(option('--out')!),model=option('--model')!
 if(existsSync(out))throw Error('Choose a new evidence directory; existing sessions and captures are preserved')
 const cols=Number(option('--cols')??140),rows=Number(option('--rows')??48)
@@ -37,8 +40,19 @@ const env=driveEnvironment({base:process.env,root,out,live:process.argv.includes
 // a fresh one is refused with "Continue in your existing Quest Giver" and can only chat.
 const session=option('--session')
 if(session!==undefined&&!/^ses_[A-Za-z0-9_-]+$/.test(session))throw Error('--session takes a ses_ identifier')
-const child=spawn('node',[join(root,'scripts/opencode-runtime.mjs'),'--config-root',root,'--json',...(process.argv.includes('--auto')?['--auto']:[]),'--cwd',cwd,'--model',model,'--agent',option('--agent')??'quest-giver',...(session?['--session',session]:[]),'--cols',String(cols),'--rows',String(rows)],{cwd:root,env,windowsHide:true,stdio:['pipe','pipe','pipe']})
-const send=(data:string)=>child.stdin.write(JSON.stringify({type:'write',data:Buffer.from(data).toString('base64')})+'\n')
+/**
+ * A new session needs a model and an agent chosen for it. An existing one already has both, and
+ * they are the owner's, not the driver's: attaching to Jon's registered Quest Giver with --model and
+ * --agent rewrote that conversation's lane, and when the forced turn failed on an exhausted account
+ * the host recovered by switching the session to the replacement model's default agent, Build --
+ * which made the single registered giver ineligible for every quest tool it owns.
+ *
+ * So a drive that opens an existing conversation carries neither, unless the caller passed them
+ * itself and therefore means to change that session.
+ */
+const identity=driveIdentity({attaching:!!session,model:option('--model'),agent:option('--agent'),chose:name=>process.argv.includes(name)})
+const child=spawn('node',[join(root,'scripts/opencode-runtime.mjs'),'--config-root',root,'--json',...(process.argv.includes('--auto')?['--auto']:[]),'--cwd',cwd,...identity,...(session?['--session',session]:[]),'--cols',String(cols),'--rows',String(rows)],{cwd:root,env,windowsHide:true,stdio:['pipe','pipe','pipe']})
+const send=(data:string|Buffer)=>child.stdin.write(JSON.stringify({type:'write',data:Buffer.from(data as any).toString('base64')})+'\n')
 terminal.onData=data=>send(Buffer.from(data).toString())
 let buffer='',seen=0,busy=false,done=false,stopping=false
 const events:any[]=[]
@@ -54,7 +68,14 @@ async function command(c:any){
  else if(c.action==='key'){
   if(typeof c.name!=='string'||(!sequences[c.name]&&c.name.length!==1))throw Error('Unsupported key')
   const sequence=sequences[c.name]??c.name
-  send(Buffer.from(terminal.encodeKey(new KeyEvent({name:c.name,sequence,raw:sequence,ctrl:c.ctrl===true,shift:c.shift===true,meta:c.meta===true,option:false,number:false,eventType:'press',source:'raw'}))).toString())
+  send(Buffer.from(terminal.encodeKey(new KeyEvent({name:c.name,sequence,raw:sequence,ctrl:c.ctrl===true,shift:c.shift===true,meta:c.meta===true,option:c.option===true,number:false,eventType:'press',source:'raw'}))).toString())
+ }else if(c.action==='raw'){
+  // This embedded terminal answers the host's kitty keyboard query, so `key` always arrives
+  // modifier-tagged and can never reproduce a terminal that has no such protocol. Windows Terminal
+  // is that terminal: it sends bare 08 for Ctrl-Backspace and 7f for Backspace, which the host
+  // decodes as the same unmodified key. `raw` writes those bytes so a check exercises that path.
+  if(typeof c.hex!=='string'||!/^([0-9a-fA-F]{2})+$/.test(c.hex))throw Error('raw requires an even-length hex byte string')
+  send(Buffer.from(c.hex,'hex'))
  }else if(c.action==='click'||c.action==='scroll'){
   if(!Number.isInteger(c.x)||!Number.isInteger(c.y)||c.x<1||c.x>cols||c.y<1||c.y>rows)throw Error('Coordinates outside terminal')
   const button=c.action==='scroll'?(c.direction==='up'?64:c.direction==='down'?65:-1):(c.button??0)
