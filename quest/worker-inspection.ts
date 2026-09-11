@@ -23,6 +23,14 @@ async function reconcile(store:QuestStore,host:any) {
  const tracker=new QuestTracker(store,host),observations:Record<string,any>={}
  for(const entry of readAllQuests(store.projectRoot,{includeArchived:true}))for(const run of entry.quest?.sessions??[]){
   if(!['planned','executing','waiting','blocked'].includes(run.state))continue
+  // A planned run that already reported a dispatch outcome and never bound a worker session has
+  // no identity to observe, so it can never leave 'planned'. Left there it holds its step
+  // ineligible forever, and the only move the Quest still offers is a duplicate of itself.
+  if(run.state==='planned'&&run.result&&!(run.openCodeSessionId??run.sessionID)){
+   observations[run.runID??run.callID]={state:'failed',reason:run.result}
+   store.apply(entry.quest!.id,'session-state',{callID:run.callID,state:'failed',result:run.result,evidence:'Dispatch reported an outcome without binding a worker session; settled as failed so this step can be dispatched again on this Quest'},'quest:reconcile')
+   continue
+  }
   const observation=await inspectWorker(host,run);observations[run.runID??run.callID]=observation
   if(observation.outcome&&observation.completedAt&&Date.parse(observation.completedAt)>=Date.parse(run.updatedAt))tracker.onHostEvent({type:'session.execution.'+observation.outcome,data:{sessionID:run.openCodeSessionId??run.sessionID,observedAt:observation.completedAt}})
  }
