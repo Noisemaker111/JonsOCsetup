@@ -28,7 +28,12 @@ const usable=(r:any)=>snapshot.accounts.some((a:any)=>a.id===r.accountID&&a.stat
 // Verify on the lane the channel actually ships on when it has capacity: a route can hold quota
 // and still be unusable here, and the activated model is the one already proven against this host.
 const activated=(()=>{try{const c=JSON.parse(readFileSync(join(root,"..","..","dev.json"),"utf8"));return String(c.model??"")}catch{return ""}})()
-const activatedID=candidates.find((r:any)=>activated&&activated.startsWith(r.providerID+"/"+r.modelID))?.id
+// Reasoning effort is part of route identity, so match the whole thing. Matching on provider/model
+// alone returned whichever effort happened to sit first in the candidate list: with dev.json
+// recording deepseek-v4.1-flash#high, the gate ran both the giver and the worker at #max, which is
+// the most expensive lane for this model and not the one the channel ships. Verification runs on the
+// lane that was actually prepared, or it falls through to the policy's primary route as before.
+const activatedID=candidates.find((r:any)=>activated&&activated===r.providerID+"/"+r.modelID+"#"+r.reasoning)?.id
 const ordered=[activatedID,policy.request.primaryRouteID,...(policy.request.allowedRouteIDs??[]),...live.derived.map(r=>r.id)].filter(Boolean)
 const route=ordered.map((id:string)=>candidates.find((r:any)=>r.id===id)).find((r:any)=>r&&usable(r))
 if(!route)throw Error('No authorized route has available capacity; this check cannot produce real dispatch evidence')
