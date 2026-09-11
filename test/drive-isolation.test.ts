@@ -1,11 +1,11 @@
 /**
- * @core-prevents a driven host writing into the real session database, quest ledger or state while it believes it is sandboxed, and its opposite: a drive asked to do real work opening onto an empty ledger, or onto a session that is not the registered Quest Giver and so cannot dispatch at all
- * @core-observed On 2026-09-11 a Claude Code session drove the Quest Giver and asked it to dispatch a step of Quest 7f2d0f457a369ddbcf7a2b5253. The driver sandboxes every home, so the giver reported "Quest not found", confirmed the board was empty, and created a duplicate Quest 63ceca06f0e32ffc86fdaea969 in the sandbox and dispatched a worker against that instead. Pointed at the real homes it then failed the other way: a fresh session saw the real board's nine open Quests and could touch none of them, because the giver is one registered session and every quest tool answers "Continue in your existing Quest Giver".
+ * @core-prevents a driven host writing into the real session database, quest ledger or state while it believes it is sandboxed, and its opposite: a drive asked to do real work opening onto an empty ledger, or onto a session that is not the registered Quest Giver and so cannot dispatch at all, or onto the giver with a model and agent forced over the ones that conversation already had
+ * @core-observed On 2026-09-11 a Claude Code session drove the Quest Giver and asked it to dispatch a step of Quest 7f2d0f457a369ddbcf7a2b5253. The driver sandboxes every home, so the giver reported "Quest not found", confirmed the board was empty, and created a duplicate Quest 63ceca06f0e32ffc86fdaea969 in the sandbox and dispatched a worker against that instead. Pointed at the real homes it then failed the other way: a fresh session saw the real board's nine open Quests and could touch none of them, because the giver is one registered session and every quest tool answers "Continue in your existing Quest Giver". Attaching to that session then imposed the channel model on it, the turn failed with "The usage limit has been reached" on the exhausted openai account, and the host recovered onto the replacement model's default agent: session_v2.agent became "build" and the registered giver failed its own eligibility check.
  */
 import { test, expect } from "bun:test"
 import { spawnSync } from "node:child_process"
 import { join } from "node:path"
-import { REDIRECTED_HOMES, isolationEnvironment, driveEnvironment, driveSession } from "../scripts/drive-isolation"
+import { REDIRECTED_HOMES, isolationEnvironment, driveEnvironment, driveSession, driveIdentity } from "../scripts/drive-isolation"
 
 const base = { HOME: "C:/real-home", USERPROFILE: "C:/real-home", PATH: "/usr/bin" } as NodeJS.ProcessEnv
 const out = "C:/evidence/run-1"
@@ -71,4 +71,22 @@ test("a live drive opens the registered Quest Giver, and an isolated one never d
 
   // A malformed id is refused here rather than reaching the host as a bad argument.
   expect(() => driveSession({ live: true, pinned: "../etc" })).toThrow("ses_ identifier")
+})
+
+test("attaching carries no model or agent of its own, and a new session always gets both", () => {
+  const none = () => false
+  const all = () => true
+
+  // The conversation already has a model and an agent, and they belong to whoever owns it.
+  expect(driveIdentity({ attaching: true, model: "opencode-go/deepseek-v4.1-flash#high", chose: none })).toEqual([])
+  expect(driveIdentity({ attaching: true, model: "m", agent: "quest-giver", chose: none })).toEqual([])
+
+  // A caller who typed the flag means to change that session, so it is carried.
+  expect(driveIdentity({ attaching: true, model: "m", agent: "a", chose: all })).toEqual(["--model", "m", "--agent", "a"])
+  expect(driveIdentity({ attaching: true, model: "m", chose: (f) => f === "--model" })).toEqual(["--model", "m"])
+
+  // A conversation being created has neither yet, so both are always chosen for it.
+  expect(driveIdentity({ attaching: false, model: "m", chose: none })).toEqual(["--model", "m", "--agent", "quest-giver"])
+  expect(driveIdentity({ attaching: false, model: "m", agent: "build", chose: none })).toEqual(["--model", "m", "--agent", "build"])
+  expect(() => driveIdentity({ attaching: false, chose: none })).toThrow("--model")
 })

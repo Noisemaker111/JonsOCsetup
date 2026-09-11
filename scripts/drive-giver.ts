@@ -117,8 +117,13 @@ const send = (value: unknown) => appendFileSync(commands, JSON.stringify(value) 
 // the giver opened onto an empty ledger, said the Quest did not exist, and created a duplicate in
 // the sandbox instead. The host still starts its own session either way, so a live drive never
 // types into a conversation already open. See scripts/drive-isolation.ts for what each mode sets.
+// The channel's model is a default for a conversation this drive creates, never something to
+// impose on one it opens: forwarding it rewrote the registered giver's lane. Only a --model the
+// caller typed reaches an attached session.
+const chosenModel = option("--model")
 const child = spawn("bun", [join(release, "scripts", "drive-opencode.ts"), "--config-root", release, "--cwd", cwd,
-  "--model", model, "--out", out, "--cols", "200", "--rows", "60",
+  ...(attach ? (chosenModel ? ["--model", chosenModel] : []) : ["--model", model]),
+  "--out", out, "--cols", "200", "--rows", "60",
   ...(live ? ["--live"] : []), ...(attach ? ["--session", attach] : [])], { cwd: release, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
 let childExit: number | undefined
 const driverLog: string[] = []
