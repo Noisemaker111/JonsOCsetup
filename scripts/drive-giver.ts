@@ -10,7 +10,7 @@
  * Waits are on observed state -- the quest ledger and the session database -- never on a sleep.
  */
 import { spawn, spawnSync } from "node:child_process"
-import { existsSync, readFileSync, appendFileSync, readdirSync, rmSync } from "node:fs"
+import { existsSync, readFileSync, appendFileSync, readdirSync, rmSync, statSync } from "node:fs"
 import { join, resolve } from "node:path"
 import { Database } from "bun:sqlite"
 
@@ -31,9 +31,24 @@ if (flag("--help") || (!option("--ask") && !flag("--test-change"))) {
   --out <dir>          Evidence directory. Defaults to run/giver-<timestamp>.
   --keep               Keep the evidence directory and any worker worktree.
   --deny-permissions   Do not auto-approve permission prompts; capture and fail instead.
-  --allow-expensive    Permit a route over $1/Mtok input; only for checks about that model.`)
+  --allow-expensive    Permit a route over $1/Mtok input; only for checks about that model.
+  --live               Drive the real ledger and session database instead of a sandbox. Use this
+                       when another harness wants the Quest Giver to do actual work, not a check.`)
   process.exit(0)
 }
+
+/**
+ * A drive is a check by default, so the host gets its own database and ledger and the real data
+ * cannot be touched. --live keeps the host's real homes instead, for the other case: another
+ * harness asking the Quest Giver to do actual work on the actual board.
+ *
+ * --test-change writes an edit and then deletes the worker worktrees its quests name. On the real
+ * ledger those worktrees are other sessions' work, so the two never combine. This is checked before
+ * anything is resolved, because an incompatible pair of flags is wrong on a machine with no release
+ * activated just as surely as on one with a release running.
+ */
+const live = flag("--live")
+if (live && flag("--test-change")) throw new Error("--test-change writes and then deletes; it never runs against the real ledger. Drop --live or drop --test-change.")
 
 const started = Date.now()
 const log = (...parts: unknown[]) => console.error(...parts)
@@ -87,8 +102,12 @@ const ask = option("--ask") ?? `Create one Quest for this project and dispatch O
 const commands = join(out, "commands.jsonl")
 const send = (value: unknown) => appendFileSync(commands, JSON.stringify(value) + "\n")
 
+// Isolation is why a drive could not do real work: asked to dispatch a step of an existing Quest,
+// the giver opened onto an empty ledger, said the Quest did not exist, and created a duplicate in
+// the sandbox instead. The host still starts its own session either way, so a live drive never
+// types into a conversation already open. See scripts/drive-isolation.ts for what each mode sets.
 const child = spawn("bun", [join(release, "scripts", "drive-opencode.ts"), "--config-root", release, "--cwd", cwd,
-  "--model", model, "--out", out, "--cols", "200", "--rows", "60"], { cwd: release, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
+  "--model", model, "--out", out, "--cols", "200", "--rows", "60", ...(live ? ["--live"] : [])], { cwd: release, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
 let childExit: number | undefined
 const driverLog: string[] = []
 child.on("exit", code => { childExit = code ?? 0 })
@@ -118,16 +137,29 @@ async function capture(name?: string): Promise<string> {
   return readFileSync(file, "utf8")
 }
 
-const questDir = join(out, "quests", ".opencode", "quests")
-const quests = () => existsSync(questDir) ? readdirSync(questDir).filter(f => f.endsWith(".md")).map(f => readFileSync(join(questDir, f), "utf8")) : []
+const home = process.env.USERPROFILE ?? process.env.HOME ?? "."
+// Watch the ledger the host is actually writing to; in live mode that is questRoot()'s default.
+const questDir = live ? join(home, ".opencode", "quests") : join(out, "quests", ".opencode", "quests")
+// The real ledger carries every Quest on the board; only the ones this run touched are evidence
+// of what this run did, and mtime is what the store updates when it writes one.
+const quests = () => existsSync(questDir)
+  ? readdirSync(questDir).filter(f => f.endsWith(".md"))
+      .filter(f => !live || statSync(join(questDir, f)).mtimeMs >= started)
+      .map(f => readFileSync(join(questDir, f), "utf8"))
+  : []
 const field = (text: string, key: string) => new RegExp(`^${key}: (.*)$`, "m").exec(text)?.[1]
 const parse = (text: string, key: string) => { try { return JSON.parse(field(text, key) ?? "null") } catch { return null } }
 function sessionRows() {
-  const file = join(out, "host.db")
+  const file = live ? join(home, ".local", "share", "opencode", "opencode.db") : join(out, "host.db")
   if (!existsSync(file)) return [] as any[]
   try {
     const db = new Database(file, { readonly: true })
-    const rows = db.query("select id,title,agent,cost,tokens_input,tokens_output,idle_outcome from session_v2").all() as any[]
+    // The sandbox database holds only this run. The real one holds every session ever, so the cost
+    // and token figures below would be a lifetime bill reported as a turn. Scope live reads to
+    // sessions this run created.
+    const rows = live
+      ? db.query("select id,title,agent,cost,tokens_input,tokens_output,idle_outcome from session_v2 where time_created >= ?").all(started) as any[]
+      : db.query("select id,title,agent,cost,tokens_input,tokens_output,idle_outcome from session_v2").all() as any[]
     db.close(); return rows
   } catch { return [] }
 }
