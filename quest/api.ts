@@ -9,6 +9,7 @@ import { redact } from "./privacy"
 import { questRequestFingerprint, unresolvedDuplicate } from "./duplicates"
 import type { ProjectIdentity } from "./project"
 import type { Quest, QuestStageStatus } from "./types"
+import { TASK_CLASSES } from "../models/task-demand"
 
 export class QuestError extends Error {
   constructor(public code: string, message: string, public retryable = false, public runID?: string) { super(message) }
@@ -16,8 +17,12 @@ export class QuestError extends Error {
 export type QuestContext = { project: ProjectIdentity; /** Internal host-derived location; never tool input. */ directory?: string; /** Verified user-giver origin, separate from the selected worker project. */ giverDirectory?: string; sessionID: string; requestID: string }
 export type CreateQuest = { title: string; description: string; steps: { title: string; detail?:string; needs?: string[]; id?: string; commandID?: string }[]; reward?: string }
 export type UpdateQuest = { title?: string; description?: string; reward?: string; steps?: { id: string; state: QuestStageStatus; title?: string; detail?: string; needs?: string[]; note?: string }[]; artifacts?: { name: string; path?: string; uri?: string; label?: string }[]; archive?: { reason?: string; accepted: boolean } | null }
-export type RunQuest = { readOnly?: boolean; stepIDs?: string[]; model?: string; files?: string[] }
-export type StartRun = (input: { quest: Quest; runID: string; stepIDs: string[]; readOnly?: boolean; model?: string; files?: string[]; context: QuestContext }) => Promise<{ sessionID: string }>
+/** `task` is what kind of work this dispatch is: coding, review, planning or utility. It is the
+ *  only thing that can name a class the dispatch does not enforce, and it decides how much
+ *  published accuracy the route may trade for a cheaper reasoning effort. Omitting it is safe --
+ *  an unclassified dispatch runs at the default coding demand, never a cheaper one. */
+export type RunQuest = { readOnly?: boolean; stepIDs?: string[]; model?: string; files?: string[]; task?: string }
+export type StartRun = (input: { quest: Quest; runID: string; stepIDs: string[]; readOnly?: boolean; model?: string; files?: string[]; task?: string; context: QuestContext }) => Promise<{ sessionID: string }>
 const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 /** A dispatch failure leaves the request with its Quest; the recovery is another run, never another Quest. */
 const retryHere = (questID: string) => ` The Quest is intact and still owns this request: fix the cause and call action=run on Quest ${questID} again. Creating a second Quest for the same request is refused.`
@@ -130,8 +135,9 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
       return questView(store.apply(id, "patched", patch, "quest:update", { expectedRevision: q.revision }))
     },
     async run(id: string, input: RunQuest = {}) {
-      keys(input, ["stepIDs", "model", "files", "readOnly"])
+      keys(input, ["stepIDs", "model", "files", "readOnly", "task"])
       if(input.readOnly!==undefined&&typeof input.readOnly!=="boolean")throw new QuestError("INVALID_INPUT","readOnly must be a boolean")
+      if(input.task!==undefined&&!TASK_CLASSES.includes(String(input.task).trim().toLowerCase() as any))throw new QuestError("INVALID_INPUT","task must be one of "+TASK_CLASSES.join(", "))
       if(input.files!==undefined&&(!Array.isArray(input.files)||!input.files.length||input.files.length>100||input.files.some(x=>typeof x!=="string"||!x.trim())))throw new QuestError("INVALID_INPUT","files must be 1–100 literal relative file/directory scopes")
       if (input.model !== undefined) text(input.model, "Model")
       const runID = hash(context.project.id + ":" + context.sessionID + ":" + context.requestID + ":run:" + id).slice(0, 26)
@@ -163,7 +169,7 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
         store.apply(q.id, "session-planned", { callID: runID, runID, parentID: context.sessionID, role: "worker", model: input.model, scope:{readOnly:input.readOnly===true,files:input.files??["."],requestedFiles:input.files??["."]}, deliverables: stepIDs, attempt: previous ? previous.attempt + 1 : 1, resumedFrom: previous?.callID, resumeRoot: previous?.resumeRoot ?? previous?.callID }, "quest:run")
       } finally { lock.release() }
       try {
-        const started = await startRun({ quest: q!, runID, stepIDs: stepIDs!, model: input.model, files: input.files, readOnly:input.readOnly, context })
+        const started = await startRun({ quest: q!, runID, stepIDs: stepIDs!, model: input.model, files: input.files, readOnly:input.readOnly, task: input.task, context })
         if (!started?.sessionID) throw new QuestError("DISPATCH_OUTCOME_UNKNOWN", "Host did not confirm a worker session; reconcile this run before retrying", false, runID)
         store.apply(id, "session-bound", { callID: runID, sessionID: started.sessionID }, "quest:run")
         return { runID, state: store.read(id)?.sessions.find(s=>s.runID===runID)?.state ?? "executing", sessionID: started.sessionID }

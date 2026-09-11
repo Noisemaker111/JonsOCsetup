@@ -21,18 +21,22 @@ therefore cannot establish the user's current 19-hour weekly reset. Some unknown
 sources contain placeholder reset intervals; the inventory command deliberately
 prints no reset timestamp unless its provenance is provider-observed.
 
-- `models/model-router.ts:pickAvailableModel` scores capability booleans,
-  output-token list prices, capacity states, and hard-coded Sol/Luna bonuses.
-  It excludes harness entries and automatic Astra selection. It does not read
-  benchmark results, task latency, or measured task cost.
+- `models/model-router.ts` no longer selects anything. Its keyword scorers
+  (`pickAvailableModel`, `applyPickedModel`, `pickModel`) ranked on capability
+  booleans, list prices and hard-coded Sol/Luna name bonuses, read no benchmark
+  and no measured cost, and had no callers. They are removed; the file keeps only
+  the favorites catalog and profile presentation `favorite-agents.ts` reads.
 - Live Quest admission uses `models/dispatch-planner.ts` and account-scoped route
-  evidence. The obsolete favorite/profile scorer and provider lane-block registry
-  have been removed; they do not select models or supply worker status.
+  evidence. Model and reasoning effort are both chosen there: the candidate set is
+  joined live (`models/live-routes.ts`), quality comes from the published
+  per-effort board (`models/benchmarks.md`), the task class decides how much of
+  that accuracy the work may trade (`models/task-demand.ts`), and the routes left
+  are ordered on recorded per-effort consumption (`models/route-cost.ts`).
 - `usage/usage-lib.ts:capacitySnapshot` reduces healthy sources to state/auth.
-  It retains resetAt only for capped windows. `telemetryFromCapacity` maps by
-  providerID, so broker routes do not automatically inherit the correct
-  Claude/Codex account's allowance. A broker provider can contain multiple
-  accounts and vendors: mapping the whole provider to one subscription is wrong.
+  It retains resetAt only for capped windows. Mapping capacity by providerID was
+  wrong for brokers and has gone with the scorer that used it: a broker provider
+  can contain several accounts and vendors, so dispatch resolves the account per
+  route through `usage/account-api.ts:accountsForRoute` instead.
 - `models/benchmarks.md` has useful research notes, including effort and harness
   distinctions, but they are not executable routing evidence. No benchmark
   numbers from those notes were copied into automatic scoring in this change.

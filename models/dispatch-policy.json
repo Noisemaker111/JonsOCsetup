@@ -21,7 +21,13 @@
       "openai-astra-medium"
     ],
     "subscriptionConcurrency": "unlimited",
-    "minBenchmarkPassAt1": 0.5
+    "minBenchmarkPassAt1": 0.5,
+    "byTask": {
+      "planning": { "qualityTolerance": 0 },
+      "coding": { "qualityTolerance": 0.02 },
+      "review": { "qualityTolerance": 0.1 },
+      "utility": { "qualityTolerance": 0.2, "minBenchmarkPassAt1": 0.4 }
+    }
   },
   "routes": [
     {

@@ -7,6 +7,11 @@
  * ever orders routes that have nothing measured of their own. The moment any candidate carries
  * local evidence for the task, the priors stop competing rather than being compared against a
  * number on another scale.
+ *
+ * Recorded cost is a third thing again, and it is not a quality signal at all: it is what a turn on
+ * this exact route and effort billed, read from the host's own request records. It never admits or
+ * excludes anything. It orders the routes that already cleared the task's quality demand, which is
+ * how an effort level gets chosen instead of always being the top of the published curve.
  */
 export type TaskClass = "coding" | "review" | "planning" | "utility"
 export type QuotaWindow = {
@@ -65,6 +70,16 @@ export type RouteBenchmark = {
   /** Why this route's effort may claim the score, when the source did not state one. */
   attribution?: string
 }
+/** Recorded per-turn consumption of this exact route and effort. See `route-cost.ts`. */
+export type RouteCost = {
+  source: string
+  observedAt: string
+  turns: number
+  reasoningTokensPerTurn: number
+  outputTokensPerTurn: number
+  sentTokensPerTurn: number
+  cacheReadRate: number
+}
 export type Route = {
   id: string
   accountID: string
@@ -82,6 +97,8 @@ export type Route = {
   outcomeIssue?: {task:TaskClass;reason:string}
   evidence: RouteEvidence[]
   benchmark?: RouteBenchmark
+  /** Recorded consumption of this exact route and effort. Orders, never admits or excludes. */
+  cost?: RouteCost
   /** Measured task consumption, in each shared account window's units. */
   quotaPerTask: Record<string, number>
   cashReservation?: { currency:string; upperBound:number }
@@ -138,6 +155,10 @@ type Candidate = {
   benchmarkPassAt1: number | null
   benchmarkProvenance?: "independent" | "vendor"
   intelligence: number | null
+  /** Recorded discretionary spend on this exact effort. Null means nothing has run here. */
+  reasoningTokensPerTurn: number | null
+  cacheReadRate: number | null
+  costSource: string | null
   evidenceSource: string
   /** What the caller must still be told about an uncalibrated admission, if anything. */
   note?: string
@@ -250,6 +271,13 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
         benchmarkNote = prior.suite + " " + (prior.passAt1 * 100).toFixed(1) + "% at effort " + prior.effort + " (" + prior.provenance + ", " + prior.measuredAt + ", " + prior.source + ")" + (prior.attribution ? "; " + prior.attribution : "")
       }
     }
+    // Recorded consumption of this exact effort. A malformed record is ignored rather than
+    // excluding the route: cost only ever orders, so being unable to read it is the same as never
+    // having run here, and that already sorts last.
+    const recorded = route.cost
+    const cost = recorded && positive(recorded.turns) && Number.isInteger(recorded.turns) &&
+      [recorded.reasoningTokensPerTurn, recorded.outputTokensPerTurn, recorded.sentTokensPerTurn, recorded.cacheReadRate].every(nonnegative) &&
+      recorded.cacheReadRate <= 1 && recorded.source?.trim() && finite(date(recorded.observedAt)) ? recorded : undefined
     let successRate = 0
     if (!evidence && !chosen) reasons.push("no evidence for this task and exact route")
     else if (evidence) {
@@ -326,6 +354,9 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
       expiryOpportunity: !evidence || (chosen && unknownConsumption) ? null : expiryOpportunity, limitingWindow,
       benchmarkPassAt1, benchmarkProvenance: benchmarkPassAt1 === null ? undefined : prior!.provenance,
       intelligence: benchmarkPassAt1 === null ? null : prior!.intelligence ?? null,
+      reasoningTokensPerTurn: cost ? cost.reasoningTokensPerTurn : null,
+      cacheReadRate: cost ? cost.cacheReadRate : null,
+      costSource: cost ? cost.turns + " recorded turns at this effort (" + cost.source + ", " + cost.observedAt + ")" : null,
       evidenceSource: evidence ? evidence.source : benchmarkNote || "configured choice; outcomes and consumption uncalibrated",
       note: unknownConsumption
         ? (unlimitedSubscriptionConcurrency(account!, req) ? "consumption uncalibrated; user policy permits concurrent subscription workers without a fixed account cap. Fresh quota is required; unknown consumption is not a capacity guarantee."
@@ -344,6 +375,13 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
   const quality = (c: Candidate) => c.successRate ?? c.benchmarkPassAt1 ?? 0
   const bestQuality = Math.max(0, ...pool.map(quality))
   const provenanceRank = (c: Candidate) => c.benchmarkProvenance === "vendor" ? 1 : 0
+  // The pool is homogeneous by construction -- either every candidate has local outcomes for this
+  // task or none does -- so recorded cost can order the whole uncalibrated pool without ever
+  // competing against a measured cash-per-success on a different scale.
+  const uncalibrated = !measured.length
+  // Unknown cost is not cheap. A route nothing has ever run on sorts behind every route that has
+  // recorded turns, and then falls through to the published board exactly as it did before.
+  const spend = (c: Candidate) => c.reasoningTokensPerTurn ?? Infinity
   const ranked = pool.filter(c => {
     if (quality(c) + req.qualityTolerance + 1e-12 >= bestQuality) return true
     excluded.push({ routeID: c.routeID, reasons: ["outside quality tolerance of best eligible route"] })
@@ -353,8 +391,16 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
     (a.millisecondsPerSuccess ?? 0) - (b.millisecondsPerSuccess ?? 0) ||
     (a.cashPerSuccess ?? Infinity) - (b.cashPerSuccess ?? Infinity) ||
     (b.successRate ?? 0) - (a.successRate ?? 0) ||
-    // Nothing measured on either side: the published board is the only quality signal left, and
-    // an independent measurement beats a vendor's own number at the same score.
+    // Everything above is null or equal across an uncalibrated pool, which is why the published
+    // board used to decide the effort by itself: pass@1 descending is monotone in effort for
+    // almost every model, so automatic selection could only ever pick the top of the curve.
+    // Every candidate here already clears the task's quality demand, so the question left is not
+    // which one scores highest but which one spends least to get there.
+    (uncalibrated ? spend(a) - spend(b) : 0) ||
+    // A route that never caches re-bills and re-processes the resident context every turn.
+    (uncalibrated ? (b.cacheReadRate ?? -1) - (a.cacheReadRate ?? -1) : 0) ||
+    // Nothing measured and nothing recorded on either side: the published board is the only signal
+    // left, and an independent measurement beats a vendor's own number at the same score.
     (b.benchmarkPassAt1 ?? 0) - (a.benchmarkPassAt1 ?? 0) ||
     provenanceRank(a) - provenanceRank(b) ||
     (b.intelligence ?? 0) - (a.intelligence ?? 0) || a.routeID.localeCompare(b.routeID))
@@ -373,6 +419,11 @@ function describe(selected: Candidate, req: RoutingRequest) {
       (selected.cashPerSuccess === null ? "actual cash unavailable" : (req.cashCurrency ?? req.cashBudget?.currency ?? "USD") + " " + selected.cashPerSuccess.toFixed(4) + "/success") + "; " +
       Math.round((selected.millisecondsPerSuccess ?? 0) / 1000) + "s/success; " +
       (selected.expiryOpportunity === null ? "expiry pressure unavailable" : "expiry pressure " + selected.expiryOpportunity.toFixed(2) + " task slots/hour")]
+  // A cheaper effort was chosen on recorded numbers, so the numbers travel with the decision.
+  parts.push(selected.reasoningTokensPerTurn === null
+    ? "no recorded turns at this effort; ranked behind every route that has some"
+    : "recorded " + selected.reasoningTokensPerTurn.toFixed(1) + " reasoning tokens/turn and " +
+      ((selected.cacheReadRate ?? 0) * 100).toFixed(1) + "% cache read over " + selected.costSource)
   if (selected.note) parts.push(selected.note)
   return selected.routeID + ": " + parts.join("; ")
 }
