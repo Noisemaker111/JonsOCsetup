@@ -59,6 +59,39 @@ const describe = (value: string) => {
   return "instruction blob"
 }
 
+/** Spend concentrates in a few metered calls, and the same model is often already on a subscription. */
+if (process.argv.includes("--spend")) {
+  const perModel = new Map<string, { input: number; cost: number }>()
+  for (const row of db.query("select data from session_message where type='assistant'").all() as any[]) {
+    let message: any
+    try { message = JSON.parse(row.data) } catch { continue }
+    const used = message.tokens ?? {}
+    if (used.input === undefined) continue
+    const model = message.model ?? {}
+    const key = String(model.providerID) + "/" + String(model.modelID ?? model.id)
+    const seen = perModel.get(key) ?? { input: 0, cost: 0 }
+    seen.input += used.input ?? 0
+    seen.cost += message.cost ?? 0
+    perModel.set(key, seen)
+  }
+  const subscriptionLanes = ["opencode", "opencode-go", "openai", "grok-sub"]
+  const bare = (key: string) => key.split("/").slice(1).join("/").split("/").pop() ?? key
+  const owned = new Set<string>()
+  for (const key of perModel.keys()) if (subscriptionLanes.includes(key.split("/")[0])) owned.add(bare(key))
+  const paid = [...perModel.entries()].filter(([, v]) => v.cost > 0).sort((a, b) => b[1].cost - a[1].cost)
+  console.log("spend by model\n")
+  let avoidable = 0
+  for (const [key, value] of paid.slice(0, 12)) {
+    // A subscription-lane model is not its own cheaper alternative; only a metered call can move.
+    const twin = !subscriptionLanes.includes(key.split("/")[0]) && owned.has(bare(key))
+    if (twin) avoidable += value.cost
+    const rate = value.input ? value.cost / (value.input / 1e6) : 0
+    console.log(`  $${value.cost.toFixed(2).padStart(7)}  ${String(value.input).padStart(12)} tok  $${rate.toFixed(2).padStart(9)}/Mtok  ${key}${twin ? "   <- same model is on a subscription lane" : ""}`)
+  }
+  console.log(`\n  $${avoidable.toFixed(2)} of metered spend went to models already available on a subscription lane.`)
+  process.exit(0)
+}
+
 const sessions = db.query("select id,title,agent,cost,tokens_input,tokens_output from session_v2").all() as any[]
 const only = option("--session")
 const report: any[] = []
@@ -97,19 +130,23 @@ for (const session of sessions.filter(s => !only || s.id === only)) {
         const name = part.name ?? "unknown"
         if (state.input !== undefined) add("tool call in: " + name, JSON.stringify(state.input).length)
         if (state.content !== undefined) add("tool result: " + name, JSON.stringify(state.content).length)
-        if (state.metadata !== undefined) add("tool metadata: " + name, JSON.stringify(state.metadata).length)
+        // Stored for the TUI only. aisdk toolResultPart builds the model message from the result,
+        // never from state.metadata, so counting it as context overstates what was actually sent.
+        if (state.metadata !== undefined) add("[stored, not sent] metadata: " + name, JSON.stringify(state.metadata).length)
       }
       else add("part: " + part.type, JSON.stringify(part).length)
     }
   }
 
   const rows = [...buckets.entries()].map(([label, chars]) => ({ label, chars, tokens: tokens(chars) })).sort((a, b) => b.chars - a.chars)
-  const estimated = rows.reduce((n, r) => n + r.tokens, 0)
+  const storedOnly = (label: string) => label.startsWith("[stored, not sent]")
+  const estimated = rows.filter(r => !storedOnly(r.label)).reduce((n, r) => n + r.tokens, 0)
+  const stored = rows.filter(r => storedOnly(r.label)).reduce((n, r) => n + r.tokens, 0)
   report.push({
     session: session.id, agent: session.agent, title: String(session.title ?? "").slice(0, 60),
     recorded: { input: session.tokens_input, output: session.tokens_output, cost: +(session.cost ?? 0).toFixed(4) },
     coldStartTokens: turns[0]?.input ?? 0,
-    turns, attributed: rows, estimatedTokens: estimated,
+    turns, attributed: rows, estimatedTokens: estimated, storedOnlyTokens: stored,
   })
 }
 
@@ -126,7 +163,7 @@ for (const entry of report) {
     if (entry.turns.length > 10) console.log(`    ... ${entry.turns.length - 10} more turns`)
   }
   const total = entry.estimatedTokens || 1
-  console.log(`  attributed ~${entry.estimatedTokens} tok:`)
+  console.log(`  sent ~${entry.estimatedTokens} tok` + (entry.storedOnlyTokens ? ` (plus ${entry.storedOnlyTokens} tok stored for the TUI, never sent)` : "") + `:`)
   for (const row of entry.attributed.slice(0, limit)) {
     const share = row.tokens / total
     console.log(`    ${String(row.tokens).padStart(6)} tok ${String(Math.round(share * 100)).padStart(3)}%  ${bar(share)}  ${row.label}`)
