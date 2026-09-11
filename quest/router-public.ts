@@ -4,7 +4,7 @@ import { QuestStore } from './store'
 import { questRoot } from './root'
 import { acquireLock } from './locking'
 import { createHash } from 'node:crypto'
-export { projectIdentity } from './project'
+export { physicalDirectory, projectIdentity } from './project'
 export function claimRouterRequest(key: string) {
   return acquireLock(new QuestStore(questRoot()).runtime, 'project-router-' + createHash('sha256').update(key).digest('hex'), { timeoutMs: 0 })
 }
