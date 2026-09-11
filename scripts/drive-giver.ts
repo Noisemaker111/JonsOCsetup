@@ -13,7 +13,7 @@ import { spawn, spawnSync } from "node:child_process"
 import { existsSync, readFileSync, appendFileSync, readdirSync, rmSync, statSync } from "node:fs"
 import { join, resolve } from "node:path"
 import { Database } from "bun:sqlite"
-import { driveSession, conditionMet } from "./drive-isolation"
+import { driveSession, conditionMet, finishedBaseline, type QuestRecord } from "./drive-isolation"
 
 type Condition = "reply" | "quest-step-done" | "worker-completed"
 const option = (name: string) => { const i = process.argv.indexOf(name); return i < 0 ? undefined : process.argv[i + 1] }
@@ -159,9 +159,15 @@ const home = process.env.USERPROFILE ?? process.env.HOME ?? "."
 const questDir = live ? join(home, ".opencode", "quests") : join(out, "quests", ".opencode", "quests")
 // The real ledger carries every Quest on the board; only the ones this run touched are evidence
 // of what this run did, and mtime is what the store updates when it writes one.
-const quests = () => existsSync(questDir)
+const allQuests = () => existsSync(questDir)
+  ? readdirSync(questDir).filter(f => f.endsWith(".md")).map(f => readFileSync(join(questDir, f), "utf8"))
+  : []
+// The report names what this run touched; mtime is what the store moves when it writes one. The
+// baseline and the wait conditions read everything instead -- a Quest whose file is old is exactly
+// the one whose long-finished steps would look new the moment the giver writes to it.
+const quests = () => !live ? allQuests() : existsSync(questDir)
   ? readdirSync(questDir).filter(f => f.endsWith(".md"))
-      .filter(f => !live || statSync(join(questDir, f)).mtimeMs >= started)
+      .filter(f => statSync(join(questDir, f)).mtimeMs >= started)
       .map(f => readFileSync(join(questDir, f), "utf8"))
   : []
 const field = (text: string, key: string) => new RegExp(`^${key}: (.*)$`, "m").exec(text)?.[1]
@@ -223,10 +229,20 @@ const promptAt = Date.now()
  * So a condition has to name something that did not exist when the prompt was sent. Records carry
  * `updatedAt`; anything stamped before the prompt is somebody else's finished work.
  */
+const records = (): QuestRecord[] => allQuests().map(q => ({
+  id: field(q, "id")?.replace(/"/g, ""),
+  stages: parse(q, "stages") ?? [],
+  sessions: parse(q, "sessions") ?? [],
+}))
+// What was already finished when the prompt was sent. Anything finished that is not in here is work
+// this run caused; see finishedBaseline in scripts/drive-isolation.ts for the two wrong answers
+// this replaces.
+const baseline = finishedBaseline(records())
 const satisfied = () => {
   if (condition === "reply") return sessionRows().some(s => s.agent === "quest-giver" && (s.tokens_output ?? 0) > 0 && s.idle_outcome && (!live || (s.time_updated ?? 0) >= promptAt))
-  return conditionMet({ condition, live, promptAt, quests: quests().map(q => ({ stages: parse(q, "stages") ?? [], sessions: parse(q, "sessions") ?? [], history: parse(q, "history") ?? [] })) })
+  return conditionMet({ condition, live, baseline, quests: records() })
 }
+
 
 
 let approvals = 0, done = false
