@@ -49,7 +49,7 @@ export function resolveDispatchSelector(policy: DispatchPolicy, selector: string
 /** A route that answered an error when probed is not a candidate, however much quota it holds.
  *  Health is recorded per probed route id, but the thing that failed is the model behind it:
  *  a derived candidate on the same provider/model is the same broken call, under a new name. */
-function unusableRoutes(maxAgeMs = 6 * 60 * 60 * 1000, now = Date.now()) {
+export function unusableRoutes(maxAgeMs = 6 * 60 * 60 * 1000, now = Date.now()) {
   const file = process.env.OPENCODE_ROUTE_HEALTH ?? join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "opencode", "route-health.json")
   const byRoute = new Map<string, string>(), byModel = new Map<string, string>()
   try {

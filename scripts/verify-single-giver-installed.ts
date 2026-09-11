@@ -14,6 +14,8 @@ import {projectIdentity} from '../quest/project'
 import {freePort} from './plugin-deploy'
 import {getAccountUsage} from '../usage/account-api'
 import {liveDispatchRoutes} from '../models/live-routes'
+import {unusableRoutes} from '../models/dispatch-planner'
+import {chooseVerificationRoute} from '../models/verification-route'
 const root=resolve(process.argv[2]),reservations=resolve(process.argv[3]),output=join(root,'.visual-e2e','installed-single-giver-'+Date.now())
 const policy=JSON.parse(readFileSync(join(root,'models/dispatch-policy.json'),'utf8'))
 // The check must run on a lane that has capacity. Pinning the primary route, or a hardcoded
@@ -24,19 +26,20 @@ const snapshot=await getAccountUsage()
 // and the router would happily have run somewhere else.
 const live=await liveDispatchRoutes(policy,snapshot)
 const candidates=[...live.curated,...live.derived]
-const usable=(r:any)=>snapshot.accounts.some((a:any)=>a.id===r.accountID&&a.state==='available')
-// Verify on the lane the channel actually ships on when it has capacity: a route can hold quota
-// and still be unusable here, and the activated model is the one already proven against this host.
+// Which lane to verify on, and why, lives in models/verification-route.ts.
+const broken=unusableRoutes()
+const probeFailure=(r:any)=>broken.byRoute.get(r.id)??broken.byModel.get(r.providerID+'/'+r.modelID)
 const activated=(()=>{try{const c=JSON.parse(readFileSync(join(root,"..","..","dev.json"),"utf8"));return String(c.model??"")}catch{return ""}})()
-// Reasoning effort is part of route identity, so match the whole thing. Matching on provider/model
-// alone returned whichever effort happened to sit first in the candidate list: with dev.json
-// recording deepseek-v4.1-flash#high, the gate ran both the giver and the worker at #max, which is
-// the most expensive lane for this model and not the one the channel ships. Verification runs on the
-// lane that was actually prepared, or it falls through to the policy's primary route as before.
-const activatedID=candidates.find((r:any)=>activated&&activated===r.providerID+"/"+r.modelID+"#"+r.reasoning)?.id
-const ordered=[activatedID,policy.request.primaryRouteID,...(policy.request.allowedRouteIDs??[]),...live.derived.map(r=>r.id)].filter(Boolean)
-const route=ordered.map((id:string)=>candidates.find((r:any)=>r.id===id)).find((r:any)=>r&&usable(r))
-if(!route)throw Error('No authorized route has available capacity; this check cannot produce real dispatch evidence')
+const chosen=chooseVerificationRoute({
+ candidates,activated,
+ primaryRouteID:policy.request.primaryRouteID,
+ allowedRouteIDs:policy.request.allowedRouteIDs,
+ derivedIDs:live.derived.map((r:any)=>r.id),
+ available:(id?:string)=>snapshot.accounts.some((a:any)=>a.id===id&&a.state==='available'),
+ probeFailure,
+})
+if(!('route' in chosen))throw Error('No authorized route is both funded and working; this check cannot produce real dispatch evidence. '+(chosen.refused.map(r=>r.id+': '+r.reason).join('; ')||'no candidate routes at all'))
+const route=chosen.route
 const holds=()=>policy.billing[route.accountID]==='subscription'&&policy.request.subscriptionConcurrency==='unlimited'?[]:JSON.parse(readFileSync(reservations,'utf8')).reservations.filter((r:any)=>r.accountID===route.accountID&&r.exclusive&&['active','unknown'].includes(r.state))
 if(holds().length)throw Error('Existing uncertain account ownership blocks this successful dispatch check; inspect it first')
 const workerModel=route.providerID+'/'+route.modelID+'#'+route.reasoning
