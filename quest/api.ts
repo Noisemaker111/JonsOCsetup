@@ -143,6 +143,9 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
           const step = q.stages.find(s => s.id === id)
           if (!step || step.status !== "pending" || step.needs.some(dep => !q.stages.some(s => s.id === dep && s.status === "done"))) throw new QuestError("STEP_NOT_ELIGIBLE", "The selected step is not ready")
           if (q.sessions.some(s => ["planned", "executing", "waiting", "blocked"].includes(s.state) && s.deliverables.includes(id))) throw new QuestError("STEP_RUNNING", "The step already has an active run")
+          // A worker that finished without recording its step leaves the step pending forever.
+          // Re-dispatching repeats the same work in a second worktree; reconcile the result instead.
+          if (q.sessions.some(s => s.state === "completed" && s.deliverables.includes(id))) throw new QuestError("STEP_UNRECONCILED", "A worker already completed this step without recording a result; inspect that session and update the step instead of dispatching again")
         }
         const previous = [...q.sessions].reverse().find(s => ["failed", "cancelled"].includes(s.state) && JSON.stringify([...s.deliverables].sort()) === JSON.stringify([...stepIDs].sort()))
         store.apply(q.id, "session-planned", { callID: runID, runID, parentID: context.sessionID, role: "worker", model: input.model, scope:{readOnly:input.readOnly===true,files:input.files??["."],requestedFiles:input.files??["."]}, deliverables: stepIDs, attempt: previous ? previous.attempt + 1 : 1, resumedFrom: previous?.callID, resumeRoot: previous?.resumeRoot ?? previous?.callID }, "quest:run")
