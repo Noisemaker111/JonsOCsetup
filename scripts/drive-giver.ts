@@ -30,7 +30,8 @@ if (flag("--help") || (!option("--ask") && !flag("--test-change"))) {
   --timeout <seconds>  Bound on the awaited condition. Default 900.
   --out <dir>          Evidence directory. Defaults to run/giver-<timestamp>.
   --keep               Keep the evidence directory and any worker worktree.
-  --deny-permissions   Do not auto-approve permission prompts; capture and fail instead.`)
+  --deny-permissions   Do not auto-approve permission prompts; capture and fail instead.
+  --allow-expensive    Permit a route over $1/Mtok input; only for checks about that model.`)
   process.exit(0)
 }
 
@@ -50,6 +51,32 @@ const cwd = resolve(option("--cwd") ?? join(process.env.USERPROFILE ?? process.e
 const out = resolve(option("--out") ?? join(configRoot, "run", "giver-" + started))
 const condition = (option("--await") ?? (flag("--test-change") ? "quest-step-done" : "reply")) as Condition
 const budgetMs = Number(option("--timeout") ?? 900) * 1000
+
+/**
+ * Verification runs on the cheapest capable route. Measured over 1,203 sessions, 37% of all spend
+ * went through 0.16% of the tokens, and most of that had the same model sitting on a subscription
+ * lane. A throwaway check is the least defensible place to spend that, so an expensive route has to
+ * be asked for rather than arrived at.
+ */
+const EXPENSIVE_INPUT_COST_PER_MTOK = 1
+async function modelInputCost(route: string): Promise<number | undefined> {
+  const [providerID, rest] = [route.slice(0, route.indexOf("/")), route.slice(route.indexOf("/") + 1)]
+  const modelID = rest.split("#")[0]
+  try {
+    const response = await fetch("https://models.dev/api.json", { signal: AbortSignal.timeout(8000) })
+    if (!response.ok) return undefined
+    const catalog: any = await response.json()
+    const cost = catalog?.[providerID]?.models?.[modelID]?.cost?.input
+    return typeof cost === "number" ? cost : undefined
+  } catch { return undefined }
+}
+if (!flag("--allow-expensive")) {
+  const cost = await modelInputCost(model)
+  if (cost !== undefined && cost > EXPENSIVE_INPUT_COST_PER_MTOK) {
+    throw new Error(`${model} costs $${cost}/Mtok input. Verification runs on the cheapest capable route; ` +
+      `pass --allow-expensive only when the check is about this model specifically.`)
+  }
+}
 
 const marker = "OPENCODE_TEST_CHANGE_" + started
 const testFile = option("--test-file") ?? "docs/scratch.md"
