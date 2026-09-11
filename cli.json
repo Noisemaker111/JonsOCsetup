@@ -13,6 +13,7 @@
     "./tui-bootstrap/usage",
     "./tui-bootstrap/quests",
     "./tui-bootstrap/composer",
-    "./tui-bootstrap/context-graph"
+    "./tui-bootstrap/context-graph",
+    "./tui-bootstrap/duration-graph"
   ]
 }

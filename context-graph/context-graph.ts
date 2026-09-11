@@ -161,9 +161,12 @@ export function sliceGroups(slices: ContextSlice[]): { kind: SliceKind; tokens: 
  * Lay a stacked bar out in whole terminal cells without losing or inventing a segment: every
  * non-zero group keeps at least one cell, and the largest group absorbs the rounding remainder so
  * the bar is always exactly `width` cells wide.
+ *
+ * Generic in the group, because `/duration-graph` stacks milliseconds through this same function
+ * and a second copy of this rounding is a second place for a bar to come out the wrong width.
  */
-export function stackedBar(groups: { kind: SliceKind; tokens: number; share: number }[], width: number): { kind: SliceKind; tokens: number; share: number; cells: number }[] {
-  const present = groups.filter(group => group.tokens > 0)
+export function stackedBar<T extends { share: number }>(groups: T[], width: number): (T & { cells: number })[] {
+  const present = groups.filter(group => group.share > 0)
   if (!present.length || width <= 0) return []
   const usable = Math.max(width, present.length)
   const cells = present.map(group => ({ ...group, cells: Math.max(1, Math.round(group.share * usable)) }))
