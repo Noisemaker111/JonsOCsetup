@@ -88,3 +88,32 @@ export function driveIdentity(input: { attaching: boolean; model?: string; agent
     ...(input.chose("--agent") && input.agent ? ["--agent", input.agent] : []),
   ]
 }
+
+/**
+ * What counts as this run's work finishing.
+ *
+ * In a sandbox every Quest is new, so "any completed worker session" could only mean this run's. On
+ * the real board it means "any worker that ever succeeded", and it fires immediately: a live drive
+ * asked to dispatch a step of Quest 7f2d0f45 reported ok after 49s with zero tokens and the step
+ * still pending, because a session from 2026-09-06 on that same Quest was marked completed.
+ *
+ * So a live condition has to name something that did not exist when the prompt was sent. Sessions
+ * carry `updatedAt`; a step does not, but the `stage-state` event that set it does. A step that
+ * merely moved is not a step that finished, so both halves are required.
+ */
+export type QuestRecord = {
+  stages?: { status?: string }[]
+  sessions?: { state?: string; updatedAt?: string }[]
+  history?: { type?: string; at?: string }[]
+}
+
+export function conditionMet(input: { condition: "quest-step-done" | "worker-completed"; live: boolean; promptAt: number; quests: QuestRecord[] }): boolean {
+  const since = (value: unknown) => { const at = Date.parse(String(value ?? "")); return Number.isFinite(at) && at >= input.promptAt }
+  return input.quests.some(quest => {
+    if (input.condition === "worker-completed")
+      return (quest.sessions ?? []).some(s => s.state === "completed" && (!input.live || since(s.updatedAt)))
+    const done = (quest.stages ?? []).some(s => s.status === "done")
+    if (!done) return false
+    return !input.live || (quest.history ?? []).some(e => e?.type === "stage-state" && since(e.at))
+  })
+}

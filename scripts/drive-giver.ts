@@ -13,7 +13,7 @@ import { spawn, spawnSync } from "node:child_process"
 import { existsSync, readFileSync, appendFileSync, readdirSync, rmSync, statSync } from "node:fs"
 import { join, resolve } from "node:path"
 import { Database } from "bun:sqlite"
-import { driveSession } from "./drive-isolation"
+import { driveSession, conditionMet } from "./drive-isolation"
 
 type Condition = "reply" | "quest-step-done" | "worker-completed"
 const option = (name: string) => { const i = process.argv.indexOf(name); return i < 0 ? undefined : process.argv[i + 1] }
@@ -174,9 +174,12 @@ function sessionRows() {
     // The sandbox database holds only this run. The real one holds every session ever, so the cost
     // and token figures below would be a lifetime bill reported as a turn. Scope live reads to
     // sessions this run created.
+    // Sessions this run created, plus the conversation it attached to -- which was created long
+    // before and would otherwise be invisible, taking the giver's own reply with it.
+    const columns = "id,title,agent,cost,tokens_input,tokens_output,idle_outcome,time_updated"
     const rows = live
-      ? db.query("select id,title,agent,cost,tokens_input,tokens_output,idle_outcome from session_v2 where time_created >= ?").all(started) as any[]
-      : db.query("select id,title,agent,cost,tokens_input,tokens_output,idle_outcome from session_v2").all() as any[]
+      ? db.query(`select ${columns} from session_v2 where time_created >= ? or id = ?`).all(started, attach ?? "") as any[]
+      : db.query(`select ${columns} from session_v2`).all() as any[]
     db.close(); return rows
   } catch { return [] }
 }
@@ -208,12 +211,23 @@ if (!typed.includes("[Pasted") && !typed.includes(ask.slice(0, 40))) throw new E
 send({ action: "key", name: "return" })
 const promptAt = Date.now()
 
+/**
+ * What counts as this run's work finishing.
+ *
+ * In a sandbox every Quest is new, so "any completed worker session" could only mean this run's. On
+ * the real board it means "any worker that ever succeeded" — and it fired immediately. A live drive
+ * asked to dispatch a step of Quest 7f2d0f45 reported ok after 49s with zero tokens and the step
+ * still pending, because a session from 2026-09-06 on that same Quest was marked completed and the
+ * file's mtime had moved when the giver merely read it.
+ *
+ * So a condition has to name something that did not exist when the prompt was sent. Records carry
+ * `updatedAt`; anything stamped before the prompt is somebody else's finished work.
+ */
 const satisfied = () => {
-  if (condition === "reply") return sessionRows().some(s => s.agent === "quest-giver" && (s.tokens_output ?? 0) > 0 && s.idle_outcome)
-  const all = quests()
-  if (condition === "quest-step-done") return all.some(q => (parse(q, "stages") ?? []).some((s: any) => s.status === "done"))
-  return all.some(q => (parse(q, "sessions") ?? []).some((s: any) => s.state === "completed"))
+  if (condition === "reply") return sessionRows().some(s => s.agent === "quest-giver" && (s.tokens_output ?? 0) > 0 && s.idle_outcome && (!live || (s.time_updated ?? 0) >= promptAt))
+  return conditionMet({ condition, live, promptAt, quests: quests().map(q => ({ stages: parse(q, "stages") ?? [], sessions: parse(q, "sessions") ?? [], history: parse(q, "history") ?? [] })) })
 }
+
 
 let approvals = 0, done = false
 const deadline = Date.now() + budgetMs
