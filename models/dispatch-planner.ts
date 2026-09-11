@@ -4,6 +4,7 @@ import { calibratedRoutes,type DispatchForecasts } from "./calibrated-dispatch"
 import { readCalibrations,accountRegime,updateBurnControls,readQuotaObservations } from "../usage/telemetry-api"
 import { assertConfiguredModel } from "./access-policy"
 import { accountsForRoute, relevantAccountWindows } from "../usage/account-api"
+import { liveDispatchRoutes } from "./live-routes"
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import type { AccountSnapshot } from "../usage/account-types"
@@ -43,18 +44,24 @@ export function resolveDispatchSelector(policy: DispatchPolicy, selector: string
  if(!reasoning)return {code:'REASONING_REQUIRED',candidates}
  return {code:'ROUTE_CONFIGURED',candidates,route:{id:'chosen-'+providerID+'-'+modelID+'-'+reasoning,accountID:linked[0].id,providerID,modelID,harness:'native',agent:'worker',reasoning,serviceTier:'default',verified:true,admission:'configured-choice',evidence:[],quotaPerTask:{}}}
 }
-/** A route that answered an error when probed is not a candidate, however much quota it holds. */
-function unusableRoutes(maxAgeMs = 6 * 60 * 60 * 1000, now = Date.now()): Map<string, string> {
+/** A route that answered an error when probed is not a candidate, however much quota it holds.
+ *  Health is recorded per probed route id, but the thing that failed is the model behind it:
+ *  a derived candidate on the same provider/model is the same broken call, under a new name. */
+function unusableRoutes(maxAgeMs = 6 * 60 * 60 * 1000, now = Date.now()) {
   const file = process.env.OPENCODE_ROUTE_HEALTH ?? join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "opencode", "route-health.json")
-  const found = new Map<string, string>()
+  const byRoute = new Map<string, string>(), byModel = new Map<string, string>()
   try {
     const health = JSON.parse(readFileSync(file, "utf8"))
     const at = Date.parse(health?.at)
     // Stale health is not evidence of breakage; a route recovers without anyone rewriting the file.
-    if (!Number.isFinite(at) || now - at > maxAgeMs) return found
-    for (const row of health.results ?? []) if (row?.state === "unusable" && row.routeID) found.set(row.routeID, String(row.reason ?? "probe failed"))
+    if (Number.isFinite(at) && now - at <= maxAgeMs) for (const row of health.results ?? []) {
+      if (row?.state !== "unusable") continue
+      const reason = String(row.reason ?? "probe failed")
+      if (row.routeID) byRoute.set(row.routeID, reason)
+      if (row.model) byModel.set(String(row.model), reason)
+    }
   } catch {}
-  return found
+  return { byRoute, byModel }
 }
 
 /** User policy supplies routes and thresholds; live balances replace offline snapshots. */
@@ -63,6 +70,17 @@ export async function reserveDispatch(input:{runID:string;model?:string;policyFi
  try{policy=JSON.parse(readFileSync(input.policyFile,"utf8"))}catch{throw new Error("Configure the dispatch policy with authorized routes, quality evidence, budgets and project bootstrap before running a Quest")}
  if(policy.version!==1||!Array.isArray(policy.routes)||!policy.request?.allowedRouteIDs?.length)throw new Error("Invalid dispatch policy: version 1 and an explicit route allowlist are required")
  const snapshot=await loadUsage({refresh:true}),now=input.now??Date.now()
+ // The policy file no longer decides which models exist. It contributes curated routes, the
+ // billing arrangements and the thresholds; the rest of the candidate pool is joined live from
+ // the models.dev catalog, the access policy, the connected accounts and benchmarks.md.
+ const live=await liveDispatchRoutes(policy,snapshot,now)
+ policy.routes=[...live.curated,...live.derived]
+ const allowed=[...new Set([...(policy.request.allowedRouteIDs??[]),...live.derived.map(r=>r.id)])]
+ policy.request={...policy.request,allowedRouteIDs:allowed}
+ // A configured default still wins while it is admissible. Everything else it can fall back to is
+ // now whatever is live and ranked, instead of a second list somebody had to keep in step.
+ const alternatives=allowed.filter(id=>id!==policy.request.primaryRouteID)
+ if(policy.request.primaryRouteID&&alternatives.length)policy.request={...policy.request,fallback:{when:"admission-unavailable",routeIDs:alternatives}}
  let explicitRouteID:string|undefined
  if(input.model){
   const result=resolveDispatchSelector(policy,input.model,snapshot)
@@ -73,8 +91,8 @@ export async function reserveDispatch(input:{runID:string;model?:string;policyFi
   if(!(policy.request.allowedRouteIDs??[]).includes(explicitRouteID))policy.request={...policy.request,allowedRouteIDs:[...(policy.request.allowedRouteIDs??[]),explicitRouteID]}
  }
  const unusable=unusableRoutes()
- for(const route of policy.routes){const probed=unusable.get(route.id);if(probed){route.verified=false;route.outcomeIssue={task:policy.request.task,reason:"Probed unusable: "+probed.slice(0,160)}}}
- for(const route of policy.routes){if(route.admission==="configured-choice")assertConfiguredModel({providerID:route.providerID,id:route.modelID});const linked=accountsForRoute(snapshot,route.providerID,route.modelID);if(linked.length!==1||linked[0].id!==route.accountID)route.verified=false}
+ policy.routes=policy.routes.map(route=>{const probed=unusable.byRoute.get(route.id)??unusable.byModel.get(route.providerID+"/"+route.modelID);return probed?{...route,verified:false,outcomeIssue:{task:policy.request.task,reason:"Probed unusable: "+probed.slice(0,160)}}:route})
+ policy.routes=policy.routes.map(route=>{if(route.admission)assertConfiguredModel({providerID:route.providerID,id:route.modelID});const linked=accountsForRoute(snapshot,route.providerID,route.modelID);return linked.length===1&&linked[0].id===route.accountID?route:{...route,verified:false}})
  const pacing=updateBurnControls(snapshot.accounts,readQuotaObservations(ACCOUNT_USAGE_FILE+".observations").observations,now)
  const accounts:PlannerInput["accounts"]=snapshot.accounts.filter(a=>policy.routes.some(r=>r.accountID===a.id)).map(a=>({id:a.id,pacing:pacing.find(p=>p.accountID===a.id),billing:policy.billing[a.id],authenticated:a.state!=="auth-required"&&a.connections.length>0,observedAt:a.observedAt??"",capacity:a.state==="available"?"available":a.state==="exhausted"?"exhausted":"unknown",windows:a.windows.filter(w=>(w.scope==="shared"||w.scope==="model")&&!(w.state==="available"&&(w.remainingPercent==null||!w.resetAt))).map(w=>({id:w.id,...(w.scope==="model"?{routeIDs:policy.routes.filter(r=>r.accountID===a.id&&relevantAccountWindows(a,r.modelID).includes(w)).map(r=>r.id)}:{}),remaining:w.state==="unknown"?NaN:w.state==="exhausted"?0:w.remainingPercent??NaN,reserved:0,resetAt:w.resetAt??"",periodSeconds:w.durationSeconds??undefined}))}))
  const unbilled=accounts.filter(a=>!a.billing).map(a=>a.id)
@@ -82,8 +100,8 @@ export async function reserveDispatch(input:{runID:string;model?:string;policyFi
  const observedRoutes=policy.outcomesFile?measuredOutcomeRoutes(policy.routes,JSON.parse(readFileSync(isAbsolute(policy.outcomesFile)?policy.outcomesFile:join(dirname(input.policyFile),policy.outcomesFile),"utf8")) as MeasuredOutcomes).routes:policy.routes
  const routes=calibratedRoutes(observedRoutes,readCalibrations().calibrations,Object.fromEntries(snapshot.accounts.map(a=>[a.id,accountRegime(a)])),policy.calibration,now)
  const ledger=new RouteReservations(input.reservationFile),result=ledger.reserve(input.runID,{request:{...policy.request,now:new Date(now).toISOString(),explicitRouteID},routes,accounts})
- if(!result.reservation)throw new Error(result.decision?.summary+": "+result.decision?.excluded.map(x=>x.routeID+" "+x.reasons.join(", ")).join("; "))
+ if(!result.reservation)throw new Error(result.decision?.summary+": "+result.decision?.excluded.map(x=>x.routeID+" "+x.reasons.join(", ")).join("; ")+" | candidates: "+live.diagnostics.join(" | "))
  const route=policy.routes.find(r=>r.id===result.reservation!.routeID)
  if(!route)throw new Error("Reserved route was removed; reconcile the existing run before retrying")
- return {route,bootstrapByProject:policy.bootstrapByProject??{},ledger,decision:result.decision}
+ return {route,bootstrapByProject:policy.bootstrapByProject??{},ledger,decision:result.decision,candidates:{derived:live.derived.length,curated:live.curated.length,catalog:live.catalog.source,diagnostics:live.diagnostics}}
 }

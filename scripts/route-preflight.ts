@@ -16,13 +16,16 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs"
 import { join, resolve, dirname } from "node:path"
 import { parse } from "json5"
 import { probeModel } from "./provider-audit"
+import { liveDispatchRoutes } from "../models/live-routes"
+import { getAccountUsage } from "../usage/account-api"
 
 const root = resolve(import.meta.dir, "..")
 const option = (name: string) => { const i = process.argv.indexOf(name); return i < 0 ? undefined : process.argv[i + 1] }
 if (process.argv.includes("--help")) {
   console.log(`bun scripts/route-preflight.ts [--out <file>] [--json]
 
-  Probes every cliproxyapi route in the dispatch policy and records whether it can actually run.
+  Probes every cliproxyapi route the dispatch would rank -- curated and live-derived -- and records
+  whether it can actually run.
   Routes on other providers are reported as not probeable from here rather than as healthy.`)
   process.exit(0)
 }
@@ -33,8 +36,15 @@ if (!settings?.baseURL || !settings?.apiKey) throw new Error("No cliproxyapi tra
 const policy = JSON.parse(readFileSync(join(root, "models", "dispatch-policy.json"), "utf8"))
 const out = resolve(option("--out") ?? join(process.env.XDG_STATE_HOME ?? join(process.env.USERPROFILE ?? process.env.HOME ?? ".", ".local", "state"), "opencode", "route-health.json"))
 
+// Dispatch ranks the curated routes plus whatever the live join derives, so probe the same set.
+// Health is matched back by provider/model as well as by route id, which is what lets one probe
+// speak for every candidate that would place the same call.
+const snapshot = await getAccountUsage({ refresh: true })
+const live = await liveDispatchRoutes(policy, snapshot)
+console.error(live.diagnostics.join("\n"))
+
 const results: any[] = []
-for (const route of policy.routes) {
+for (const route of [...live.curated, ...live.derived]) {
   const id = `${route.providerID}/${route.modelID}`
   if (route.providerID !== "cliproxyapi") {
     results.push({ routeID: route.id, model: id, state: "not-probeable", reason: "Only the local proxy transport can be probed from here" })

@@ -13,18 +13,24 @@ import {QuestStore} from '../quest/store'
 import {projectIdentity} from '../quest/project'
 import {freePort} from './plugin-deploy'
 import {getAccountUsage} from '../usage/account-api'
+import {liveDispatchRoutes} from '../models/live-routes'
 const root=resolve(process.argv[2]),reservations=resolve(process.argv[3]),output=join(root,'.visual-e2e','installed-single-giver-'+Date.now())
 const policy=JSON.parse(readFileSync(join(root,'models/dispatch-policy.json'),'utf8'))
 // The check must run on a lane that has capacity. Pinning the primary route, or a hardcoded
 // giver model, fails the whole gate when that account is spent even though other routes are free.
 const snapshot=await getAccountUsage()
+// Choose from the same candidate pool a real dispatch ranks -- the policy's curated routes plus
+// whatever the live join derives -- or this gate fails whenever the curated accounts are spent
+// and the router would happily have run somewhere else.
+const live=await liveDispatchRoutes(policy,snapshot)
+const candidates=[...live.curated,...live.derived]
 const usable=(r:any)=>snapshot.accounts.some((a:any)=>a.id===r.accountID&&a.state==='available')
 // Verify on the lane the channel actually ships on when it has capacity: a route can hold quota
 // and still be unusable here, and the activated model is the one already proven against this host.
 const activated=(()=>{try{const c=JSON.parse(readFileSync(join(root,"..","..","dev.json"),"utf8"));return String(c.model??"")}catch{return ""}})()
-const activatedID=policy.routes.find((r:any)=>activated&&activated.startsWith(r.providerID+"/"+r.modelID))?.id
-const ordered=[activatedID,policy.request.primaryRouteID,...(policy.request.fallback?.routeIDs??[]),...(policy.request.allowedRouteIDs??[])].filter(Boolean)
-const route=ordered.map((id:string)=>policy.routes.find((r:any)=>r.id===id)).find((r:any)=>r&&usable(r))
+const activatedID=candidates.find((r:any)=>activated&&activated.startsWith(r.providerID+"/"+r.modelID))?.id
+const ordered=[activatedID,policy.request.primaryRouteID,...(policy.request.allowedRouteIDs??[]),...live.derived.map(r=>r.id)].filter(Boolean)
+const route=ordered.map((id:string)=>candidates.find((r:any)=>r.id===id)).find((r:any)=>r&&usable(r))
 if(!route)throw Error('No authorized route has available capacity; this check cannot produce real dispatch evidence')
 const holds=()=>policy.billing[route.accountID]==='subscription'&&policy.request.subscriptionConcurrency==='unlimited'?[]:JSON.parse(readFileSync(reservations,'utf8')).reservations.filter((r:any)=>r.accountID===route.accountID&&r.exclusive&&['active','unknown'].includes(r.state))
 if(holds().length)throw Error('Existing uncertain account ownership blocks this successful dispatch check; inspect it first')

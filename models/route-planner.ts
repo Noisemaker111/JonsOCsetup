@@ -1,7 +1,12 @@
 /**
  * Offline route decisions. No provider calls, token prices, or model-name bonuses.
  * A route is an exact account + provider/model + harness + reasoning + service tier.
- * Evidence is local to that route; cross-harness public scores are research inputs.
+ *
+ * Evidence is local to that route. A published benchmark is a different thing and stays a
+ * different field: it is a prior, measured by someone else on someone else's harness, and it only
+ * ever orders routes that have nothing measured of their own. The moment any candidate carries
+ * local evidence for the task, the priors stop competing rather than being compared against a
+ * number on another scale.
  */
 export type TaskClass = "coding" | "review" | "planning" | "utility"
 export type QuotaWindow = {
@@ -46,6 +51,20 @@ export type RouteEvidence = {
   /** Upper latency estimate, for deadline admission. */
   p95Milliseconds: number
 }
+/** A public score for this model at this exact effort. Never a measurement of this route. */
+export type RouteBenchmark = {
+  suite: string
+  passAt1: number
+  /** The effort level the published score was produced at, not necessarily the route's. */
+  effort: string
+  provenance: "independent" | "vendor"
+  source: string
+  measuredAt: string
+  /** Artificial Analysis Intelligence Index, when the table records one. Tiebreak only. */
+  intelligence?: number
+  /** Why this route's effort may claim the score, when the source did not state one. */
+  attribution?: string
+}
 export type Route = {
   id: string
   accountID: string
@@ -56,10 +75,13 @@ export type Route = {
   reasoning: string
   serviceTier: string
   verified: boolean
-  /** User judgment authorizes this exact choice, without claiming benchmark results. */
-  admission?: "configured-choice"
+  /** Policy authorizes this exact choice without claiming a local measurement of it:
+   *  `configured-choice` is the user naming it, `benchmark-ranked` is a live candidate whose
+   *  only quality signal is `benchmark`. Both mean task consumption is uncalibrated. */
+  admission?: "configured-choice" | "benchmark-ranked"
   outcomeIssue?: {task:TaskClass;reason:string}
   evidence: RouteEvidence[]
+  benchmark?: RouteBenchmark
   /** Measured task consumption, in each shared account window's units. */
   quotaPerTask: Record<string, number>
   cashReservation?: { currency:string; upperBound:number }
@@ -73,6 +95,9 @@ export type RoutingRequest = {
   qualityTolerance: number
   maxUsageAgeSeconds: number
   maxEvidenceAgeDays: number
+  /** Floor for a route whose only quality signal is a published benchmark. A route the user
+   *  named explicitly is exempt: naming it is the authorization. */
+  minBenchmarkPassAt1?: number
   maxTaskMilliseconds?: number
   maxCashPerSuccess?: number
   cashCurrency?: string
@@ -102,13 +127,20 @@ export function applicableQuotaWindows(account: Account, route: Route) {
 type Candidate = {
   routeID: string
   accountID: string
+  /** Locally measured pass rate. Null means nothing was measured on this exact route. */
   successRate: number | null
   millisecondsPerSuccess: number | null
   cashPerSuccess: number | null
   /** Estimated current-window task slots lost before a longer window resets. */
   expiryOpportunity: number | null
   limitingWindow?: string
+  /** Published prior, on a different harness. Only ranks against other priors. */
+  benchmarkPassAt1: number | null
+  benchmarkProvenance?: "independent" | "vendor"
+  intelligence: number | null
   evidenceSource: string
+  /** What the caller must still be told about an uncalibrated admission, if anything. */
+  note?: string
 }
 export type RoutingDecision = {
   selected: Candidate | null
@@ -128,6 +160,7 @@ function validateRequest(r: RoutingRequest) {
   if(r.cashBudget){const b=r.cashBudget;if(!b.id?.trim()||!b.currency?.trim()||![b.limit,b.spent,b.reserved??0].every(nonnegative)||!finite(date(b.startsAt))||!finite(date(b.endsAt))||date(b.startsAt)>=date(b.endsAt))throw new Error("Invalid cash budget")}
   if (r.preference !== undefined && !["capacity", "latency", "cash"].includes(r.preference)) throw new Error("Invalid routing preference")
   if (r.allowedRouteIDs !== undefined && (!Array.isArray(r.allowedRouteIDs) || r.allowedRouteIDs.some(id => typeof id !== "string"))) throw new Error("Invalid route allowlist")
+  if (r.minBenchmarkPassAt1 !== undefined && (!nonnegative(r.minBenchmarkPassAt1) || r.minBenchmarkPassAt1 > 1)) throw new Error("Invalid benchmark floor")
   if (!["coding", "review", "planning", "utility"].includes(r.task) || !finite(date(r.now)) ||
       !positive(r.minTrials) || !Number.isInteger(r.minTrials) ||
       !nonnegative(r.minSuccessRate) || r.minSuccessRate > 1 ||
@@ -148,20 +181,15 @@ export function planRoutes(input: PlannerInput): RoutingDecision {
  if(req.explicitRouteID||!req.primaryRouteID)return planEligibleRoutes(input)
  const first=planEligibleRoutes({...input,request:{...req,explicitRouteID:req.primaryRouteID}})
  if(first.selected||!req.fallback)return first
- // Each alternative is attempted as its own configured choice, in the order the user ranked them.
- // A pooled pass cannot admit them: a route counts as a configured choice only while it is the
- // requested one, so pooling excludes every un-benchmarked route and selects nothing.
+ // The alternatives are ranked as a pool, not tried in list order. Attempting them one at a time
+ // made the list's own order the decision -- whoever typed it first won -- which is exactly what
+ // a benchmark-informed ranking is for. Policy authorization no longer depends on a route being
+ // the one requested, so a pooled pass admits them and then sorts them on the evidence it has.
  const reasons=first.excluded.flatMap(r=>r.reasons)
- let alternative:RoutingDecision|undefined
- const rejected:RoutingDecision["excluded"]=[]
- for(const routeID of req.fallback.routeIDs){
-  const attempt=planEligibleRoutes({...input,request:{...req,explicitRouteID:routeID}})
-  if(attempt.selected){alternative=attempt;break}
-  rejected.push(...attempt.excluded)
- }
- if(!alternative)return {selected:null,ranked:[],excluded:[...first.excluded,...rejected],summary:"Configured primary and fallback routes unavailable"}
- const fallback={fromRouteID:req.primaryRouteID,toRouteID:alternative.selected!.routeID,reasons}
- return {...alternative,fallback,excluded:[...first.excluded,...rejected.filter(r=>r.routeID!==req.primaryRouteID)],summary:"Configured fallback "+fallback.fromRouteID+" → "+fallback.toRouteID+": "+reasons.join("; ")}
+ const alternative=planEligibleRoutes({...input,request:{...req,allowedRouteIDs:req.fallback.routeIDs}})
+ if(!alternative.selected)return {...alternative,excluded:[...first.excluded,...alternative.excluded],summary:"Configured primary and fallback routes unavailable"}
+ const fallback={fromRouteID:req.primaryRouteID,toRouteID:alternative.selected.routeID,reasons}
+ return {...alternative,fallback,excluded:[...first.excluded,...alternative.excluded.filter(r=>r.routeID!==req.primaryRouteID)],summary:"Configured fallback "+fallback.fromRouteID+" → "+fallback.toRouteID+": "+reasons.join("; ")}
 }
 function planEligibleRoutes(input: PlannerInput): RoutingDecision {
   const { request: req, accounts, routes } = input
@@ -173,7 +201,11 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
   const candidates: Candidate[] = []
   for (const route of routes) {
     if (req.explicitRouteID && route.id !== req.explicitRouteID) continue
-    const configuredChoice = req.explicitRouteID === route.id && route.admission === "configured-choice"
+    const named = req.explicitRouteID === route.id
+    // Policy authorized this exact route without a local measurement of it, so its task
+    // consumption is uncalibrated and admitted on quota alone. That was always the meaning;
+    // it was only ever computed from `explicitRouteID` because nothing else could be chosen.
+    const chosen = route.admission !== undefined
     const reasons: string[] = []
     if (route.outcomeIssue?.task === req.task) reasons.push("Measured outcomes unavailable: " + route.outcomeIssue.reason)
     const account = accounts.find(a => a.id === route.accountID)
@@ -185,10 +217,10 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
     if (!account) reasons.push("account is not registered")
     else {
       if (!["subscription", "free", "metered"].includes(account.billing)) reasons.push("unknown billing arrangement")
-      if (configuredChoice && windows.some(w=>!positive(route.quotaPerTask[w.id])) && (account.concurrentWorkers ?? 0) > 0 && !unlimitedSubscriptionConcurrency(account,req) && !pacedSubscriptionAdmission(account,req.now)) reasons.push("uncalibrated admission awaits existing account workers and fresh quota")
+      if (chosen && windows.some(w=>!positive(route.quotaPerTask[w.id])) && (account.concurrentWorkers ?? 0) > 0 && !unlimitedSubscriptionConcurrency(account,req) && !pacedSubscriptionAdmission(account,req.now)) reasons.push("uncalibrated admission awaits existing account workers and fresh quota")
       if(account.pacing){const p=account.pacing,now=Date.parse(req.now);if(p.state==="stopped"||(!unlimitedSubscriptionConcurrency(account,req)&&now>=p.deadlineAt))reasons.push("Burn pacing stopped: "+p.reason);else if(p.state!=="ready"||p.updatedAt>now||now-p.updatedAt>=30000||(!unlimitedSubscriptionConcurrency(account,req)&&(account.concurrentWorkers??0)>=p.desiredConcurrency))reasons.push("Burn pacing hold: "+p.reason)}
       if (account.dispatchHold) reasons.push(account.dispatchHold)
-      if (configuredChoice && account.billing === "metered" && !req.cashBudget) reasons.push("configured metered choice requires a cash budget")
+      if (chosen && account.billing === "metered" && !req.cashBudget) reasons.push("configured metered choice requires a cash budget")
       if (!account.authenticated) reasons.push("account is not authenticated")
       if (account.capacity !== "available") reasons.push("account capacity is " + account.capacity)
       const age = now - date(account.observedAt)
@@ -199,8 +231,27 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
     // Newest matching measurement only. An older favorable result cannot mask a regression.
     const evidence = route.evidence.filter(e => e.task === req.task)
       .sort((a, b) => date(b.measuredAt) - date(a.measuredAt))[0]
+    // A published score is admitted as a prior, not as a measurement. It is checked here so a
+    // malformed or sub-floor one excludes the route instead of silently ranking it at zero.
+    const prior = route.benchmark
+    let benchmarkPassAt1: number | null = null
+    let benchmarkNote = ""
+    if (prior) {
+      const age = now - date(prior.measuredAt)
+      if (!prior.suite?.trim() || !prior.source?.trim() || !prior.effort?.trim() || !positive(prior.passAt1) || prior.passAt1 > 1 ||
+          !["independent", "vendor"].includes(prior.provenance) || !finite(age) || age < 0 ||
+          (prior.intelligence !== undefined && !positive(prior.intelligence))) reasons.push("invalid benchmark prior")
+      // A stale public score is not evidence of breakage, only of nobody re-running the board.
+      // It stops being a ranking signal; it does not remove a route the user already authorized.
+      else if (age > req.maxEvidenceAgeDays * 86400000) benchmarkNote = "benchmark prior from " + prior.measuredAt + " is stale and was not ranked"
+      else if (!named && req.minBenchmarkPassAt1 !== undefined && prior.passAt1 < req.minBenchmarkPassAt1) reasons.push("benchmark prior " + (prior.passAt1 * 100).toFixed(1) + "% is below the task floor")
+      else {
+        benchmarkPassAt1 = prior.passAt1
+        benchmarkNote = prior.suite + " " + (prior.passAt1 * 100).toFixed(1) + "% at effort " + prior.effort + " (" + prior.provenance + ", " + prior.measuredAt + ", " + prior.source + ")" + (prior.attribution ? "; " + prior.attribution : "")
+      }
+    }
     let successRate = 0
-    if (!evidence && !configuredChoice) reasons.push("no evidence for this task and exact route")
+    if (!evidence && !chosen) reasons.push("no evidence for this task and exact route")
     else if (evidence) {
       const age = now - date(evidence.measuredAt)
       if (!finite(age) || age < 0 || age > req.maxEvidenceAgeDays * 86400000) reasons.push("evidence is stale or invalid")
@@ -225,7 +276,7 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
       for (const window of windows) {
         const burn = route.quotaPerTask[window.id]
         const reset = date(window.resetAt)
-        if ((!positive(burn) && (!configuredChoice || burn !== undefined)) || !nonnegative(window.remaining) || !nonnegative(window.reserved) ||
+        if ((!positive(burn) && (!chosen || burn !== undefined)) || !nonnegative(window.remaining) || !nonnegative(window.reserved) ||
             !finite(reset) || reset <= now ||
             (window.nextCapacity !== undefined && !positive(window.nextCapacity)) ||
             (window.periodSeconds !== undefined && !positive(window.periodSeconds))) {
@@ -234,7 +285,7 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
         }
         const reserve = req.reserveByAccount?.[account.id]?.[window.id] ?? window.remaining * req.reserveFraction
         if (!nonnegative(reserve)) { reasons.push("invalid reserve for " + window.id); continue }
-        if (configuredChoice && !positive(burn)) {
+        if (chosen && !positive(burn)) {
           if (window.remaining - reserve - window.reserved <= 0) reasons.push("insufficient unreserved quota in " + window.id)
           continue // Unknown consumption is not a zero-token forecast. Concurrency follows explicit policy.
         }
@@ -262,37 +313,66 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
       }
     }
     if (reasons.length) { excluded.push({ routeID: route.id, reasons }); continue }
-    if (configuredChoice && !evidence) {
-      const selected: Candidate = {routeID:route.id,accountID:route.accountID,successRate:null,millisecondsPerSuccess:null,cashPerSuccess:null,expiryOpportunity:null,evidenceSource:"configured choice; outcomes and consumption uncalibrated"}
-      const unknownConsumption = windows.some(w=>!positive(route.quotaPerTask[w.id]))
-      return {selected,ranked:[selected],excluded,summary:route.id + ": configured choice; quality uncalibrated; " + (unknownConsumption ? (unlimitedSubscriptionConcurrency(account!,req) ? "consumption uncalibrated; user policy permits concurrent subscription workers without a fixed account cap. Fresh quota is required; unknown consumption is not a capacity guarantee." : pacedSubscriptionAdmission(account!,req.now) ? "consumption uncalibrated; explicit scoped pacing permits up to "+account!.pacing!.desiredConcurrency+" concurrent managed workers. Quota movement, not session count, controls pacing." : "consumption uncalibrated; one worker on this account, refresh after completion. Quota reserves are admission thresholds, not a task consumption guarantee.") : "quota reservations use configured/calibrated consumption.")}
-    }
+    const unknownConsumption = !!account && windows.some(w => !positive(route.quotaPerTask[w.id]))
+    // Every eligible route becomes a candidate now. It used to return the first uncalibrated
+    // choice straight out of the loop, which meant automatic selection could never compare two
+    // of them: whichever came first in the policy file won, and the ranking below was dead code
+    // for every route the user had not measured -- which is all of them.
     candidates.push({
-      routeID: route.id, accountID: route.accountID, successRate,
-      millisecondsPerSuccess: evidence!.totalMilliseconds / evidence!.passed,
-      cashPerSuccess: evidence!.totalCash === null ? null : evidence!.totalCash / evidence!.passed,
-      expiryOpportunity: configuredChoice && windows.some(w=>!positive(route.quotaPerTask[w.id])) ? null : expiryOpportunity, limitingWindow, evidenceSource: evidence!.source,
+      routeID: route.id, accountID: route.accountID,
+      successRate: evidence ? successRate : null,
+      millisecondsPerSuccess: evidence ? evidence.totalMilliseconds / evidence.passed : null,
+      cashPerSuccess: evidence ? (evidence.totalCash === null ? null : evidence.totalCash / evidence.passed) : null,
+      expiryOpportunity: !evidence || (chosen && unknownConsumption) ? null : expiryOpportunity, limitingWindow,
+      benchmarkPassAt1, benchmarkProvenance: benchmarkPassAt1 === null ? undefined : prior!.provenance,
+      intelligence: benchmarkPassAt1 === null ? null : prior!.intelligence ?? null,
+      evidenceSource: evidence ? evidence.source : benchmarkNote || "configured choice; outcomes and consumption uncalibrated",
+      note: unknownConsumption
+        ? (unlimitedSubscriptionConcurrency(account!, req) ? "consumption uncalibrated; user policy permits concurrent subscription workers without a fixed account cap. Fresh quota is required; unknown consumption is not a capacity guarantee."
+          : pacedSubscriptionAdmission(account!, req.now) ? "consumption uncalibrated; explicit scoped pacing permits up to " + account!.pacing!.desiredConcurrency + " concurrent managed workers. Quota movement, not session count, controls pacing."
+          : "consumption uncalibrated; one worker on this account, refresh after completion. Quota reserves are admission thresholds, not a task consumption guarantee.")
+        : undefined,
     })
   }
   if (req.explicitRouteID && !routes.some(r => r.id === req.explicitRouteID)) excluded.push({ routeID: req.explicitRouteID, reasons: ["explicit route is not registered"] })
-  const bestQuality = Math.max(0, ...candidates.map(c => c.successRate ?? 0))
-  const ranked = candidates.filter(c => {
-    if ((c.successRate ?? 0) + req.qualityTolerance + 1e-12 >= bestQuality) return true
+  // Measured outcomes and public priors are different scales on different harnesses, so they are
+  // never compared. Anything measured locally for this task wins the field outright; the priors
+  // only order the routes that are left when nothing has been measured at all.
+  const measured = candidates.filter(c => c.successRate !== null)
+  const pool = measured.length ? measured : candidates
+  for (const c of candidates) if (!pool.includes(c)) excluded.push({ routeID: c.routeID, reasons: ["only a published benchmark prior; measured routes are available for this task"] })
+  const quality = (c: Candidate) => c.successRate ?? c.benchmarkPassAt1 ?? 0
+  const bestQuality = Math.max(0, ...pool.map(quality))
+  const provenanceRank = (c: Candidate) => c.benchmarkProvenance === "vendor" ? 1 : 0
+  const ranked = pool.filter(c => {
+    if (quality(c) + req.qualityTolerance + 1e-12 >= bestQuality) return true
     excluded.push({ routeID: c.routeID, reasons: ["outside quality tolerance of best eligible route"] })
     return false
   }).sort((a, b) =>
     (req.preference === "cash" ? (a.cashPerSuccess ?? Infinity) - (b.cashPerSuccess ?? Infinity) : req.preference === "latency" ? (a.millisecondsPerSuccess ?? 0) - (b.millisecondsPerSuccess ?? 0) : (b.expiryOpportunity ?? -Infinity) - (a.expiryOpportunity ?? -Infinity)) ||
     (a.millisecondsPerSuccess ?? 0) - (b.millisecondsPerSuccess ?? 0) ||
     (a.cashPerSuccess ?? Infinity) - (b.cashPerSuccess ?? Infinity) ||
-    (b.successRate ?? 0) - (a.successRate ?? 0) || a.routeID.localeCompare(b.routeID))
+    (b.successRate ?? 0) - (a.successRate ?? 0) ||
+    // Nothing measured on either side: the published board is the only quality signal left, and
+    // an independent measurement beats a vendor's own number at the same score.
+    (b.benchmarkPassAt1 ?? 0) - (a.benchmarkPassAt1 ?? 0) ||
+    provenanceRank(a) - provenanceRank(b) ||
+    (b.intelligence ?? 0) - (a.intelligence ?? 0) || a.routeID.localeCompare(b.routeID))
   const selected = ranked[0] ?? null
   return {
     selected, ranked, excluded,
-    summary: selected
-      ? selected.routeID + ": observed success " + ((selected.successRate ?? 0) * 100).toFixed(1) +
-        "%; " + (selected.cashPerSuccess === null ? "actual cash unavailable; " : (req.cashCurrency??req.cashBudget?.currency??"USD") + " " + selected.cashPerSuccess.toFixed(4) + "/success; ") +
-        Math.round((selected.millisecondsPerSuccess ?? 0) / 1000) + "s/success; " +
-        (selected.expiryOpportunity === null ? "expiry pressure unavailable" : "expiry pressure " + selected.expiryOpportunity.toFixed(2) + " task slots/hour")
-      : "No evidenced, funded route meets the task constraints. No fallback was authorized.",
+    summary: selected ? describe(selected, req) : "No evidenced, funded route meets the task constraints. No fallback was authorized.",
   }
+}
+
+/** The decision text carries the provenance of whatever justified it, never a bare percentage. */
+function describe(selected: Candidate, req: RoutingRequest) {
+  const parts = [selected.successRate === null
+    ? (selected.benchmarkPassAt1 === null ? "quality uncalibrated" : "no local outcomes; ranked on " + selected.evidenceSource)
+    : "observed success " + (selected.successRate * 100).toFixed(1) + "%; " +
+      (selected.cashPerSuccess === null ? "actual cash unavailable" : (req.cashCurrency ?? req.cashBudget?.currency ?? "USD") + " " + selected.cashPerSuccess.toFixed(4) + "/success") + "; " +
+      Math.round((selected.millisecondsPerSuccess ?? 0) / 1000) + "s/success; " +
+      (selected.expiryOpportunity === null ? "expiry pressure unavailable" : "expiry pressure " + selected.expiryOpportunity.toFixed(2) + " task slots/hour")]
+  if (selected.note) parts.push(selected.note)
+  return selected.routeID + ": " + parts.join("; ")
 }
