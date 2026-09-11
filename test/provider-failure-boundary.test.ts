@@ -1,3 +1,7 @@
+/**
+ * @core-prevents a provider warning inferred without an actual response, or one session's failure being reported against another
+ * @core-observed Quota failures were previously inferred rather than observed, producing warnings for accounts that had not answered (2026-09-10).
+ */
 import {test,expect} from 'bun:test'
 import {installProviderFailureObservation} from '../models/server'
 import {detectProviderFailure} from '../usage/usage-reached'

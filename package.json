@@ -27,7 +27,7 @@
     "setup:plan": "node scripts/install-setup.mjs",
     "setup:install": "node scripts/install-setup.mjs --apply",
     "runtime:drive": "bun scripts/drive-opencode.ts",
-    "check:core": "bun test test/quest-worker-identity.test.ts test/quest-artifact-preview.test.ts test/provider-failure-boundary.test.ts test/worktree-retirement.test.ts test/quest-duplicate-admission.test.ts test/live-route-derivation.test.ts",
+    "check:core": "node scripts/core-suite.mjs",
     "worktree:cleanup": "node scripts/worktree-cleanup.mjs"
   }
 }

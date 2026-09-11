@@ -1,3 +1,7 @@
+/**
+ * @core-prevents a recorded artifact rendering from a path outside the Quest workspace, or a missing artifact rendering as if present
+ * @core-observed Artifact previews follow recorded paths including symlinks, so a preview could read outside the workspace it belongs to (2026-09-09).
+ */
 import {expect,test} from 'bun:test'
 import {mkdtempSync,mkdirSync,writeFileSync,rmSync,symlinkSync} from 'node:fs'
 import {tmpdir} from 'node:os'

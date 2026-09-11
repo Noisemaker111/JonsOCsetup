@@ -1,3 +1,7 @@
+/**
+ * @core-prevents retirement following a junction and deleting a live checkout, or leaving an integrated worktree behind forever
+ * @core-observed A Windows retirement pass had to remove empty shells without following a junction to its target (2026-09-10).
+ */
 import {test,expect} from 'bun:test'
 import {mkdtempSync,writeFileSync,mkdirSync,existsSync,rmSync,realpathSync,symlinkSync,readFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
