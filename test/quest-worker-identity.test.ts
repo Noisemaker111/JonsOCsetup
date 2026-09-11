@@ -1,3 +1,7 @@
+/**
+ * @core-prevents a worker session binding a different agent or model than dispatch reserved, so a Quest records work that a different route actually did
+ * @core-observed Dispatch reserves an exact account/model/reasoning route; a host that bound something else would be invisible without this check (2026-09-09).
+ */
 import {test,expect} from 'bun:test'
 import {assertWorkerIdentity} from '../quest/worker-identity'
 const run:any={runtime:'native',agentRole:'proxy-sol',providerID:'cliproxyapi',modelID:'gpt-5.6-sol',reasoningEffort:'xhigh'}

@@ -1,3 +1,7 @@
+/**
+ * @core-prevents a failed dispatch spawning a second Quest for the same request, and a refusal deadlocking the Quest it points at
+ * @core-observed One request produced four near-duplicate Quests because requestFingerprint was written and never read back (2026-09-10, PR40).
+ */
 import {test,expect} from 'bun:test'
 import {mkdtempSync,rmSync} from 'node:fs'
 import {tmpdir} from 'node:os'

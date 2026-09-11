@@ -1,3 +1,7 @@
+/**
+ * @core-prevents an oversized or clamp-truncated tool result entering the conversation, where it is re-sent every later turn as unparseable JSON
+ * @core-observed The host's 51,200-byte tool-output clamp cut quest and usage snapshots mid-structure, leaving ~12,800 tokens of invalid JSON resident and opening sessions above 20,000 tokens (2026-09-11).
+ */
 import {test,expect} from 'bun:test'
 import {applyResultBudget,budgetText,DEFAULT_RESULT_BUDGET} from '../models/result-budget'
 

@@ -1,3 +1,7 @@
+/**
+ * @core-prevents a derived route reaching dispatch without a connected account, catalog entry, access-policy permission, billing or benchmark
+ * @core-observed Live derivation replaced the hand-typed allowlist; each of the five sources must stay a veto (2026-09-10, PR41).
+ */
 import { test, expect } from "bun:test"
 import { join } from "node:path"
 // Derivation reads the user's installed access policy, and fails closed to no candidates when it
