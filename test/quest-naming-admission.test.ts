@@ -1,6 +1,6 @@
 /**
  * @core-prevents a Quest being admitted whose own record cannot say what it is: an objective that opens with who spoke, or a step titled only with the lifecycle stage it sits in
- * @core-observed Jk's ledger at ~/.opencode/quests, 2026-09-11: 37 of 79 objectives open with "Jk:" or "User requests", and 20 of 289 step titles are exactly Implementation, Verification or Integration.
+ * @core-observed Jk's ledger at ~/.opencode/quests, 2026-09-11: 37 of 79 objectives open with "Jk:" or "User requests", and 20 of 289 step titles are exactly Implementation, Verification or Integration. Driving the create-only guard the same day, the giver accepted the refusal and then patched the Quest back to "Integration" over five revisions.
  */
 import {test,expect} from 'bun:test'
 import {mkdtempSync,rmSync} from 'node:fs'
@@ -26,6 +26,23 @@ test('a Quest that cannot name itself is refused with what to write instead, and
   expect(stage).toContain('Step "Verification" names a lifecycle stage')
   expect(refusal(()=>questsAPI(store,context('call-3'),started).create({title:'Integration',description:'Fold the project router into the dev channel.',steps:[{title:'Merge the router plugin into the dev generation'}]}))).toContain('names a lifecycle stage, not an outcome')
   expect(readAllQuests(root).length).toBe(0)
+ }finally{rmSync(root,{recursive:true,force:true})}
+})
+
+test('a readable Quest cannot be renamed back into an unreadable one',()=>{
+ const root=mkdtempSync(join(tmpdir(),'quest-rename-'))
+ try{
+  const store=new QuestStore(root)
+  const api=(request:string)=>questsAPI(store,context(request),started)
+  const quest=api('call-1').create({title:'Composer draft survives a reconnect',description:'Typed composer text survives a reconnect instead of being lost.',steps:[{title:'Keep the draft through the reconnect'}]})
+  expect(refusal(()=>api('call-2').update(quest.id,{title:'Integration'}))).toContain('names a lifecycle stage, not an outcome')
+  expect(refusal(()=>api('call-3').update(quest.id,{description:'Jk: i lose my typing when it reconnects, fix it.'}))).toContain('opens by naming who spoke')
+  expect(refusal(()=>api('call-4').update(quest.id,{steps:[{id:'keep-the-draft-through',state:'pending',title:'Implementation'}]}))).toContain('Step "Implementation" names a lifecycle stage')
+  const saved=store.read(quest.id)!
+  expect(saved.title).toBe('Composer draft survives a reconnect')
+  expect(saved.stages.map(s=>s.title)).toEqual(['Keep the draft through the reconnect'])
+  // Reporting a step's state carries no title, so a worker's normal update is untouched.
+  expect(api('call-5').update(quest.id,{steps:[{id:'keep-the-draft-through',state:'done',note:'draft survived the reconnect'}]}).id).toBe(quest.id)
  }finally{rmSync(root,{recursive:true,force:true})}
 })
 

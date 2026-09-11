@@ -6,6 +6,10 @@
  * titles are exactly "Implementation", "Verification" or "Integration", so a list of steps reads
  * as a process template rather than this task's work.
  *
+ * Create and update are both checked. Driven against the release that only guarded create, the
+ * giver accepted the refusal, created a readable Quest, and then patched it five times back to
+ * exactly the refused wording, so a Quest guarded only at the door does not stay readable.
+ *
  * Both checks are exact matches, never a judgement about quality. A step titled "Integration" is
  * refused; "Integration: fold the router into the dev channel" is not. An objective opening
  * "Jk: ..." is refused; one that mentions Jk in a later sentence is not. Everything softer -- a
@@ -36,8 +40,12 @@ const SPEAKER = /^\s*(?:jk|jon)\b|^\s*user\s*-?\s*(?:asks?|wants?|requests?|says
 
 export function speakerAttribution(value: string): boolean { return SPEAKER.test(String(value ?? "")) }
 
-/** What is wrong with this Quest's names, phrased as what to write instead. Empty means admit it. */
-export function namingProblems(input: { title: string; objective: string; steps: { title: string }[] }): string[] {
+/**
+ * What is wrong with the names being written, phrased as what to write instead. Empty means accept
+ * them. Only fields actually present are judged, so an update is held to the text it writes and a
+ * Quest named before this check existed stays editable.
+ */
+export function namingProblems(input: { title?: string; objective?: string; steps?: { title?: string }[] }): string[] {
   const problems: string[] = []
   const title = String(input.title ?? "").trim(), objective = String(input.objective ?? "").trim()
   if (bareStageName(title))
