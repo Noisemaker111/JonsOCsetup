@@ -1,6 +1,12 @@
 # OpenCode2 development and stable releases
 
-This repository's stable branch is `master`. `agents` is the integration branch.
+This repository's stable branch is `main`. `agents` is the integration branch.
+
+`main` was established on 2026-09-11 from a verified `agents` revision. The former stable branch,
+`master`, shares no common ancestor with `agents` -- separate root commits, 462 commits against 134,
+because `agents` was seeded from the live working tree rather than branched from `master`. No merge
+between them could fast-forward, so a stable release was impossible without a force. `master` is
+preserved at the tag `legacy/master-20260911` and is no longer a release target.
 These rules apply to OpenCode2 configuration and extensions, not other projects.
 
 The agent owns the full change: inspect existing work and PRs, use an isolated
@@ -81,10 +87,10 @@ the installed OpenCode host or publishes the public plugin mirrors.
 ## Stable promotion
 
 Only when Jon requests a release, freeze a candidate branch at the verified agents
-revision and open its PR against master. Generate patch notes from that exact
+revision and open its PR against main. Generate patch notes from that exact
 candidate's merged PRs and changes, attach them to the PR, and run release CI.
 Later agents changes belong to a separate batch. Only Jon personally merges
-master: agents never merge it, enable auto-merge, or push to it, including after
+main: agents never merge it, enable auto-merge, or push to it, including after
 chat approval. After observing his merge, follow separately authorized stable
 activation gates. Keep the previous stable artifact for rollback; changing code
 does not roll back mutable data. Never propose releases during routine work.
@@ -93,8 +99,8 @@ does not roll back mutable data. Never propose releases during routine work.
 
 Use the shared helper in [agents-and-main](../skills/agents-and-main/SKILL.md).
 Install it once with that skill's `scripts/install.ps1`; use `sb agents` only in
-a checkout you own. Stable remains master, so use `git switch master` followed by
-`git pull --ff-only origin master`. Do not switch another session's checkout.
+a checkout you own. Stable is `main`, so use `sb main`, or `git switch main` followed by
+`git pull --ff-only origin main`. Do not switch another session's checkout.
 
 The agents branch replaces dev. The existing runtime channel is still called dev:
 `ocd`, `.channels/dev.json`, and its isolated state are runtime identities, not Git
@@ -112,7 +118,7 @@ there is no unattended merge service. Stable releases are human-only.
 
 Run `bun install --frozen-lockfile` once in the owned package directory, then
 `bun run check:core` and `node --check scripts/runtime-channel.mjs`. The GitHub
-workflow runs the core checks on PRs to agents and master. Before activation,
+workflow runs the core checks on PRs to agents and main. Before activation,
 prepare the committed candidate with `bun run runtime:channel -- prepare dev
 --ref <revision> --model <exact-route>`, drive the installed app twice, and use
 `activate dev --candidate <root> --evidence <report>` with the real captures and
