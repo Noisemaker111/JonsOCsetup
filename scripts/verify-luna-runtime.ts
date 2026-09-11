@@ -12,7 +12,8 @@ writeFileSync(join(repo,'input.txt'),'LUNA_RUNTIME_INPUT\n')
 for(const args of [['init'],['add','AGENTS.md','input.txt'],['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','Runtime fixture']]){const r=spawnSync('git',args,{cwd:repo,windowsHide:true,encoding:'utf8'});if(r.status!==0)throw Error(r.stderr)}
 const executable=codexExecutable(),version=spawnSync(executable,['--version'],{windowsHide:true,encoding:'utf8'}).stdout.trim()
 const candidateArg=process.argv.indexOf('--candidate'),candidate=candidateArg>=0?resolve(process.argv[candidateArg+1]):undefined
-const env={...process.env,OPENCODE_QUEST_ROOT:join(root,'ledger')};delete env.CODEX_THREAD_ID
+// Every real home, or the check writes into one of them.
+const env={...process.env,OPENCODE_QUEST_ROOT:join(root,'ledger'),OPENCODE_DB:join(root,'host.db'),OPENCODE_ORCHESTRATION_LEDGER:join(root,'orchestration.jsonl'),OPENCODE_TELEMETRY_FILE:join(root,'requests.jsonl'),XDG_STATE_HOME:join(root,'state')};delete env.CODEX_THREAD_ID
 const config:string[]=[]
 if(candidate){
  const staged=join(root,'candidate');cpSync(candidate,staged,{recursive:true});env.PLUGIN_ROOT=staged
