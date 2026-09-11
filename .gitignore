@@ -3,7 +3,7 @@ node_modules/
 generations/
 .channels/
 .worktrees/
-.claude/
+/.claude/
 .visual-e2e/
 run/
 tmp/
