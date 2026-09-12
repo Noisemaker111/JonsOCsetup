@@ -1,3 +1,4 @@
+import {installWorkerInstructionReads} from './worker-instructions'
 import {cleanupQuests} from "./cleanup"
 import {connectHostObservation,disconnectHostObservation,recordHostObservation,registerHostObservation} from "./host-observation"
 import {installWorkerCapabilities} from './worker-capabilities'
@@ -287,7 +288,7 @@ export function questTool(api = createQuestAgentAPI(questRoot())) {
   }
 }
 
-export async function installQuestTools(ctx: { tool?: { transform?: Function }; session?: any }, api = createQuestAgentAPI(questRoot())) {
+export async function installQuestTools(ctx: { tool?: { transform?: Function }; session?: any;permission?:any }, api = createQuestAgentAPI(questRoot())) {
   const transform = ctx?.tool?.transform
   if (typeof transform !== "function") return
   await transform((draft: { add: (tool: unknown) => void }) => {
@@ -315,6 +316,7 @@ export default define({
       ["user-giver", () => installUserGiverContext(api.store,ctx.session)],
       ["tools", () => installQuestTools(ctx, api)],
       ["shared-workspace-guard", () => installSharedWorkspaceGuard(ctx,api.store)],
+      ["worker-instruction-reads", () => installWorkerInstructionReads(ctx,api.store)],
     ] as const) {
       try { await install() } catch (error) {
         console.error(`[quests] ${name} disabled:`, error)

@@ -12,9 +12,10 @@ export function observeWorker(session, { active, messages = [], permissions = []
       return { action, resources }
     })
     const detail = requests.map(request=>request.action+(request.resources.length?' ('+request.resources.join(', ')+')':'')).join('; ')
-    return { ...base, state: 'blocked', permissions: requests, reason: 'Waiting for host permission: '+detail+(permissions.length>3?'; '+(permissions.length-3)+' more':'')+'. Open the worker session to review. Existing launch retained.' }
+    return { ...base, state: 'blocked', permissions: requests, reason: 'Waiting for host permission: '+detail+(permissions.length>3?'; '+(permissions.length-3)+' more':'')+'. The Quest Giver reviews this request; you can also open the worker. Existing launch retained.' }
   }
   if (forms.length) return { ...base, state: 'blocked', reason: 'Waiting for a worker question. Open the worker session to review. Existing launch retained.' }
+  if(active===false&&expected?.state==='cancelled'&&expected.permissionDecisions?.some(d=>d.reply==='reject'&&d.state==='acknowledged'))return {...base,state:'interrupted',reason:expected.result??'Permission rejected; owning host confirmed idle'}
   if (active !== true && session?.outcome && time(session.time?.idle) >= updated) return { ...base, state: { succeeded: 'completed', failed: 'failed', interrupted: 'interrupted' }[session.outcome] ?? 'unknown', outcome: session.outcome, completedAt: new Date(time(session.time.idle)).toISOString(), reason: 'Persisted host execution outcome; step completion is separate' }
   if (active !== false && expected?.providerID && expected?.modelID && expected?.reasoningEffort && (session?.agent !== expected.agentRole || session?.model?.providerID !== expected.providerID || session?.model?.id !== expected.modelID || session?.model?.variant !== expected.reasoningEffort)) return { ...base, state: 'blocked', reason: 'Host agent/model/reasoning differs from the recorded dispatch. Return to your Quest Giver to inspect and restore the existing assignment; do not redispatch.' }
   if (active === true) return { ...base, state: 'running', reason: 'Owning host confirms an active execution' }

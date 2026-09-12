@@ -35,3 +35,6 @@ export async function hostPermissions(host: object, id: string) {
  const state = hosts.get(host)
  return state?.permission?.list ? await state.permission.list({ sessionID: id }) : []
 }
+
+/** These domains are location-scoped; invoke them only from the worker's owning plugin. */
+export function hostPermissionDomain(host:object){return hosts.get(host)?.permission}

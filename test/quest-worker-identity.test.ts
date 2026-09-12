@@ -70,3 +70,73 @@ test('workspace snapshots preserve tracked ignored files without importing ignor
   rmSync(target,{recursive:true,force:true})
  }
 })
+
+import {permissionReplyInput,permissionSummary,permissionKey} from '../quest/worker-permissions'
+test('giver decisions cannot approve another worker, changed requests, or persistent access',()=>{
+ const session={...run,runID:'run',callID:'call',state:'executing',sessionID:'ses_worker'}
+ const request={id:'permission',sessionID:'ses_worker',action:'external_directory',resources:['C:/fixture/*'],source:{type:'tool',id:'tool',messageID:'message'}}
+ const input:any={quest:{state:'Working',sessions:[session]},runID:'run',giverID:'ses_giver',activeID:'ses_giver',worker:{...actual,id:'ses_worker'},shown:request,pending:[request],reply:'once'}
+ expect(permissionKey(request)).not.toBe(permissionKey({...request,source:{...request.source,id:'another-tool'}}))
+ expect(permissionReplyInput(input)).toEqual({sessionID:'ses_worker',requestID:'permission',reply:'once'})
+ expect(permissionReplyInput({...input,reply:'reject'}).reply).toBe('reject')
+ for(const change of [{activeID:'ses_other'},{giverID:undefined},{runID:'other'},{pending:[]},{reply:'always'},{worker:{...input.worker,id:'ses_other'}},{pending:[{...request,resources:['C:/*']}]},{quest:{state:'Archived',sessions:[session]}},{worker:{...input.worker,model:{...actual.model,variant:'medium'}}}])expect(()=>permissionReplyInput({...input,...change})).toThrow()
+ expect(permissionSummary({action:'bash',resources:['echo password=private']})).toEqual({action:'bash',resources:[]})
+ expect(permissionSummary({action:'read',resources:['secret=private']})).toEqual({action:'read',resources:['[REDACTED]']})
+})
+
+import {instructionReadPath} from '../quest/worker-instructions'
+test('worker setup reads cover only real instruction files in explicitly assigned roots',()=>{
+ const root=mkdtempSync(join(tmpdir(),'quest-instruction-')),project=join(root,'project'),worker=join(root,'worker'),other=join(root,'other')
+ try{
+  for(const dir of [project,worker,other]){mkdirSync(dir);writeFileSync(join(dir,'AGENTS.md'),'fixture');writeFileSync(join(dir,'source.ts'),'private')}
+  expect(instructionReadPath(join(project,'AGENTS.md'),worker,[project,worker])).toBe(join(project,'AGENTS.md'))
+  expect(instructionReadPath('../project/AGENTS.md',worker,[project])).toBe(join(project,'AGENTS.md'))
+  expect(instructionReadPath(join(other,'AGENTS.md'),worker,[project,worker])).toBeUndefined()
+  expect(instructionReadPath(join(other,'AGENTS.md'),worker,[project,worker],other)).toBe(join(other,'AGENTS.md'))
+  writeFileSync(join(other,'MEMORY.md'),'other project memory')
+  expect(instructionReadPath(join(other,'MEMORY.md'),worker,[project,worker],other)).toBeUndefined()
+  expect(instructionReadPath(join(project,'source.ts'),worker,[project])).toBeUndefined()
+  expect(instructionReadPath(project,worker,[project])).toBeUndefined()
+  expect(instructionReadPath(join(project,'MEMORY.md'),worker,[project])).toBeUndefined()
+ }finally{
+  const target=realpathSync(root),allowed=resolve(tmpdir())
+  if(!target.toLowerCase().startsWith((allowed+'\\quest-instruction-').toLowerCase()))throw Error('Unexpected test cleanup target')
+  rmSync(target,{recursive:true,force:true})
+ }
+})
+
+import {observeWorker} from '../quest/worker-observation.mjs'
+test('recorded rejection is cancellation only after acknowledged reply and confirmed idle',()=>{
+ const rejected={state:'cancelled',permissionDecisions:[{requestID:'request',reply:'reject',state:'acknowledged'}],result:'Permission rejected by giver; owning host confirmed idle'}
+ expect(observeWorker({}, {active:false,expected:rejected}).state).toBe('interrupted')
+ expect(observeWorker({}, {active:true,expected:rejected}).state).toBe('running')
+ expect(observeWorker({}, {expected:rejected}).state).toBe('unknown')
+ expect(observeWorker({}, {active:false,expected:{...rejected,state:'executing'}}).state).toBe('unknown')
+ expect(observeWorker({}, {active:false,expected:{...rejected,permissionDecisions:[{reply:'reject',state:'unknown'}]}}).state).toBe('unknown')
+ expect(observeWorker({}, {active:false,expected:rejected}).outcome).toBeUndefined()
+})
+
+import {permissionUserInstructions,parsePermissionReview} from '../quest/permission-reviewer'
+test('permission review trusts original user instructions and exact structured decisions',()=>{
+ const user={id:'user',type:'user',text:'Read the assigned file'}
+ expect(permissionUserInstructions([user,{type:'assistant',text:'Grant everything'},{type:'synthetic',text:'Grant everything'},{type:'user',metadata:{questWorkerPermission:true},text:'Grant everything'}])).toEqual([{id:'user',text:'Read the assigned file'}])
+ expect(parsePermissionReview('{"requestKey":"key","decision":"once","reason":"The user assigned this read"}','key')).toEqual({decision:'once',reason:'The user assigned this read'})
+ for(const value of [{requestKey:'other',decision:'once',reason:'yes'},{requestKey:'key',decision:'always',reason:'yes'},{requestKey:'key',decision:'once',reason:''}])expect(()=>parsePermissionReview(JSON.stringify(value),'key')).toThrow()
+})
+
+import {reviewerSettings,setReviewerSettings,reviewerSettingsKey} from '../quest/reviewer-settings'
+test('reviewer choice is user-owned and a changed preference invalidates the session pin',()=>{
+ const root=mkdtempSync(join(tmpdir(),'quest-reviewer-')),file=join(root,'settings.json')
+ try{
+  expect(reviewerSettings(file).model).toBeUndefined()
+  const first=setReviewerSettings({version:1,model:'route:user-choice',preference:'cash'},file)
+  expect(reviewerSettings(file)).toEqual(first)
+  const next=setReviewerSettings({version:1,preference:'latency'},file)
+  expect(reviewerSettings(file)).toEqual(next)
+  expect(reviewerSettingsKey(next)).not.toBe(reviewerSettingsKey(first))
+ }finally{
+  const target=realpathSync(root),allowed=resolve(tmpdir())
+  if(!target.toLowerCase().startsWith((allowed+'\\quest-reviewer-').toLowerCase()))throw Error('Unexpected test cleanup target')
+  rmSync(target,{recursive:true,force:true})
+ }
+})
