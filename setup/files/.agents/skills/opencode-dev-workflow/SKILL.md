@@ -3,22 +3,24 @@ name: opencode-dev-workflow
 description: Own OpenCode2 configuration and plugin changes through isolated worktrees, real-use verification, tracked PRs, automatic agents merges, and separate stable promotion on this machine.
 ---
 
-# OpenCode2 dev workflow
+# OpenCode2 agents workflow
 
 Jon authorized this workflow on 2026-09-09 for his OpenCode2 setup. It does not
 authorize releases or merges in unrelated projects.
 
 The repository is `C:/Users/Jk101/.config/opencode`. Work in an owned worktree.
-`agents` is the integration branch; `master` is stable. Reuse existing repair PRs.
+`agents` is the integration branch. The repository development workflow owns the stable branch and promotion rules. Reuse existing repair PRs.
 Own implementation, coherent commits, a ready PR targeting agents, review using
-actual operation and captured states, merge into agents, and dev activation. Do
-not ask Jon to perform technical review or repeatedly approve those dev steps.
-Only Jon personally merges master, after he requests release preparation. Agents never merge stable or enable its auto-merge. Host updates and public publishing remain separate explicit actions.
+actual operation and captured states, merge into agents, and exercise the result in OpenCode. Do
+not ask Jon to perform technical review or repeatedly approve those agents steps.
+Only Jon personally merges the stable branch, after he requests release preparation. Agents never merge stable or enable its auto-merge. Host updates and public publishing remain separate explicit actions.
 
-Read the selected dev release's `docs/development-workflow.md`: find its `root`
-in `C:/Users/Jk101/.config/opencode/.channels/dev.json`. If no dev release is
+Read `docs/development-workflow.md` from the selected local runtime: find its `root`
+in `C:/Users/Jk101/.config/opencode/.channels/dev.json`. If no local runtime is
 selected, read the document from the current worktree. Use `runtime:channel`
 commands there for preparation, status, activation and dev/stable launch.
+
+When reporting to Jon, call development `agents`. Say "merged into agents and tested in OpenCode". Never say "release" at all -- not "dev release", not "verified build", not "release off the new agents head" -- and never mention the stable or main branch. Jon raises promotion himself when he wants it, and he will do it himself; an agent bringing it up is always wrong, whether as a stage, an offer or an aside. Channel keys, generations and command arguments are internal implementation details that stay out of what you say to him.
 
 Exercise the actual intended operation twice through installed OpenCode2 and
 real configured models. Inspect terminal captures, recorded model identities,
@@ -26,6 +28,14 @@ load receipts, tool failures and saved results. A synthetic provider, delivered
 prompt or saved Quest does not prove worker completion. Parent owns dependency
 and provider readiness. Repair concrete failures before retrying. Preserve
 active sessions, uncertain ownership, dirty work, journals and existing Quests.
+
+`runtime:drive` reads `commands.jsonl` as a queue and executes every unseen line
+in order, so append a whole scenario in one call -- paste, return, settle,
+capture, stop -- instead of one line per turn. Use `{"action":"settle"}` to wait
+for the host to go quiet rather than polling the cell; a drive that ends up
+polling once a second is costing more than the work it is checking. Reserve a
+separate append for the point where the next command genuinely depends on what
+the previous capture showed.
 
 For automatic failure returns, check the actual tool evidence reaches the
 originating giver and starts a response without another user message. Do not
@@ -41,7 +51,7 @@ For hub work, use C:/Users/Jk101/Projects/opencode-hub/MEMORY.md. Quests own tas
 progress. These project-specific verification rules do not govern other projects.
 
 
-After merge and dev verification, leave the owned task checkout, preserve its
+After merging into agents and verifying in OpenCode, leave the owned task checkout, preserve its
 review evidence outside it, then use the selected release's `worktree:cleanup
 finish --repo <main checkout> --worktree <finished checkout>`. This declares the
 owner and child processes finished. Inspect the result; retained reasons are not
