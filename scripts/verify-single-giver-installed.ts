@@ -12,7 +12,7 @@ import {join,resolve} from 'node:path'
 import {QuestStore} from '../quest/store'
 import {projectIdentity} from '../quest/project'
 import {freePort} from './plugin-deploy'
-import {getAccountUsage} from '../usage/account-api'
+import {getAccountUsage,ACCOUNT_USAGE_FILE} from '../usage/account-api'
 import {liveDispatchRoutes} from '../models/live-routes'
 import {unusableRoutes} from '../models/dispatch-planner'
 import {chooseVerificationRoute} from '../models/verification-route'
@@ -56,7 +56,13 @@ const fixtures=[1,2].map(number=>{const directory=join(fixture,'project-'+number
  let number=1,dir=join(output,'run-1');mkdirSync(dir,{recursive:true});const database=join(output,'host.db'),store=new QuestStore(join(output,'ledger'))
 
  const setup=await createTestRenderer({width:150,height:52}),terminal=new EmbeddedTerminalRenderable(setup.renderer,{id:'hold-check',width:150,height:52,cols:150,rows:52,maxScrollback:100000});setup.renderer.root.add(terminal);terminal.focus()
- const env={...process.env,OPENCODE_CONFIG_DIR:root,OPENCODE_CONFIG_PROJECT_DISABLE:'1',OPENCODE_RELEASE_CHANNEL:'dev',OPENCODE_DB:database,OPENCODE_QUEST_ROOT:store.projectRoot,OPENCODE_ROUTE_RESERVATIONS:reservations,OPENCODE_ORCHESTRATION_LEDGER:join(dir,'orchestration.jsonl'),OPENCODE_TELEMETRY_FILE:join(dir,'requests.jsonl'),XDG_STATE_HOME:join(dir,'state'),OPENCODE_DISABLE_AUTOUPDATE:'1',CLAUDE_CODE_BRIDGE_PORT:String(await freePort())}
+ // Account observations stay real. Everything else is redirected so a check cannot touch live data,
+ // but XDG_STATE_HOME is where ACCOUNT_USAGE_FILE lives (usage/account-api.ts:12), so redirecting it
+ // left the host with an empty snapshot -- and the dispatch this gate exists to prove was refused
+ // with "No evidenced, funded route meets the task constraints: account capacity is unknown". The
+ // gate chooses its route from the real snapshot; handing the host a different one asks it to fund
+ // a worker on evidence it was denied. What it writes back are true observations of real calls.
+ const env={...process.env,OPENCODE_ACCOUNT_USAGE_FILE:ACCOUNT_USAGE_FILE,OPENCODE_CONFIG_DIR:root,OPENCODE_CONFIG_PROJECT_DISABLE:'1',OPENCODE_RELEASE_CHANNEL:'dev',OPENCODE_DB:database,OPENCODE_QUEST_ROOT:store.projectRoot,OPENCODE_ROUTE_RESERVATIONS:reservations,OPENCODE_ORCHESTRATION_LEDGER:join(dir,'orchestration.jsonl'),OPENCODE_TELEMETRY_FILE:join(dir,'requests.jsonl'),XDG_STATE_HOME:join(dir,'state'),OPENCODE_DISABLE_AUTOUPDATE:'1',CLAUDE_CODE_BRIDGE_PORT:String(await freePort())}
  const child=spawn('node',[join(root,'scripts/opencode-runtime.mjs'),'--json','--auto','--cwd',root,'--model',model,'--agent','quest-giver','--cols','150','--rows','52'],{cwd:root,env,windowsHide:true,stdio:['pipe','pipe','pipe']})
  let buffer='',errors='',exited=false,db:Database|undefined;const events:any[]=[];let row:any={number,ok:false,screenshots:[]}
  child.stdout.on('data',chunk=>{buffer+=chunk;for(;;){const n=buffer.indexOf('\n');if(n<0)break;const line=buffer.slice(0,n);buffer=buffer.slice(n+1);try{const e=JSON.parse(line);if(e.type==='data'){const raw=Buffer.from(e.data,'base64').toString();appendFileSync(join(output,'terminal.ansi'),raw);terminal.write(raw);}else events.push(e)}catch{errors+=line}}});child.stderr.on('data',x=>errors+=x);child.on('exit',()=>exited=true)
