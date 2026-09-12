@@ -70,3 +70,15 @@ test('workspace snapshots preserve tracked ignored files without importing ignor
   rmSync(target,{recursive:true,force:true})
  }
 })
+
+import {permissionReplyInput,permissionSummary} from '../quest/worker-permissions'
+test('giver decisions cannot approve another worker, changed requests, or persistent access',()=>{
+ const session={...run,runID:'run',callID:'call',state:'executing',sessionID:'ses_worker'}
+ const request={id:'permission',sessionID:'ses_worker',action:'external_directory',resources:['C:/fixture/*'],source:{type:'tool',id:'tool',messageID:'message'}}
+ const input:any={quest:{state:'Working',sessions:[session]},runID:'run',giverID:'ses_giver',activeID:'ses_giver',worker:{...actual,id:'ses_worker'},shown:request,pending:[request],reply:'once'}
+ expect(permissionReplyInput(input)).toEqual({sessionID:'ses_worker',requestID:'permission',reply:'once'})
+ expect(permissionReplyInput({...input,reply:'reject'}).reply).toBe('reject')
+ for(const change of [{activeID:'ses_other'},{giverID:undefined},{runID:'other'},{pending:[]},{reply:'always'},{worker:{...input.worker,id:'ses_other'}},{pending:[{...request,resources:['C:/*']}]},{quest:{state:'Archived',sessions:[session]}},{worker:{...input.worker,model:{...actual.model,variant:'medium'}}}])expect(()=>permissionReplyInput({...input,...change})).toThrow()
+ expect(permissionSummary({action:'bash',resources:['echo password=private']})).toEqual({action:'bash',resources:[]})
+ expect(permissionSummary({action:'read',resources:['secret=private']})).toEqual({action:'read',resources:['[REDACTED]']})
+})

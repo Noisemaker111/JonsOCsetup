@@ -1,3 +1,4 @@
+import {reviewWorkerPermissions} from './worker-permissions'
 import {inspectWorker} from "../worker-inspection"
 import { ensureUserGiver, userGiverID } from "../user-giver"
 import { QuestStore } from "../store"
@@ -131,6 +132,7 @@ function Commands(props: { context: any }) {
   props.context.keymap.layer(() => ({
     mode: "global",
     commands: [
+      { id: "quests.approvals", title: "Review worker permissions", group: "Quests", palette: true, slash: { name: "quest-approvals" }, run: () => reviewWorkerPermissions(props.context) },
       { id: "quests.workspace-mode", title: "Quest workspace mode (global)", group: "System", palette: true, slash: { name: "quest-workspace" }, run: () => chooseWorkspaceMode(props.context).catch(error=>props.context.ui.dialog.alert({title:"Quest workspace mode",message:String(error)})) },
       { id: "quests.open", title: "Open Quest board", group: "System", palette: true, suggested: true, slash: { name: "quests", aliases: ["quest", "board"] }, run: () => openBoard(props.context) },
       { id: "quests.session", title: "Jump to worker session", group: "System", palette: true, suggested: false, slash: { name: "session", aliases: ["jump"] }, run: () => openSessionPicker(props.context) },
@@ -159,7 +161,7 @@ function useQuests(context: any) {
 export function QuestStatus(props: { context: any }) {
   const all = useQuests(props.context)
   const observation=useWorkerObservations(props.context,()=>all().flatMap(q=>q.sessions))
-  const lines=()=>all().flatMap(quest=>quest.sessions.map(session=>({quest,session}))).sort((a,b)=>b.session.updatedAt.localeCompare(a.session.updatedAt)).slice(0,2)
+  const lines=()=>all().flatMap(quest=>quest.sessions.map(session=>({quest,session}))).sort((a,b)=>Number(observation(b.session).state==='blocked')-Number(observation(a.session).state==='blocked')||b.session.updatedAt.localeCompare(a.session.updatedAt)).slice(0,2)
   const counts = async () => {
     const picked=await props.context.ui.dialog.select({title:all.error()??"Quest counts · all projects",options:QUEST_FILTERS.filter(f=>f.id!=="all").map(f=>({value:f.id,title:`${filterQuests(all(),f.id,observation).length} ${f.label}`}))})
     if(picked)openBoard(props.context,undefined,picked)
@@ -170,7 +172,10 @@ export function QuestStatus(props: { context: any }) {
       <text fg={C.yellow} wrapMode="none" truncate flexShrink={1} onMouseUp={(event:any)=>activate(event,()=>openBoard(props.context))}>Quests · {filterQuests(all(),"open").length} open</text>
       <text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>void counts())}>▾</text>
     </box>
-    <For each={lines()}>{row=><text fg={C.muted} wrapMode="none" truncate onMouseUp={(event:any)=>activate(event,()=>void openWorkerSession(props.context,row.session))}>↳ Open worker · {observation(row.session).state} · {row.quest.title}</text>}</For>
+    <For each={lines()}>{row=><box flexDirection="row" gap={1} minWidth={0}>
+      <Show when={activeSessionID(props.context)===userGiverID()&&observation(row.session).permissions?.length}><text fg={C.yellow} flexShrink={0} onMouseUp={(event:any)=>activate(event,()=>void reviewWorkerPermissions(props.context,row.quest.id,row.session.runID??row.session.callID))}>Review permission</text></Show>
+      <text fg={C.muted} wrapMode="none" truncate flexShrink={1} onMouseUp={(event:any)=>activate(event,()=>void openWorkerSession(props.context,row.session))}>↳ Open worker · {observation(row.session).state} · {row.quest.title}</text>
+    </box>}</For>
   </box>
 }
 
