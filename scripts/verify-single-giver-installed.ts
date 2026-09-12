@@ -99,9 +99,28 @@ const fixtures=[1,2].map(number=>{const directory=join(fixture,'project-'+number
    await capture('submitted-request')
    await wait('giver persisted',()=>{if(!existsSync(database))return false;db??=new Database(database,{readonly:true});const found:any=db.query("select id from session_v2 where agent='quest-giver' and parent_id is null order by time_created asc").get();report.giverSessionID??=found?.id;row.sessionID=report.giverSessionID;return !!row.sessionID})
    let q:any
-   await wait('Quest created',()=>{q=readAllQuests(store.projectRoot).find(r=>r.quest?.title==='Installed single giver project '+number)?.quest;return !!q},MODEL_TURN)
+   /**
+    * A title is not an identity. Asked for these two Quests, the giver made three: two both called
+    * "Installed single giver project 1", 79 seconds apart, with different request fingerprints, so
+    * the duplicate-admission guard never saw a duplicate. `find` took the first -- the empty one --
+    * and the gate then waited forever for a worker that had bound to the other. Everything the gate
+    * exists to prove had actually happened.
+    *
+    * So the Quest this run means is the one carrying a worker, and when several share the title the
+    * newest wins: the giver's own correction of itself is the one it dispatched against.
+    */
+   const named=()=>readAllQuests(store.projectRoot).flatMap(r=>r.quest?.title==='Installed single giver project '+number?[r.quest]:[])
+   const worked=(list:any[])=>list.find(candidate=>candidate.sessions.some((session:any)=>session.sessionID??session.openCodeSessionId))
+   await wait('Quest created',()=>{const all=named();q=worked(all)??all.sort((a,b)=>b.createdAt.localeCompare(a.createdAt))[0];return !!q},MODEL_TURN)
   let sibling:any
-  await wait('both workers bound',()=>{sibling=readAllQuests(store.projectRoot).find(r=>r.quest?.title==='Installed concurrent sibling '+number)?.quest;return !!store.read(q.id)?.sessions[0]?.sessionID&&!!sibling?.sessions[0]?.sessionID},MODEL_TURN)
+  // Any bound session, not sessions[0]: a refused route or a planned record can sit in front of the
+  // one that actually ran, and did -- the gate is asking whether a worker bound, not which slot.
+  const bound=(quest:any)=>!!quest?.sessions?.some((session:any)=>session.sessionID??session.openCodeSessionId)
+  await wait('both workers bound',()=>{
+   const all=named();const better=worked(all);if(better&&better.id!==q.id)q=better
+   sibling=readAllQuests(store.projectRoot).flatMap(r=>r.quest?.title==='Installed concurrent sibling '+number?[r.quest]:[]).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).find(bound)??sibling
+   return bound(store.read(q.id))&&bound(sibling)
+  },MODEL_TURN)
   await command('/quests');await wait('live board',async()=>(await frame()).includes('Search quests'));{await key('q','q');await wait('Quest picker',async()=>(await frame()).includes('Select Quest'));await command(q.title);}await wait('selected assigned Quest',async()=>(await frame()).split('\n').some(line=>line.indexOf(q.title)>35));await wait('confirmed running',async()=>(await frame()).includes('RUNNING · Saved: executing'));await capture('worker-running');const firstCheck=(await frame()).match(/Checked: ([^\n]+)/)?.[1];await sleep(4500);await capture('worker-activity-update');row.liveUpdates=firstCheck!==(await frame()).match(/Checked: ([^\n]+)/)?.[1]
   await key('n','n');await wait('native composer dialog',async()=>(await frame()).includes('Nudge Quest Giver'));await capture('composer');await key('escape','\x1b');row.composer=true
   await wait('automatic worker response',()=>{const all:any[]=db!.query('select type,data from session_message where session_id=? order by seq').all(row.sessionID);const messages=all.map(r=>({type:r.type,...JSON.parse(r.data)}));row.messages=messages.map(m=>({...m,content:m.content?.filter((p:any)=>p.type!=='reasoning')}));const at=messages.findIndex(m=>m.type==='user'&&JSON.stringify(m).includes('Automatic Quest worker update')&&JSON.stringify(m).includes(q.title));row.automaticReturn=at>=0&&messages.slice(at+1).some(m=>m.type==='assistant'&&m.time?.completed&&m.finish==='stop');return row.automaticReturn},240000)
