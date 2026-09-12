@@ -7,6 +7,7 @@ import { emptySelection, resolveTargets, verifyTarget, revalidate, instructions,
 import { Onboarding } from './onboarding'
 import { routeFeedback } from '../quest/route-public'
 import {RouterMemory} from './memory'
+import { goalCommand } from './goal-command'
 
 const string = { type: 'string', minLength: 1, maxLength: 2000 }
 const selectors = { type: 'array', minItems: 1, maxItems: 10, items: string }
@@ -105,11 +106,44 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
     try { const result = await operation.execute(input, context); const output = Array.isArray(result) ? { items: result } : result; return { output, content: JSON.stringify(output) } }
     catch (error) { const output = { code: (error as any)?.code ?? 'ROUTER_FAILED', message: redact(error instanceof Error ? error.message : 'Router failed'), action: 'Inspect this bounded result; do not retry unknown launches or substitute routes' }; return { output, content: JSON.stringify(output) } }
   } }) })
-  await ctx.command?.transform((editor: any) => editor.add({ name: 'goal', description: 'Canonical Quest goal: start <quest> <step...>, status, pause, cancel, resume', execute: async ({ sessionID, prompt }: any) => {
-    const [action, questID, ...stepIDs] = (prompt.text ?? '').trim().split(/\s+/)
-    if (!['start', 'status', 'pause', 'cancel', 'resume'].includes(action)) throw new RouterError('INVALID_GOAL', 'Use /goal start <quest> <step...>, status, pause, cancel or resume')
-    const result = await goals.control({ action, questID, stepIDs: stepIDs.length ? stepIDs : undefined } as any, { sessionID, requestID: 'goal-command:' + (prompt.id ?? crypto.randomUUID()) })
-    await ctx.session.synthetic({ sessionID, text: JSON.stringify(result) })
+  /**
+   * `/goal` is the one way in.
+   *
+   * It used to be operations only -- start, status, pause, cancel, resume -- and everything else was
+   * refused as INVALID_GOAL, so stating a goal meant writing the Quest by hand first. Anything that
+   * is not one of those five verbs is now the goal itself, and the giver files and starts it.
+   *
+   * The wording is the giver's, not this handler's. A command can only put the raw sentence in both
+   * the title and the objective, which is exactly the unreadable Quest the naming guard exists to
+   * refuse; the giver has the quest-writing skill, the guard and the project context. So intake is a
+   * synthetic prompt: Session.synthetic admits it and calls execution.wake, so the giver takes a real
+   * turn (packages/core/src/session/session.ts:334).
+   */
+  const intakePrompt = (goal: string) => [
+    `Jon stated this goal: ${goal}`,
+    '',
+    'File it as a Quest and start it, in this turn:',
+    '  1. Load the quest-writing skill, then create the Quest. The title names the outcome, not the',
+    '     activity, and says what this one owns that a sibling does not. The objective opens with the',
+    '     goal itself; his words go after it, not first.',
+    '  2. Give it steps that name the work of this task and the result each one is checked against.',
+    '     Never Implementation / Verification / Integration.',
+    '  3. Select the project it belongs to if that is not already obvious, then run the first step,',
+    '     choosing the route on merit.',
+    '',
+    'Reply with the Quest id, its title, its steps, and what you dispatched. If the goal is too vague',
+    'to write steps for, say exactly what you need to know instead of guessing.',
+  ].join(String.fromCharCode(10))
+
+  await ctx.command?.transform((editor: any) => editor.add({ name: 'goal', description: 'State a goal and it becomes a Quest and starts; or start <quest> <step...>, status, pause, cancel, resume', execute: async ({ sessionID, prompt }: any) => {
+    const asked = goalCommand(prompt.text)
+    if (asked.kind === 'intake') {
+      await ctx.session.synthetic({ sessionID, text: intakePrompt(asked.goal), description: 'Goal: ' + asked.goal, metadata: { projectRouterGoal: true } })
+      return
+    }
+    const request = asked.kind === 'status' ? { action: 'status' } : { action: asked.action, questID: asked.questID, stepIDs: asked.stepIDs }
+    const result = await goals.control(request as any, { sessionID, requestID: 'goal-command:' + (prompt.id ?? crypto.randomUUID()) })
+    await ctx.session.synthetic({ sessionID, text: JSON.stringify(result), metadata: { projectRouterGoal: true } })
   } }))
   await ctx.session.hook?.('prompt',async(event:any)=>{if(event.metadata?.projectRouterGoal!==true&&event.metadata?.projectRouterReturn!==true&&event.metadata?.questWorkerReturn!==true)await goals.steer(event.sessionID)})
   const abort=new AbortController()
