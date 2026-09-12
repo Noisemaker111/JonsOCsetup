@@ -82,3 +82,24 @@ test('giver decisions cannot approve another worker, changed requests, or persis
  expect(permissionSummary({action:'bash',resources:['echo password=private']})).toEqual({action:'bash',resources:[]})
  expect(permissionSummary({action:'read',resources:['secret=private']})).toEqual({action:'read',resources:['[REDACTED]']})
 })
+
+import {instructionReadPath} from '../quest/worker-instructions'
+test('worker setup reads cover only real instruction files in explicitly assigned roots',()=>{
+ const root=mkdtempSync(join(tmpdir(),'quest-instruction-')),project=join(root,'project'),worker=join(root,'worker'),other=join(root,'other')
+ try{
+  for(const dir of [project,worker,other]){mkdirSync(dir);writeFileSync(join(dir,'AGENTS.md'),'fixture');writeFileSync(join(dir,'source.ts'),'private')}
+  expect(instructionReadPath(join(project,'AGENTS.md'),worker,[project,worker])).toBe(join(project,'AGENTS.md'))
+  expect(instructionReadPath('../project/AGENTS.md',worker,[project])).toBe(join(project,'AGENTS.md'))
+  expect(instructionReadPath(join(other,'AGENTS.md'),worker,[project,worker])).toBeUndefined()
+  expect(instructionReadPath(join(other,'AGENTS.md'),worker,[project,worker],other)).toBe(join(other,'AGENTS.md'))
+  writeFileSync(join(other,'MEMORY.md'),'other project memory')
+  expect(instructionReadPath(join(other,'MEMORY.md'),worker,[project,worker],other)).toBeUndefined()
+  expect(instructionReadPath(join(project,'source.ts'),worker,[project])).toBeUndefined()
+  expect(instructionReadPath(project,worker,[project])).toBeUndefined()
+  expect(instructionReadPath(join(project,'MEMORY.md'),worker,[project])).toBeUndefined()
+ }finally{
+  const target=realpathSync(root),allowed=resolve(tmpdir())
+  if(!target.toLowerCase().startsWith((allowed+'\\quest-instruction-').toLowerCase()))throw Error('Unexpected test cleanup target')
+  rmSync(target,{recursive:true,force:true})
+ }
+})

@@ -1,3 +1,4 @@
+import {installWorkerInstructionReads} from './worker-instructions'
 import {cleanupQuests} from "./cleanup"
 import {connectHostObservation,disconnectHostObservation,recordHostObservation,registerHostObservation} from "./host-observation"
 import {installWorkerCapabilities} from './worker-capabilities'
@@ -315,6 +316,7 @@ export default define({
       ["user-giver", () => installUserGiverContext(api.store,ctx.session)],
       ["tools", () => installQuestTools(ctx, api)],
       ["shared-workspace-guard", () => installSharedWorkspaceGuard(ctx,api.store)],
+      ["worker-instruction-reads", () => installWorkerInstructionReads(ctx,api.store)],
     ] as const) {
       try { await install() } catch (error) {
         console.error(`[quests] ${name} disabled:`, error)

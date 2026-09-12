@@ -29,10 +29,10 @@ export async function reviewWorkerPermissions(context:any,questID?:string,runID?
   if(picked===undefined||picked===null)return
   const row=rows[picked];if(!row)return
   const summary=permissionSummary(row.request),id=workerSessionID(row.run)!
-  const choice=await dialog.select({title:redact(row.quest.title)+' · permission required',options:[
-   {value:'worker',title:'Open worker · full request and persistent access',description:summary.action+(summary.resources.length?' · '+summary.resources.join(', '):'')},
-   {value:'once',title:'Allow once',description:'Resume this pending request only; do not save a permission rule.'},
-   {value:'reject',title:'Reject and stop worker',description:'Native rejection also rejects other pending requests in this worker. Keeps saved work.'},
+  const choice=await dialog.select({title:[redact(row.quest.title), 'Permission required: '+summary.action, ...summary.resources, 'Allow once resumes this request without saving a rule.', 'Reject stops this worker and rejects its pending requests.'].join('\n'),options:[
+   {value:'worker',title:'Open worker',description:'Full request and persistent access'},
+   {value:'once',title:'Allow once'},
+   {value:'reject',title:'Reject and stop worker'},
   ]})
   if(choice==='worker'){context.ui.router.navigate({type:'session',sessionID:id});return}
   if(choice!=='once'&&choice!=='reject')return
