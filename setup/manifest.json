@@ -5,7 +5,7 @@
     {
       "source": "setup/files/Projects/opencode-hub/AGENTS.md",
       "target": "Projects/opencode-hub/AGENTS.md",
-      "sha256": "c4c7763e804d236f4210799f290d0489529eb4738d69709934a4858ee41d3498",
+      "sha256": "727539fe6a2c8aada8ecc01ccf7ea69df047ad8d67c3f4c2832c7eba7ba4bf63",
       "importedFrom": "Projects/opencode-hub/AGENTS.md"
     },
     {
@@ -53,7 +53,7 @@
     {
       "source": "setup/files/.codex/AGENTS.md",
       "target": ".codex/AGENTS.md",
-      "sha256": "c7ca17f7e81db39245d7b48bb00f2c1df019cb879bc0f1cd57042cef5e3db239",
+      "sha256": "041a90218f490b1caf930c2e3cedaaf9423db82a98ad74db23c0335aad726bbb",
       "importedFrom": ".codex/AGENTS.md"
     },
     {
@@ -107,7 +107,7 @@
     {
       "source": "setup/files/.agents/skills/opencode-dev-workflow/SKILL.md",
       "target": ".agents/skills/opencode-dev-workflow/SKILL.md",
-      "sha256": "7bf76f70300db9faccfef4f432c0ba7242dd74bedb5e51a2f3f782aefb7d018f",
+      "sha256": "b42d608ba42f36be347c11af7e30fdf73962bce587171b3962791e894accab6b",
       "importedFrom": ".agents/skills/opencode-dev-workflow/SKILL.md"
     },
     {
