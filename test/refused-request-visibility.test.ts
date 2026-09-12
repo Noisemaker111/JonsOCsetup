@@ -5,7 +5,7 @@
 import { test, expect } from "bun:test"
 import { installAccessGuard, announcer, requestedAgentRoute, refusalNotice, substitutedProvider } from "../models/access-policy"
 
-const launch = JSON.stringify({ agents: { "quest-giver": { model: "opencode-go/deepseek-v4.1-flash#high" } } })
+const launch = JSON.stringify({ default_agent: "quest-giver", agents: { "quest-giver": { model: "opencode-go/deepseek-v4.1-flash#high" }, worker: {model:"openai/gpt-6-astra#medium"} } })
 
 test("a refused request and a substituted model both reach the conversation, not just the log", async () => {
   const hooks: Record<string, Function> = {}
@@ -53,6 +53,11 @@ test("a refused request and a substituted model both reach the conversation, not
       model: { providerID: "opencode-go", id: "deepseek-v4.1-flash" },
       request: new Request("https://opencode.ai/zen/go/v1/chat/completions"),
     })
+    await Bun.sleep(5)
+    expect(posted).toHaveLength(2)
+    // A real automatic dispatch selected DeepSeek max; the generic worker template named
+    // Astra. The old notice woke the worker to investigate a substitution that never happened.
+    hooks.context({sessionID:"ses_auto_worker",agent:"worker",model:{providerID:"opencode-go",id:"deepseek-v4.1-flash",variant:"max"}})
     await Bun.sleep(5)
     expect(posted).toHaveLength(2)
 
