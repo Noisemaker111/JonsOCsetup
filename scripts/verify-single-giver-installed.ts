@@ -79,7 +79,33 @@ const fixtures=[1,2].map(number=>{const directory=join(fixture,'project-'+number
   * every wait returns the moment its condition holds.
   */
  const MODEL_TURN=240000
- async function wait(label:string,check:()=>any,timeout=60000){const end=Date.now()+timeout;while(Date.now()<end){if(await check())return;if(exited)throw Error(label+': host exited '+errors);await sleep(300)}throw Error(label+': timed out')}
+ /**
+  * A timeout that says what it saw.
+  *
+  * Across 53 recorded gate runs this check has passed 26 times and failed 27 -- a coin flip -- and
+  * the 27 failures are spread over twelve different links in this chain. That is not bad luck: about
+  * fifteen predicates run in series, so even at 95% each the run is 0.95^15, and every failure lands
+  * on a different one and reads like a new problem.
+  *
+  * What made each of them expensive is that `label: timed out` discarded everything. Diagnosing one
+  * meant reading the fixture ledger by hand afterwards, and twice tonight the real answer was that
+  * the thing being waited for had already happened -- the gate was looking at the wrong Quest, and
+  * at sessions[0] rather than at any bound session. So a wait now carries a `saw` describing the
+  * state it kept finding, and the timeout prints it. The chain is still long; the failures stop
+  * being mute.
+  */
+ async function wait(label:string,check:()=>any,timeout=60000,saw?:()=>unknown){
+  const end=Date.now()+timeout
+  while(Date.now()<end){
+   if(await check())return
+   if(exited)throw Error(label+': host exited '+errors)
+   await sleep(300)
+  }
+  let observed=''
+  try{const value=await saw?.();if(value!==undefined)observed=' | last saw: '+(typeof value==='string'?value:JSON.stringify(value)).slice(0,600)}
+  catch(error){observed=' | could not describe what it saw: '+String(error).slice(0,200)}
+  throw Error(label+': timed out after '+Math.round(timeout/1000)+'s'+observed)
+ }
  async function capture(name:string){await setup.renderOnce();const path=join(dir,name+'.png');writeFileSync(path,new Resvg(frameToSvg(setup.captureSpans(),name,HOST_PALETTE),{font:{loadSystemFonts:true}}).render().asPng());writeFileSync(join(dir,name+'.txt'),await frame());row.screenshots.push(path)}
  async function key(name:string,sequence:string){send(Buffer.from(terminal.encodeKey(new KeyEvent({name,sequence,raw:sequence,ctrl:false,meta:false,shift:false,option:false,number:false,eventType:'press',source:'raw'}))).toString());await sleep(350)}
  async function command(text:string){send(Buffer.from(terminal.encodePaste(new TextEncoder().encode(text))).toString());await sleep(1000);await frame();await capture('before-enter');await key('return','\r')}
@@ -116,8 +142,9 @@ const fixtures=[1,2].map(number=>{const directory=join(fixture,'project-'+number
     * newest wins: the giver's own correction of itself is the one it dispatched against.
     */
    const named=()=>readAllQuests(store.projectRoot).flatMap(r=>r.quest?.title==='Installed single giver project '+number?[r.quest]:[])
+   const questsSeen=()=>readAllQuests(store.projectRoot).map(r=>({id:r.quest?.id,title:r.quest?.title,state:r.quest?.state,sessions:r.quest?.sessions?.map((x:any)=>({state:x.state,bound:!!(x.sessionID??x.openCodeSessionId)}))}))
    const worked=(list:any[])=>list.find(candidate=>candidate.sessions.some((session:any)=>session.sessionID??session.openCodeSessionId))
-   await wait('Quest created',()=>{const all=named();q=worked(all)??all.sort((a,b)=>b.createdAt.localeCompare(a.createdAt))[0];return !!q},MODEL_TURN)
+   await wait('Quest created',()=>{const all=named();q=worked(all)??all.sort((a,b)=>b.createdAt.localeCompare(a.createdAt))[0];return !!q},MODEL_TURN,questsSeen)
   let sibling:any
   // Any bound session, not sessions[0]: a refused route or a planned record can sit in front of the
   // one that actually ran, and did -- the gate is asking whether a worker bound, not which slot.
@@ -126,7 +153,7 @@ const fixtures=[1,2].map(number=>{const directory=join(fixture,'project-'+number
    const all=named();const better=worked(all);if(better&&better.id!==q.id)q=better
    sibling=readAllQuests(store.projectRoot).flatMap(r=>r.quest?.title==='Installed concurrent sibling '+number?[r.quest]:[]).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).find(bound)??sibling
    return bound(store.read(q.id))&&bound(sibling)
-  },MODEL_TURN)
+  },MODEL_TURN,questsSeen)
   await command('/quests');await wait('live board',async()=>(await frame()).includes('Search quests'));{await key('q','q');await wait('Quest picker',async()=>(await frame()).includes('Select Quest'));await command(q.title);}await wait('selected assigned Quest',async()=>(await frame()).split('\n').some(line=>line.indexOf(q.title)>35));await wait('confirmed running',async()=>(await frame()).includes('RUNNING · Saved: executing'));await capture('worker-running');const firstCheck=(await frame()).match(/Checked: ([^\n]+)/)?.[1];await sleep(4500);await capture('worker-activity-update');row.liveUpdates=firstCheck!==(await frame()).match(/Checked: ([^\n]+)/)?.[1]
   await key('n','n');await wait('native composer dialog',async()=>(await frame()).includes('Nudge Quest Giver'));await capture('composer');await key('escape','\x1b');row.composer=true
   await wait('automatic worker response',()=>{const all:any[]=db!.query('select type,data from session_message where session_id=? order by seq').all(row.sessionID);const messages=all.map(r=>({type:r.type,...JSON.parse(r.data)}));row.messages=messages.map(m=>({...m,content:m.content?.filter((p:any)=>p.type!=='reasoning')}));const at=messages.findIndex(m=>m.type==='user'&&JSON.stringify(m).includes('Automatic Quest worker update')&&JSON.stringify(m).includes(q.title));row.automaticReturn=at>=0&&messages.slice(at+1).some(m=>m.type==='assistant'&&m.time?.completed&&m.finish==='stop');return row.automaticReturn},240000)
