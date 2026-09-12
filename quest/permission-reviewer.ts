@@ -44,17 +44,16 @@ export class PermissionReviewer {
     const directory=join(this.store.runtime,'permission-reviewers'),file=join(directory,input.giverID+'.json')
     let pin=existsSync(file)?JSON.parse(readFileSync(file,'utf8')):undefined
     const settings=before.authority.reviewer,settingsKey=reviewerSettingsKey(settings)
-    const previous=pin,selectionChanged=!!pin&&pin.settingsKey!==settingsKey
+    const previous=pin
     if(pin?.settingsKey!==settingsKey)pin=undefined
     const reviewID='permission-'+digest(input.giverID+input.requestKey+before.key)
     reserved=await reservePermissionReview(this.store.runtime,reviewID,settings,pin)
     const route=reserved.route
     if(route.harness!=='native'||route.serviceTier!=='default')throw Error('Permission reviewer requires the exact supported native model service')
     if(pin&&pin.accountID!==route.accountID)throw Error('The pinned reviewer account changed; no substitute selected')
-    if(!pin){pin={selector:'route:'+route.id,model:route.providerID+'/'+route.modelID+'#'+route.reasoning,settingsKey,selectionReason:reserved.decision?.summary,accountID:route.accountID,giverID:input.giverID,createdAt:new Date().toISOString()};mkdirSync(directory,{recursive:true});const tmp=file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(pin));renameSync(tmp,file)}
+    if(!pin){pin={selector:'route:'+route.id,model:route.providerID+'/'+route.modelID+'#'+route.reasoning,settingsKey,selectionReason:reserved.decision?.summary,accountID:route.accountID,giverID:input.giverID,createdAt:new Date().toISOString(),reviewerSessionID:previous?.reviewerSessionID,sessionState:previous?.sessionState,pendingModelChange:!!previous?.reviewerSessionID};mkdirSync(directory,{recursive:true});const tmp=file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(pin));renameSync(tmp,file)}
     const savePin=()=>{mkdirSync(directory,{recursive:true});const tmp=file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(pin));renameSync(tmp,file)}
     const model={providerID:route.providerID,id:route.modelID,...(route.reasoning!=='unknown'?{variant:route.reasoning}:{})}
-    if(!pin.reviewerSessionID&&previous?.reviewerSessionID){pin.reviewerSessionID=previous.reviewerSessionID;savePin()}
     if(!pin.reviewerSessionID){
      if(pin.sessionState==='creating')throw Error('Reviewer creation is uncertain; inspect the original launch before retrying')
      pin.sessionState='creating';savePin()
@@ -68,8 +67,9 @@ export class PermissionReviewer {
      if(session?.id!==pin.reviewerSessionID||session.agent!=='permission-reviewer')throw Error('Reviewer session identity changed; no inference sent')
      if(session.model?.providerID!==model.providerID||session.model?.id!==model.id||session.model?.variant!==model.variant)throw Error('Reviewer model changed; update the user reviewer setting before continuing')
     }
-    if(selectionChanged&&previous?.reviewerSessionID)await this.host.switchModel({sessionID:pin.reviewerSessionID,model})
+    if(pin.pendingModelChange)await this.host.switchModel({sessionID:pin.reviewerSessionID,model})
     await verifySession()
+    if(pin.pendingModelChange){delete pin.pendingModelChange;savePin()}
     save({model:pin.model})
     const prompt=policy+'\nUSER INSTRUCTIONS:\n'+JSON.stringify(before.authority.instructions)+'\nASSIGNMENT:\n'+JSON.stringify(before.authority.assignment)+'\nWORKER REQUEST:\n'+JSON.stringify(request)
     const response=unwrap(await this.host.generate({sessionID:pin.reviewerSessionID,prompt}))
@@ -77,7 +77,7 @@ export class PermissionReviewer {
     reserved.ledger.settle(reviewID,{state:'settled',completedAt:new Date().toISOString()});reserved=undefined
     const decision=parsePermissionReview(response.text,input.requestKey)
     const after=await snapshot()
-    if(after.key!==before.key)return save({state:'escalated',reason:'User instructions or assignment changed during review; no permission granted'})
+    if(after.key!==before.key){save({state:'escalated',reason:'User instructions, reviewer settings or assignment changed during review; retry with fresh authority'});return}
     if(!after.view.requests.some((r:any)=>r.requestKey===input.requestKey))return save({state:'decided',reason:'Request was answered elsewhere during review; no duplicate reply sent'})
     if(decision.decision==='escalate'||decision.decision==='once'&&!request.canApprove)return save({state:'escalated',reason:decision.decision==='once'?'Exact action details are incomplete or redacted; no permission granted':decision.reason})
     replyAttempted=true

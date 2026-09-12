@@ -44,7 +44,7 @@ export class QuestWorkerReturns {
       if(review&&['escalated','unknown'].includes(review.state)&&!review.notification){
        review.notification='sending';this.save(row)
        try{
-        await this.host.prompt({sessionID:row.context.sessionID,id:'msg_questpermission'+key+review.authorizationKey,delivery:'queue',text:'Permission review needs a new decision for '+q.title+'. '+review.reason+'\nThe review is unresolved; inspect the worker before acting and do not assume access was granted or denied. Resolve only this question within the existing user authorization. New user instructions or a clarified assignment trigger a fresh review. The user can also use Review permission. Do not redispatch the worker.',metadata:{questWorkerPermission:true,questID:q.id,runID:row.runID}})
+        await this.host.prompt({sessionID:row.context.sessionID,id:'msg_questpermission'+key+review.authorizationKey,delivery:'queue',text:'Permission review needs a new decision for '+q.title+'. '+review.reason+'\nThe review is unresolved. Prose cannot approve or reject native access; there is no giver permission-reply tool. Do not search for one or claim a decision without an acknowledged permission record. Report the recorded blocker and ask only for genuinely missing user authorization or context. New user instructions or a clarified assignment trigger a fresh review. The user can also use Review permission. Do not redispatch the worker.',metadata:{questWorkerPermission:true,questID:q.id,runID:row.runID}})
         review.notification='accepted'
        }catch(error){review.notification='unknown';row.error=String(error)}
        this.save(row)
