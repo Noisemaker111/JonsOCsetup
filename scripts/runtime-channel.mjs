@@ -19,7 +19,7 @@ if(!['dev','stable'].includes(channel))throw Error('Choose dev or stable: prepar
 if(action==='prepare'){
   if(channel!=='dev')throw Error('Stable preparation requires the separate human-merged agents-to-master release')
   const ref=option('--ref'),model=option('--model');if(!ref||!model)throw Error('Preparation requires a committed ref and exact real model route')
-  const target=resolveRef(repository,ref)
+  const target=resolveRef(source,ref)
   const {root,release}=await prepareDevRelease({repository,registry,model,...target})
   const commit=release.commit
   console.log(JSON.stringify({prepared:true,active:false,root,commit,ref,resolved:release.resolved,next:'Exercise this candidate twice, then activate dev with the real evidence report.'},null,2))

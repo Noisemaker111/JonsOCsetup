@@ -43,6 +43,21 @@ test('a ref resolves to its remote-tracking commit, and a candidate is judged ag
     // The local branch is still reachable when it is asked for by name.
     expect(resolveRef(repository, 'refs/heads/feature', {fetch: false}).commit).toBe(stale)
 
+    // Explicit revisions use the owned checkout, even with a different remote default HEAD.
+    git(repository, ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/feature'])
+    const owned = join(home, 'owned')
+    git(repository, ['worktree', 'add', '-b', 'owned', owned, stale])
+    for (const ref of ['HEAD', '@', 'HEAD~0', 'HEAD@{0}']) {
+      const explicit = resolveRef(owned, ref, {fetch: false})
+      expect(explicit.commit).toBe(stale)
+      expect(explicit.resolved).toBe(ref)
+    }
+    expect(resolveRef(owned, 'HEAD^', {fetch: false}).commit).toBe(git(repository, ['rev-parse', 'HEAD']))
+    expect(resolveRef(owned, 'origin/HEAD', {fetch: false}).commit).toBe(tip)
+    git(owned, ['fetch', 'origin', 'feature'])
+    expect(resolveRef(owned, 'FETCH_HEAD').commit).toBe(tip)
+    git(repository, ['worktree', 'remove', owned])
+
     // A candidate for an unmerged branch is not integrated into agents and never would be, so
     // retirement has to judge it against its own ref or the release can never be reclaimed.
     const root = join(home, 'candidate')

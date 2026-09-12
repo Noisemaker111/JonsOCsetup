@@ -167,7 +167,7 @@ worktree, one frozen lockfile restore, and one real prompt to the configured mod
 and it is paid once per commit, because a second `oc <branch>` on the same commit
 reuses the release it already prepared. `--fresh` forces a new one, `--model
 <exact-route>` overrides the model the candidate inherits from the activated channel.
-Any tag or commit works where a branch name does.
+Any tag or commit works where a branch name does. Explicit Git revisions such as `HEAD`, `@` and `HEAD~1` retain Git meaning; they are never prefixed with `origin/`. `runtime:channel prepare` resolves them in the checkout containing its script, so an owned worktree prepares its own revision. Resolution does not fetch before evaluating these expressions, preserving `FETCH_HEAD` and local revision state.
 
 A bare branch name resolves to `origin/<branch>` when that exists and to the local ref
 otherwise, so a stale local branch cannot be built by accident, and the launch banner
