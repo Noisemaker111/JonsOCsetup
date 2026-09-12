@@ -121,7 +121,7 @@ export function seedQuestLedger(dir: string, project: LabProject): QuestStore {
     createdAt: iso(26 * HOUR), updatedAt: iso(50 * MIN),
     stages: stagesFromSteps([
       { title: "Write fitTitle with word-boundary cut", status: "done" },
-      { title: "Use it in workerStatusLine", status: "done" },
+      { title: "Use it in board summaries", status: "done" },
       { title: "Regression test", status: "done" },
     ], { scope }),
     sessions: [

@@ -155,21 +155,8 @@ function useQuests(context: any) {
   return Object.assign(all,{error})
 }
 
-/**
- * Live worker status, teleported straight from the Quest ledger — this is
- * the one source of truth Jk asked for: "the chat status and the agent's
- * quick-look at the board should be the same 1:1... immediately brought
- * from that rather than duplicated or having 2 different sources." The
- * giver reports each step via the `quest` tool (action=step); the moment
- * that lands, this slot reflects it — the giver never retypes status lines
- * the footer already shows (see AGENTS.md FACE DISCLOSURE bullet).
- *
- * Each row is 1:1 with the one Quest it came from and is a click target,
- * same convention as the count line above it and the board's own rows:
- * activate() + openBoard(context, questID) → router.navigate({type:"plugin",
- * name:"quests", data:{questID, returnRoute}}), landing straight on that Quest.
- */
-export function Footer(props: { context: any }) {
+/** Quest status occupies its own composer rows; the host footer keeps its native controls. */
+export function QuestStatus(props: { context: any }) {
   const all = useQuests(props.context)
   const observation=useWorkerObservations(props.context,()=>all().flatMap(q=>q.sessions))
   const lines=()=>all().flatMap(quest=>quest.sessions.map(session=>({quest,session}))).sort((a,b)=>b.session.updatedAt.localeCompare(a.session.updatedAt)).slice(0,2)
@@ -177,7 +164,7 @@ export function Footer(props: { context: any }) {
     const picked=await props.context.ui.dialog.select({title:all.error()??"Quest counts · all projects",options:QUEST_FILTERS.filter(f=>f.id!=="all").map(f=>({value:f.id,title:`${filterQuests(all(),f.id,observation).length} ${f.label}`}))})
     if(picked)openBoard(props.context,undefined,picked)
   }
-  return <box flexDirection="column" flexShrink={1} flexGrow={1} minWidth={0} maxWidth={70}>
+  return <box flexDirection="column" width="100%" flexShrink={0} minWidth={0}>
     <box flexDirection="row" flexShrink={1} minWidth={0} gap={1}>
       <Show when={hasQuestReturn(props.context)}><text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>returnToQuest(props.context))}>↩ Quest</text></Show>
       <text fg={C.yellow} wrapMode="none" truncate flexShrink={1} onMouseUp={(event:any)=>activate(event,()=>openBoard(props.context))}>Quests · {filterQuests(all(),"open").length} open</text>
@@ -248,7 +235,8 @@ export default Plugin.define({
     context.ui.router.register({ name: "quests", render: (route: any) => <QuestBoard context={context} initialQuestID={route.data?.questID} initialFilter={route.data?.filter} initialAllProjects={route.data?.allProjects} initialProjectDirectory={route.data?.projectDirectory} returnRoute={route.data?.returnRoute} /> })
     context.ui.slot({ append: "app", render: () => <Commands context={context} /> })
     context.ui.slot({ append: "session.composer.top", render: (input:any) => <SessionRole context={context} sessionID={input.sessionID} /> })
-    context.ui.slot({ append: "prompt.footer", render: () => <Footer context={context} /> })
+    context.ui.slot({ append: "session.composer.top", render: () => <QuestStatus context={context} /> })
+    context.ui.slot({ append: "home.footer", render: () => <QuestStatus context={context} /> })
     // One worker face: the host's own background chip already carries the live
     // line (dispatch descriptions are set to the chip format), so the sidebar
     // stays the general board list — a second chip here would render the same

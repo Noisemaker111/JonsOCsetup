@@ -17,7 +17,7 @@ Then open `ui-lab/out/index.html` in a browser. Per surface you also get
 Only some surfaces, or a different terminal size:
 
 ```bash
-bun run ui:lab sidebar footer
+bun run ui:lab sidebar usage
 bun run ui:lab board --width 160 --height 50
 ```
 
@@ -38,12 +38,10 @@ empty ledger are skipped in real mode.
   dialog at 60 columns, all measured from host screenshots. Change `HOST_COLS`,
   `HOST_ROWS`, `SIDEBAR_COLS`, `DIALOG_COLS` in `render.tsx` if your terminal differs.
 - **Theme**: cells a component never paints show the host's own ground. The board
-  paints its own palette; the sidebar, footer and dialog sit on the host's near-black
+  paints its own palette; the sidebar and dialog sit on the host's near-black
   and gray. The lab passes the plugins no `theme`, because the live host passes none
   either, which is why `/usage` is grayscale in the host.
-- **Chrome**: the composer box and the host footer row around the `prompt.footer`
-  slot, and the sidebar column around `sidebar.content`, are static mocks traced from
-  screenshots. Only the plugin content inside them is live code.
+- **Chrome**: the sidebar column around `sidebar.content` is a static mock. Component previews do not prove host layout or interaction; use the installed app for acceptance.
 - **Data**: `--real` for your ledger and accounts; the fixture otherwise.
 
 ## Surfaces → source
@@ -55,7 +53,6 @@ empty ledger are skipped in real mode.
 | `board-attention` | Same board, blocked step + failed worker | `quest/tui-active/quest-board.tsx` — `status()`, `badge()`, `sessionColor()` |
 | `board-empty` | First-run, no Quests | `quest/tui-active/quest-board.tsx` — `QuestBoard` fallback |
 | `sidebar` | The quest list beside the chat (`sidebar.content` slot) | `quest/tui-active/quests.tsx` — `Sidebar`, `laneColor` |
-| `footer` | Bottom bar under the composer (`prompt.footer` slot): count line + live worker lines, then the usage gauge | `quest/tui-active/quests.tsx` — `Footer`; `quest/tui-active/quest-board.tsx` — `liveWorkerLines`, `workerStatusLine`, `fitTitle`; `usage/tui-active/usage.tsx` — `ContextFooter` |
 | `usage` | The `/usage` dialog | `usage/tui-active/usage.tsx` — `UsageDialog`, `ConversationTelemetry`, `UsageTable`; column widths and bars in `usage/tui-usage-format.ts` |
 
 Text that comes from data rather than layout lives one level down: the count
@@ -108,7 +105,7 @@ recolour and retype on the canvas:
 bun run ui:lab:paper
 ```
 
-`bun run ui:lab:paper sidebar footer` pushes a subset. Other flags on `bun ui-lab/paper.ts`:
+`bun run ui:lab:paper sidebar usage` pushes a subset. Other flags on `bun ui-lab/paper.ts`:
 `--info` lists the file, page and artboards with node ids; `--inspect <id>` prints a
 node's layer tree and saves a screenshot; `--delete <id,id>` removes artboards (a
 superseded push); `--list-tools` prints what the running Paper exposes. After every
@@ -140,3 +137,5 @@ They can also be pasted anywhere that accepts HTML.
 5. `bun test test/tui-quests.test.ts test/tui-usage.test.ts test/quest-board.test.ts` — the click targets and wording the tests pin.
 
 `ui-lab/out/` is git-ignored; it is regenerated every run.
+
+Composer status and native footer layout must be checked through the installed host with `runtime:drive`; the old static footer preview was removed because it reproduced the obsolete shared row.
