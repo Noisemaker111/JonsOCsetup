@@ -5,9 +5,9 @@
  * and it stays that way. But none of that is needed to look at a change. This resolves a ref,
  * reuses an already prepared release for that commit when one exists, prepares one when it does
  * not, and hands the launcher an explicit candidate. It never writes .channels/dev.json, so the
- * activated channel is untouched and `ocd` keeps running what it ran before.
+ * activated channel is untouched and `oc` with no branch keeps running what it ran before.
  *
- * Reuse is the point: the second `ocb` on the same commit costs nothing. Superseded candidates for
+ * Reuse is the point: the second `oc <branch>` on the same commit costs nothing. Superseded candidates for
  * the same branch are retired on the way through, so trying branches does not accumulate releases.
  */
 import {existsSync, readFileSync, writeFileSync} from 'node:fs'
@@ -21,7 +21,7 @@ const option = name => {const at = argv.indexOf(name); return at < 0 ? undefined
 const flag = name => argv.includes(name)
 const named = new Set([option('--model'), option('--plan')].filter(Boolean))
 const ref = argv.find(arg => !arg.startsWith('-') && !named.has(arg))
-if (!ref) throw Error('Name the branch, tag or commit to try: ocb <ref> [--model <exact-route>] [--fresh]')
+if (!ref) throw Error('Name the branch, tag or commit to run: oc <branch> [--model <exact-route>] [--fresh]')
 
 const repository = runtimeHome, registry = registryRoot
 const selectedPath = join(registry, 'dev.json'), selected = existsSync(selectedPath) ? read(selectedPath) : undefined

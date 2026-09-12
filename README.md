@@ -19,7 +19,7 @@ Plugins have their own directories, not their own GitHub repositories. Individua
 
 `agents` is the integration branch; `master` is stable. Use isolated worktrees, coherent commits and PRs to agents, then verify the actual intended operation. Stable promotion is a separate action. Existing running sessions retain their loaded version.
 
-After channel preparation, **`ocd`** starts dev and **`ocs`** starts stable in the native console. Neither command proxies terminal output. The source for these commands lives in `scripts/install-channel-shortcuts.mjs` and `scripts/start-direct-channel.ps1`.
+After channel preparation, **`oc`** starts OpenCode in the native console: `oc` on the release that passed the gate, `oc <branch>` on that branch's code instead, `oc --stable` on stable. It does not proxy terminal output. The source lives in `scripts/install-channel-shortcuts.mjs`, `scripts/start-direct-channel.ps1` and `scripts/try-ref.mjs`.
 
 ## Development acceptance
 

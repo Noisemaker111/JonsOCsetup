@@ -1,4 +1,11 @@
-/** Install normal terminal commands for the already-selected channel runtime. */
+/**
+ * Install the one terminal command that opens OpenCode.
+ *
+ * There were five names for two things: `oca` and `ocd` both opened the activated dev release by two
+ * different launch paths, `ocm` and `ocs` both opened stable, `ocb` opened a branch -- and `oc`
+ * opened nothing at all, it changed directory. Jon had to remember which spelling belonged to which
+ * path. Now `oc` is the launcher, a branch name is its argument, and `oh` keeps the directory job.
+ */
 import {existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, copyFileSync} from 'node:fs'
 import {join} from 'node:path'
 import {homedir} from 'node:os'
@@ -11,23 +18,38 @@ mkdirSync(installed,{recursive:true})
 for(const name of ['prepare-direct-channel.mjs','start-direct-channel.ps1','try-ref.mjs','channel-prepare.mjs'])copyFileSync(fileURLToPath(new URL(name,import.meta.url)),join(installed,name))
 const direct=join(installed,'start-direct-channel.ps1')
 const marker='rem Managed OpenCode channel shortcut'
-const shortcut=lines=>['@echo off',marker,...lines,'exit /b %errorlevel%',''].join('\r\n')
-// ocb tries a ref: it prepares or reuses a candidate for that branch and launches it without
-// activating anything, so ocd keeps running the release that was actually accepted.
-const entries=[
- {path:join(bin,'ocd.cmd'),body:shortcut([`powershell.exe -NoProfile -File "${direct}" dev %*`])},
- {path:join(bin,'ocs.cmd'),body:shortcut([`powershell.exe -NoProfile -File "${direct}" stable %*`])},
- {path:join(bin,'ocb.cmd'),body:shortcut(['if "%~1"=="" (','  echo Name the branch, tag or commit to try: ocb ^<ref^> [--model ^<exact-route^>] [--fresh]','  exit /b 2',')',`powershell.exe -NoProfile -File "${direct}" dev -Try %*`])},
-]
-for(const {path} of entries)if(existsSync(path)&&!readFileSync(path,'utf8').includes(marker))throw Error('Preserving existing command: '+path)
+const command={path:join(bin,'oc.cmd'),body:['@echo off',marker,`powershell.exe -NoProfile -File "${direct}" %*`,'exit /b %errorlevel%',''].join('\r\n')}
+if(existsSync(command.path)&&!readFileSync(command.path,'utf8').includes(marker))throw Error('Preserving existing command: '+command.path)
 mkdirSync(bin,{recursive:true})
-for(const {path,body} of entries)writeFileSync(path,body)
-for(const name of ['opencode-dev','opencode-stable']){const path=join(bin,name+'.cmd');if(existsSync(path)&&readFileSync(path,'utf8').includes(marker))unlinkSync(path)}
-// Remove only the known obsolete helper, preserving other profile contents.
+writeFileSync(command.path,command.body)
+// Remove only the names this installer wrote. Anything without the marker is somebody else's.
+const superseded=[]
+for(const name of ['ocd','ocs','ocb','opencode-dev','opencode-stable']){
+ const path=join(bin,name+'.cmd')
+ if(existsSync(path)&&readFileSync(path,'utf8').includes(marker)){unlinkSync(path);superseded.push(name)}
+}
+
+/**
+ * The profile's own launchers are superseded too, and leaving them would win: a PowerShell function
+ * beats a command on PATH, so `oc` would keep changing directory. Each is removed by its exact
+ * recorded text, so an edited one is preserved rather than guessed at, and the file is backed up
+ * before anything changes.
+ */
 const profile=join(home,'Documents','PowerShell','Microsoft.PowerShell_profile.ps1')
+const removedFromProfile=[]
 if(existsSync(profile)){
  const before=readFileSync(profile,'utf8')
- const after=before.replace(/^function oho \{ oh; & opencode2 @args \}\r?\n/m,'').replace('# oho / ohc / ohcc: cd here, then open opencode2 / Codex / Claude Code in this terminal','# ohc / ohcc: cd here, then open Codex / Claude Code in this terminal')
+ let after=before
+ const drop=(label,pattern)=>{const next=after.replace(pattern,'');if(next!==after){after=next;removedFromProfile.push(label)}}
+ drop('oc (cd alias)',/^function oc \{ oh \}\r?\n/m)
+ drop('oho',/^function oho \{ oh; & opencode2 @args \}\r?\n/m)
+ drop('ocm',/^function ocm \{ Start-OcChannel -Channel stable -Rest \$args \}\r?\n?/m)
+ drop('oca',/^function oca \{ Start-OcChannel -Channel dev -Rest \$args \}\r?\n?/m)
+ drop('Start-OcChannel',/^function Start-OcChannel \{[\s\S]*?\n\}\r?\n/m)
+ drop('Get-OcRuntimeScript',/^function Get-OcRuntimeScript \{[\s\S]*?\n\}\r?\n/m)
+ after=after
+  .replace('# oho / ohc / ohcc: cd here, then open opencode2 / Codex / Claude Code in this terminal','# ohc / ohcc: cd here, then open Codex / Claude Code in this terminal')
+  .replace(/^# OpenCode launchers\. ocm is stable \(main\), oca is the agents integration release\.\r?\n(^#.*\r?\n)*/m,'# OpenCode itself is opened with `oc` (installed by install-channel-shortcuts.mjs), not from here.\n')
  if(after!==before){copyFileSync(profile,profile+'.before-channel-shortcuts-'+Date.now()+'.bak');writeFileSync(profile,after)}
 }
-console.log('Installed: ocd (activated dev), ocs (stable) and ocb <ref> (try a branch without activating it). Removed the old managed names and known oho profile helper. Existing terminals need a new shell to forget oho.')
+console.log(JSON.stringify({installed:'oc',usage:['oc','oc <branch>','oc --stable','oc --here','oc <branch> --fresh|--model <route>'],superseded,removedFromProfile,note:'Open terminals keep the old profile functions until you start a new shell.'},null,2))

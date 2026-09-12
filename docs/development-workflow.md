@@ -103,7 +103,7 @@ a checkout you own. Stable is `main`, so use `sb main`, or `git switch main` fol
 `git pull --ff-only origin main`. Do not switch another session's checkout.
 
 The agents branch replaces dev. The existing runtime channel is still called dev:
-`ocd`, `.channels/dev.json`, and its isolated state are runtime identities, not Git
+`oc`, `.channels/dev.json`, and its isolated state are runtime identities, not Git
 branches. Keeping those identities preserves real sessions, Quests and queued work.
 Activation validates the candidate against origin/agents. Stable source and runtime
 are unchanged by this branch migration; the open stable-pointer repair owns the
@@ -132,27 +132,29 @@ TUI and server load receipts must match that revision. Record the installed host
 binary separately. Old sessions keep their loaded generation and cannot consume
 new-generation continuation work.
 
-## Trying a ref without activating it
+## Running a branch without activating it
 
-`ocb <ref>` prepares a dev candidate from that ref and launches it. It does not gate
-and does not activate: `.channels/dev.json` is untouched, so `ocd` keeps running the
-release that was actually accepted, and `activate` keeps its two acceptance runs and
-its origin/agents tree check. Preparation is the only cost -- a worktree, one frozen
-lockfile restore, and one real prompt to the configured model -- and it is paid once
-per commit, because a second `ocb` on the same commit reuses the release it already
-prepared. `--fresh` forces a new one, `--model <exact-route>` overrides the model the
-candidate inherits from the activated channel.
+`oc <branch>` prepares a dev candidate from that branch and launches it. It does not
+gate and does not activate: `.channels/dev.json` is untouched, so `oc` with no branch
+keeps running the release that was actually accepted, and `activate` keeps its two
+acceptance runs and its origin/agents tree check. Preparation is the only cost -- a
+worktree, one frozen lockfile restore, and one real prompt to the configured model --
+and it is paid once per commit, because a second `oc <branch>` on the same commit
+reuses the release it already prepared. `--fresh` forces a new one, `--model
+<exact-route>` overrides the model the candidate inherits from the activated channel.
+Any tag or commit works where a branch name does.
 
-A bare branch name resolves to `origin/<ref>` when that exists and to the local ref
+A bare branch name resolves to `origin/<branch>` when that exists and to the local ref
 otherwise, so a stale local branch cannot be built by accident, and the launch banner
-names the ref, what it resolved to, the commit subject, the model, the release root
-and which commit the activated channel is still on. A candidate shares dev's isolated
+names the branch, what it resolved to, the commit subject, the model and which commit
+the gated release is still on. A candidate shares dev's isolated
 sessions, Quests and telemetry under `.channels/state/dev`; it is different code, not
 a different world.
 
 A candidate records the ref it was built from, so retirement judges it against that
 ref instead of origin/agents and can reclaim it once the branch moves on. While it is
-still that ref's tip it is kept, because that is the preparation the next `ocb` reuses.
+still that ref's tip it is kept, because that is the preparation the next
+`oc <branch>` reuses.
 
 ## Channel isolation
 
@@ -164,11 +166,12 @@ dev because its isolated ledger cannot authorize against stable ownership.
 Use isolated worktrees for dev code work; this preserves stable checkout owners.
 
 Activation requires the current merged agents tree and two real return-flow passes.
-It installs the scoped workflow skill and creates `.channels/start.mjs`. Start
-with `ocd` from your project folder
-or use `ocs`, and `ocb <ref>` to try a branch without activating it. Install these
-PATH commands once with
-`node scripts/install-channel-shortcuts.mjs`. All three accept `--cwd <project>`. Switching launch channels does not stop existing
+It installs the scoped workflow skill and creates `.channels/start.mjs`. Start with `oc`, which launches at the hub root so its AGENTS.md loads; `--here` uses
+the current directory instead and `--cwd <project>` names one. `oc --stable` is the
+stable channel and `oc <branch>` runs a branch without activating it. Install this
+PATH command once with `node scripts/install-channel-shortcuts.mjs`; it also removes
+the superseded `oca`, `ocm`, `ocd`, `ocs` and `ocb` names, including the `oca`/`ocm`
+PowerShell functions, which would otherwise shadow it. Switching launch channels does not stop existing
 terminals. Each terminal has a separate concrete launch configuration.
 
 A launch and a retirement never interleave: both take `.channels/retirement.lock`,
@@ -203,7 +206,7 @@ a source. A worker can update the hub Quest only from its verified owned workspa
 
 Channel state remains under `~/.config/opencode/.channels` after source migration.
 For explicit candidate acceptance, set `OPENCODE_DEV_CANDIDATE` to a prepared dev
-release and invoke `ocd`; the native launcher records that release's load receipt.
+release and invoke `oc`; the native launcher records that release's load receipt.
 This does not select a release for other launches. Clear the variable afterward.
 
 Direct `quest run` workers retain the giver's original project, agent and model as

@@ -14,7 +14,7 @@ const selectedPath=join(registry,'dev.json'),selectedDev=existsSync(selectedPath
 // selected dev release at all, and must leave the selected one exactly as it was.
 const candidate=channel==='dev'?process.env.OPENCODE_DEV_CANDIDATE:undefined
 const dev=candidate?read(join(candidate,'channel-release.json')):selectedDev
-if(!dev)throw Error('No dev channel is activated; prepare and activate one, or try a ref with ocb')
+if(!dev)throw Error('No dev channel is activated; prepare and activate one, or run a branch with oc <branch>')
 if(candidate&&(dev.channel!=='dev'||dev.root!==candidate))throw Error('Invalid explicit dev candidate')
 const root=channel==='dev'?dev.root:repository
 const {useRelease}=await import(pathToFileURL(join(dev.root,'scripts/release-retirement.mjs')))
