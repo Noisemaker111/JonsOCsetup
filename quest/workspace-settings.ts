@@ -1,16 +1,12 @@
-import {existsSync,readFileSync,mkdirSync,writeFileSync,renameSync} from 'node:fs'
+import {mkdirSync,writeFileSync,renameSync} from 'node:fs'
 import {join,dirname,resolve} from 'node:path'
-import {homedir,tmpdir} from 'node:os'
+import {tmpdir} from 'node:os'
 import {createHash} from 'node:crypto'
 import {acquireLock} from './locking'
 export type WorkspaceMode='worktree'|'shared'
-export const workspaceSettingsFile=()=>process.env.OPENCODE_QUEST_SETTINGS??join(process.env.OPENCODE_CONFIG_DIR??join(homedir(),'.config','opencode'),'quest-settings.json')
-export function workspaceSettings(file=workspaceSettingsFile()):{version:1;workspaceMode:WorkspaceMode} {
- if(!existsSync(file))return {version:1,workspaceMode:'worktree'}
- const value=JSON.parse(readFileSync(file,'utf8'))
- if(value.version!==1||!['worktree','shared'].includes(value.workspaceMode))throw new Error('Invalid Quest workspace settings; preserve and repair the configuration')
- return value
-}
+export {workspaceSettingsFile} from '../skills/workspace-flow/scripts/settings.mjs'
+import {workspaceSettingsFile,readWorkspaceSettings} from '../skills/workspace-flow/scripts/settings.mjs'
+export function workspaceSettings(file=workspaceSettingsFile()):{version:1;workspaceMode:WorkspaceMode} {return readWorkspaceSettings(file)}
 export function setWorkspaceMode(mode:WorkspaceMode,file=workspaceSettingsFile()) {
  if(!['worktree','shared'].includes(mode))throw new Error('Workspace mode must be worktree or shared')
  // Dev keeps an isolated ledger and rejects shared checkout writes at dispatch. Accepting
