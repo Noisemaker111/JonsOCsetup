@@ -66,6 +66,10 @@ Load the `memory` skill before adding a line.
   path is `app/src/composer/submit.ts sendPrompt()`, which calls `switchAgent` whenever the composer
   selection differs from the session — `session_v2.agent` follows the dropdown, nothing recovers
   anything. A claim naming a mechanism carries a file:line or says it is a guess.
+- A report ends a turn; it never interrupts one. The two-heading format manufactured a closing every
+  turn -- a tidy summary was available, so the turn ended and Jon had to say "continue" for work
+  already decided. If the next action can be named, take it. Background work running is not a
+  stopping point.
 
 ## Maintenance
 

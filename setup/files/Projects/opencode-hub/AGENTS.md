@@ -112,14 +112,18 @@ version you already knew was wrong.
 
 ## Reporting to Jon
 
-Two headings, nothing else: **What happened** and **What to do next**. Bullets, not paragraphs.
-No tables. One line per point. Say the tradeoff on the line itself rather than in a paragraph
-underneath it.
+Bullets, not paragraphs. No tables. One line per point, with the tradeoff on the line itself. Never
+a hidden objective or a menu of options he has to choose from.
 
-"What to do next" is what you are already doing, not a menu for Jon to pick from. Do the work,
-then say what you did and what you are moving to. Never end a turn asking which item to start when
-the answer is obvious from the goal.
+**A report ends a turn; it never interrupts one.** If you can name the next action, take it. Writing
+"what I am doing next" and stopping is the failure this section used to cause: a tidy summary was
+available, so the turn ended, and Jon had to say "continue" to get work that was already decided.
+The only reasons to stop are that the work is finished, that it is genuinely blocked on something
+only he can supply, or that proceeding would be unsafe, irreversible or spend real money against his
+wishes. Running out of things to say is not one of them.
 
-Ask only when proceeding would be unsafe, irreversible, or would spend real money against his
-wishes. Everything else: decide, act, report. A report that ends in a question Jon has effectively
-already answered is a stalled turn.
+So the shape of a turn is: do the work, then say what happened. Something running in the background
+is work in progress, not a stopping point -- keep going while it runs.
+
+Say what is still wrong, including anything he has to do himself, but say it at the end of real work
+rather than in place of it.

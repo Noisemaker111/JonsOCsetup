@@ -5,7 +5,7 @@
     {
       "source": "setup/files/Projects/opencode-hub/AGENTS.md",
       "target": "Projects/opencode-hub/AGENTS.md",
-      "sha256": "dd0e2eec373faaeb97e139fa6992279624690ff74994a7b76b7c8541932b6bad",
+      "sha256": "c4c7763e804d236f4210799f290d0489529eb4738d69709934a4858ee41d3498",
       "importedFrom": "Projects/opencode-hub/AGENTS.md"
     },
     {
@@ -845,7 +845,7 @@
     {
       "source": "setup/files/Projects/opencode-hub/MEMORY.md",
       "target": "Projects/opencode-hub/MEMORY.md",
-      "sha256": "8aa729a7e369a88ff8eb32fe64cdb3c92da4942b2531de9f3f609cdbb21724df",
+      "sha256": "607f328ed735ff2cef1836b374c82e13d96f7e69ac0a5604c972c0fc1eb79ff9",
       "importedFrom": "Projects/opencode-hub/MEMORY.md"
     },
     {
