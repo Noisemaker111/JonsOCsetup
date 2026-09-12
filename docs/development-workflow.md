@@ -132,6 +132,28 @@ TUI and server load receipts must match that revision. Record the installed host
 binary separately. Old sessions keep their loaded generation and cannot consume
 new-generation continuation work.
 
+## Trying a ref without activating it
+
+`ocb <ref>` prepares a dev candidate from that ref and launches it. It does not gate
+and does not activate: `.channels/dev.json` is untouched, so `ocd` keeps running the
+release that was actually accepted, and `activate` keeps its two acceptance runs and
+its origin/agents tree check. Preparation is the only cost -- a worktree, one frozen
+lockfile restore, and one real prompt to the configured model -- and it is paid once
+per commit, because a second `ocb` on the same commit reuses the release it already
+prepared. `--fresh` forces a new one, `--model <exact-route>` overrides the model the
+candidate inherits from the activated channel.
+
+A bare branch name resolves to `origin/<ref>` when that exists and to the local ref
+otherwise, so a stale local branch cannot be built by accident, and the launch banner
+names the ref, what it resolved to, the commit subject, the model, the release root
+and which commit the activated channel is still on. A candidate shares dev's isolated
+sessions, Quests and telemetry under `.channels/state/dev`; it is different code, not
+a different world.
+
+A candidate records the ref it was built from, so retirement judges it against that
+ref instead of origin/agents and can reclaim it once the branch moves on. While it is
+still that ref's tip it is kept, because that is the preparation the next `ocb` reuses.
+
 ## Channel isolation
 
 Dev has separate host sessions, UI preferences, Quests and telemetry. Existing
@@ -144,8 +166,9 @@ Use isolated worktrees for dev code work; this preserves stable checkout owners.
 Activation requires the current merged agents tree and two real return-flow passes.
 It installs the scoped workflow skill and creates `.channels/start.mjs`. Start
 with `ocd` from your project folder
-or use `ocs`. Install these PATH commands once with
-`node scripts/install-channel-shortcuts.mjs`. Both accept `--cwd <project>`. Switching launch channels does not stop existing
+or use `ocs`, and `ocb <ref>` to try a branch without activating it. Install these
+PATH commands once with
+`node scripts/install-channel-shortcuts.mjs`. All three accept `--cwd <project>`. Switching launch channels does not stop existing
 terminals. Each terminal has a separate concrete launch configuration.
 
 A launch and a retirement never interleave: both take `.channels/retirement.lock`,
