@@ -58,10 +58,16 @@ export const modelIdentity=(model:{providerID?:string;id?:string;modelID?:string
  * as "your policy denies OpenRouter", which is true and useless: the user never asked for
  * OpenRouter.
  */
-export function requestedAgentRoute(agent?:string,source=process.env.OPENCODE_CONFIG_CONTENT):string|undefined{
+export function requestedAgentRoute(agent?:string,source=process.env.OPENCODE_CONFIG_CONTENT,sessionID?:string,selection=process.env.OPENCODE_LAUNCH_SELECTION):string|undefined{
   if(!agent||typeof source!=="string"||!source)return
   try{
     const config=JSON.parse(source)
+    if(selection){
+      const launch=JSON.parse(selection)
+      // A resume without --model keeps the conversation's saved choice. The configured
+      // default describes new conversations, not a replacement requested for this one.
+      if(typeof launch.sessionID==='string'&&launch.sessionID===sessionID&&launch.explicitModel!==true)return
+    }
     // Only the visible launch agent was selected by opencode-runtime. A worker's generic
     // config is a template: Quest dispatch binds its own exact provider/model/effort.
     // Comparing it to that template invents a substitution on automatic cross-provider work.
@@ -147,7 +153,7 @@ export async function installAccessGuard(ctx:{session?:{hook?:Function;synthetic
   // Before the request, while the identity is still legible: the catalog could not give the host
   // the route the launch asked for, so say which model is actually about to answer.
   await ctx.session.hook("context",(event:any)=>{
-    const requested=requestedAgentRoute(event?.agent)
+    const requested=requestedAgentRoute(event?.agent,undefined,event?.sessionID)
     const actual=modelIdentity(event?.model??{})
     if(!substitutedProvider(requested,actual))return
     const notice=substitutionNotice(requested,actual)
@@ -160,7 +166,7 @@ export async function installAccessGuard(ctx:{session?:{hook?:Function;synthetic
       await assertRequestSelection(event.model,event.request,policy)
       if(route.verifyOAuthBroker&&new URL(event.request.url).origin!==verifyOAuthProxy().origin)throw new Error("Configured broker origin does not match its verified endpoint")
     }catch(error){
-      announce(event?.sessionID,refusalNotice({model:event?.model??{},reason:error instanceof Error?error.message:String(error),requested:requestedAgentRoute(event?.agent)}))
+      announce(event?.sessionID,refusalNotice({model:event?.model??{},reason:error instanceof Error?error.message:String(error),requested:requestedAgentRoute(event?.agent,undefined,event?.sessionID)}))
       throw error
     }
   })

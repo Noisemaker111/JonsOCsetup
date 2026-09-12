@@ -103,7 +103,7 @@ function launch(pointer) {
     } catch {}
     return supplied
   }
-  const env = Object.fromEntries(Object.entries({ ...process.env, OPENCODE_CONFIG_DIR: launchRoot, OPENCODE_CONFIG_CONTENT: JSON.stringify(reviewed), OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_PLUGIN_GENERATION: generation, OPENCODE_RUNTIME_CONTROL: control, OPENCODE_RUNTIME_TOKEN: token, OPENCODE_RUNTIME_RECEIPT: receipt, ...authorizedKeys() }).filter(([, value]) => typeof value === "string"))
+  const env = Object.fromEntries(Object.entries({ ...process.env, OPENCODE_CONFIG_DIR: launchRoot, OPENCODE_CONFIG_CONTENT: JSON.stringify(reviewed), OPENCODE_LAUNCH_SELECTION: JSON.stringify({agent,sessionID,explicitModel:!!option("--model")}), OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_PLUGIN_GENERATION: generation, OPENCODE_RUNTIME_CONTROL: control, OPENCODE_RUNTIME_TOKEN: token, OPENCODE_RUNTIME_RECEIPT: receipt, ...authorizedKeys() }).filter(([, value]) => typeof value === "string"))
   const child = startChild(args, env)
   terminal = child
   writeFileSync(join(control, "owner.json"), JSON.stringify({ releaseLease, mode: attached ? "attached" : "relayed", pid: process.pid, childPID: child.pid || undefined, generation, sessionID, cwd, sequence }))
