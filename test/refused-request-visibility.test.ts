@@ -61,6 +61,26 @@ test("a refused request and a substituted model both reach the conversation, not
     await Bun.sleep(5)
     expect(posted).toHaveLength(2)
 
+    const priorSelection=process.env.OPENCODE_LAUNCH_SELECTION
+    try{
+      process.env.OPENCODE_LAUNCH_SELECTION=JSON.stringify({agent:'quest-giver',sessionID:'ses_resumed',explicitModel:false})
+      hooks.context({sessionID:'ses_resumed',agent:'quest-giver',model:{providerID:'cliproxyapi',id:'gpt-5.6-sol',variant:'xhigh'}})
+      await Bun.sleep(5)
+      expect(posted).toHaveLength(2)
+      // Refusing a prohibited request still reaches the resumed conversation; only the false
+      // claim that its saved choice was a substitution is absent.
+      await expect(hooks['http.request']({sessionID:'ses_resumed',agent:'quest-giver',model:{providerID:'openrouter',id:'deepseek/deepseek-v4.1-flash'},request:new Request('https://openrouter.ai/api/v1/chat/completions')})).rejects.toThrow('User access policy')
+      await Bun.sleep(5)
+      expect(posted).toHaveLength(3)
+      expect(posted[2].text).toContain('Nothing was sent')
+      expect(posted[2].text).not.toContain('the launch asked for')
+      // An explicit change on resume and a newly created conversation retain the comparison.
+      process.env.OPENCODE_LAUNCH_SELECTION=JSON.stringify({agent:'quest-giver',sessionID:'ses_resumed',explicitModel:true})
+      expect(requestedAgentRoute('quest-giver',launch,'ses_resumed')).toBe('opencode-go/deepseek-v4.1-flash#high')
+      process.env.OPENCODE_LAUNCH_SELECTION=JSON.stringify({agent:'quest-giver',sessionID:'ses_resumed',explicitModel:false})
+      expect(requestedAgentRoute('quest-giver',launch,'ses_new')).toBe('opencode-go/deepseek-v4.1-flash#high')
+    }finally{if(priorSelection===undefined)delete process.env.OPENCODE_LAUNCH_SELECTION;else process.env.OPENCODE_LAUNCH_SELECTION=priorSelection}
+
     // The host draws a session's title and summary models from the session's own provider, so a
     // same-provider difference is that, not the catalog handing back another provider's model.
     expect(substitutedProvider("opencode-go/deepseek-v4.1-flash#high", "opencode-go/gpt-5.6-luna")).toBe(false)

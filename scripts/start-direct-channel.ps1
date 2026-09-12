@@ -125,6 +125,15 @@ try {
   if($hostArgs[$i] -eq '--cwd'){$i++;if($i -ge $hostArgs.Count){throw '--cwd needs a directory'}; $nativeArgs+=$hostArgs[$i]}
   else{$nativeArgs+=$hostArgs[$i]}
  }
+ # The native session keeps its saved model unless this launch explicitly chose one.
+ # Record the actual session argument, including a caller override of the registered giver.
+ $selectionName='OPENCODE_LAUNCH_SELECTION'
+ $saved[$selectionName]=[Environment]::GetEnvironmentVariable($selectionName,'Process')
+ $selection=@{explicitModel=[bool]($model -or $hostArgs -contains '--model' -or $hostArgs -contains '-m')}
+ $sessionAt=[Array]::IndexOf($nativeArgs,'--session')
+ if($sessionAt -lt 0){$sessionAt=[Array]::IndexOf($nativeArgs,'-s')}
+ if($sessionAt -ge 0 -and $sessionAt+1 -lt $nativeArgs.Count){$selection.sessionID=$nativeArgs[$sessionAt+1]}
+ [Environment]::SetEnvironmentVariable($selectionName,($selection | ConvertTo-Json -Compress),'Process')
  & $plan.host.executable @nativeArgs
  $hostExit=$LASTEXITCODE
 } finally {
