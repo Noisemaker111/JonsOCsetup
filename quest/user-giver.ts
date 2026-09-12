@@ -1,4 +1,4 @@
-import {readUserGiver,saveUserGiver} from './giver-registry.mjs'
+import {readUserGiver,saveUserGiver,releaseUserGiver} from './giver-registry.mjs'
 import {acquireLock} from './locking'
 import {readAllQuests} from './index'
 import {physicalDirectory,projectIdentity,verifySourceBinding} from './project'
@@ -75,11 +75,39 @@ export function verifyGiverBinding(store:QuestStore,context:QuestContext,session
  rootConversation(store,session);verifySourceBinding(context,context.directory!)
 }
 
-/** Register the native first conversation even when its first turn is only discussion. */
+/**
+ * Register the native first conversation even when its first turn is only discussion, and let a
+ * deliberately started one take over.
+ *
+ * `/new` navigates to the home screen (packages/tui/src/app.tsx:697); a session is only created when
+ * the first prompt is sent. That session carries the quest-giver agent, this hook fired, the registry
+ * still named the previous conversation, and the turn was refused -- so `/new` looked like it did
+ * nothing and put you back where you started. Jon reported it twice.
+ *
+ * Opening a new root conversation with the giver agent is the succession this product already
+ * supports: `succeed-giver` releases the binding, and `adoptQuestGiver` re-points a Quest's
+ * integration owner at whoever holds it now. Nothing is destroyed -- the registry entry is renamed
+ * aside with a timestamp, and the old conversation keeps its history and its Quests.
+ *
+ * A worker never succeeds anything (excluded above), and a tool call arriving from some other
+ * session is still redirected rather than allowed to steal the binding: that path goes through
+ * singleUserGiver, not this hook. This is only about a conversation the user has just opened.
+ */
 export async function installUserGiverContext(store:QuestStore,host:any){
  await host.hook?.('context',async(event:any)=>{
   if(event.agent!=='quest-giver'||worker(store,event.sessionID))return
-  const row=await ensureUserGiver(store,host,event.sessionID)
+  let row=await ensureUserGiver(store,host,event.sessionID)
+  if(row.id===event.sessionID)return
+  const incoming=unwrap(await host.get({sessionID:event.sessionID}))
+  if(incoming?.id!==event.sessionID)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different session')
+  // Only a root conversation of the user's own may take over. Anything else -- a child session that
+  // happens to carry the giver agent -- is redirected exactly as it always was, rather than being
+  // handed a new error for a case whose behaviour is not changing.
+  try{rootConversation(store,incoming)}
+  catch{throw new QuestError('SINGLE_GIVER_REQUIRED','Continue in your existing Quest Giver: '+row.id)}
+  const previous=releaseUserGiver(store.runtime)
+  row=await bindUserGiver(store,host,event.sessionID)
   if(row.id!==event.sessionID)throw new QuestError('SINGLE_GIVER_REQUIRED','Continue in your existing Quest Giver: '+row.id)
+  if(Array.isArray(event.system))event.system.push({type:'text',text:`This conversation is now your Quest Giver${previous?`, succeeding ${previous}`:''}. That conversation and its Quests are untouched; workers report here from now on.`})
  })
 }
