@@ -53,7 +53,7 @@ export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFi
    }
   if(!isWorker&&(session?.data??session)?.agent==='quest-giver'&&!userGiverID(store))await bindUserGiver(store,host,context.sessionID)
   if(!isWorker&&userGiverID(store)&&userGiverID(store)!==context.sessionID&&['create','update','run'].includes(input.action))throw new QuestError('SINGLE_GIVER_REQUIRED','Continue in your one Quest Giver: '+userGiverID(store))
-  const trusted=isWorker?{project:workerLedgerProject(store,context.sessionID,directory,input.id)??projectIdentity(directory),directory:physicalDirectory(directory),sessionID:context.sessionID,requestID}:giverContext(store,{...(session?.data??session),id:context.sessionID},requestID,input.id)
+  const trusted=isWorker?{project:workerLedgerProject(store,context.sessionID,directory,input.id)??projectIdentity(directory),directory:physicalDirectory(directory),sessionID:context.sessionID,requestID}:giverContext(store,{...(session?.data??session),id:context.sessionID},requestID,input.id,input.action==='create')
   if(!isWorker&&trusted.giverDirectory&&input.id)adoptQuestGiver(store,input.id)
   if(input.action==='run'){
    if((input.run?.maxConcurrent!==undefined||input.run?.stepModels!==undefined)&&input.run?.continue!==true)throw new QuestError('INVALID_INPUT','Parallel options require run.continue')

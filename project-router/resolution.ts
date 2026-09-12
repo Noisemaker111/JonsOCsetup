@@ -5,7 +5,7 @@ import { RouterError, redact } from './host'
 import {repositoryURL} from './remote'
 
 export type Target = { id: string; root: string; directory: string; name: string; hostID?: string; remote?: string }
-export type Selection = { revision: number; targets: Target[]; pin?: Target; aliases: Record<string, Target>; asked: boolean }
+export type Selection = { revision: number; targets: Target[]; pin?: Target; aliases: Record<string, Target>; asked: boolean; pending?: string }
 export const emptySelection = (): Selection => ({ revision: 0, targets: [], aliases: {}, asked: false })
 /**
  * A target directory is the operating system's own spelling of the path, never the caller's.
@@ -48,6 +48,7 @@ export function resolveTargets(state: Selection, known: Target[], input: { selec
   if (input.discussion) return { state: 'discussion' as const, targets: [] }
   const selectors = input.selectors?.filter(s => s.trim()) ?? []
   if (!selectors.length) {
+    if(state.pending)return {state:state.asked?"unresolved" as const:"clarify" as const,targets:[],candidates:state.targets,reason:state.pending}
     const targets = state.pin ? [state.pin] : state.targets
     if (targets.length) return { state: 'resolved' as const, targets: targets.map(revalidate), reason: 'Verified conversation selection' }
   }

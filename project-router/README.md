@@ -17,18 +17,21 @@ Verify discovery from the actual hub/destination giver after coordinated promoti
 3. `project_select({action:"select", selectors:["C:/Projects/atlas"]})` reads
    destination instructions and returns a revision. `pin`, `correct`, `alias`
    and `forget` use the same tool. Aliases survive a fresh hub conversation.
-4. `project_route({revision:1, requestKey:"fix-check-1", text:"Fix the failing check"})`
-   creates/verifies a real destination giver with the hub's actual agent and exact
-   model/variant, then admits the original request. Follow-up request keys reuse the
-   verified destination session. Multiple selected targets remain independent.
-5. `project_result({})` reads bounded destination excerpts back into the hub.
-   Excerpts are not completion proof. Quest operations run in the destination
-   conversation, never by impersonating a hub caller's session context.
+4. `project_route({revision})` confirms the exact revision returned by selection.
+   It revalidates the directories and creates no session, dispatch or second copy
+   of selection. Create and run Quests in the same giver conversation.
+5. `project_result({})` lists saved Quest results and worker references for the
+   selected projects. Read a Quest with `get` for its authoritative current state.
 
-Use the same request key for delivery retries. A changed request/selection requires
-a new explicitly authorized key after inspecting prior work. Correction invalidates
-old revisions; it does not cancel already-delivered work. Unknown creation/delivery
-is retained and never blindly retried.
+The giver registry owns the persisted selection used by both tools and Quest
+creation. An old plugin selection is imported only once; an existing giver record
+wins if the old copies disagree. Aliases remain shared project-discovery metadata.
+A correction first records that a new target needs confirmation. Missing or
+ambiguous selectors cannot silently reuse the previous root, including after
+restart. A successful explicit selection clears that condition. Multi-target
+selection is preserved, but creating one Quest requires selecting one project.
+Existing Quests retain their recorded destinations throughout correction or failure.
+Selection and routing never dispatch work or erase historical conversations/results.
 
 ## Repo onboarding
 
@@ -71,7 +74,7 @@ authorization until explicit resume; it never pursues the historical backlog.
 
 ## Tool recovery
 
-- `PROJECT_MISMATCH`: discover/select the owning root and route to its real giver.
+- `PROJECT_MISMATCH`: inspect the recorded Quest destination; work stays in the same giver.
 - `project_route_status` distinguishes unavailable authorized routes, missing
   reasoning, ambiguous account/service routes, stale quota and account hold.
   Candidate `route:<id>` selectors are executable in `quest.run.model`; no route,
@@ -79,7 +82,7 @@ authorization until explicit resume; it never pursues the historical backlog.
 - Quest list/get/update defaults are compact. For complete evidence use
   `quest({action:"get", id, inspect:{section:"runs", offset:0, limit:8000}})`.
   Sections include description, reward, steps, runs, artifacts, changes and
-  continuation; continue with the returned character offset.
+  continuation; use typed `data` and continue with `nextOffset`, which counts whole entries.
 - Usage tool defaults omit bulk telemetry history; explicit pagination requests
   expose bounded history.
 - Orchestration unknown/live locks are preserved. Accepted contended lineage is
