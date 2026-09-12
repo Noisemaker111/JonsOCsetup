@@ -1,3 +1,4 @@
+import { assertConfiguredSelection } from "./access-policy"
 /**
  * Which lane the activation gate verifies on.
  *
@@ -43,6 +44,7 @@ export function chooseVerificationRoute(input: {
     seen.add(id)
     const route = candidates.find(r => r.id === id)
     if (!route) { refused.push({ id, reason: "not a candidate route" }); continue }
+    try { assertConfiguredSelection(route) } catch(error) { refused.push({id,reason:String(error)}); continue }
     const broken = input.probeFailure(route)
     if (broken) { refused.push({ id, reason: broken }); continue }
     if (!input.available(route.accountID)) { refused.push({ id, reason: "no available account" }); continue }

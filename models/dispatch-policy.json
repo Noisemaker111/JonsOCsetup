@@ -8,7 +8,6 @@
     "maxUsageAgeSeconds": 120,
     "maxEvidenceAgeDays": 30,
     "reserveFraction": 0,
-    "primaryRouteID": "proxy-sol-xhigh",
     "allowedRouteIDs": [
       "proxy-sol-xhigh",
       "proxy-sol-max",
@@ -16,17 +15,25 @@
       "proxy-fable-xhigh",
       "proxy-fable-max",
       "proxy-claude-unknown",
-      "proxy-luna-unknown",
       "proxy-terra-unknown",
       "openai-astra-medium"
     ],
     "subscriptionConcurrency": "unlimited",
     "minBenchmarkPassAt1": 0.5,
     "byTask": {
-      "planning": { "qualityTolerance": 0 },
-      "coding": { "qualityTolerance": 0.02 },
-      "review": { "qualityTolerance": 0.1 },
-      "utility": { "qualityTolerance": 0.2, "minBenchmarkPassAt1": 0.4 }
+      "planning": {
+        "qualityTolerance": 0
+      },
+      "coding": {
+        "qualityTolerance": 0.02
+      },
+      "review": {
+        "qualityTolerance": 0.1
+      },
+      "utility": {
+        "qualityTolerance": 0.2,
+        "minBenchmarkPassAt1": 0.4
+      }
     }
   },
   "routes": [
@@ -107,20 +114,6 @@
       "modelID": "claude-opus-5",
       "harness": "native",
       "agent": "proxy-claude",
-      "reasoning": "unknown",
-      "serviceTier": "default",
-      "verified": true,
-      "admission": "configured-choice",
-      "evidence": [],
-      "quotaPerTask": {}
-    },
-    {
-      "id": "proxy-luna-unknown",
-      "accountID": "openai-429c9885edc3fc7113fc",
-      "providerID": "cliproxyapi",
-      "modelID": "gpt-5.6-luna",
-      "harness": "native",
-      "agent": "proxy-luna",
       "reasoning": "unknown",
       "serviceTier": "default",
       "verified": true,

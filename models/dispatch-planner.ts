@@ -2,7 +2,7 @@ import {measuredOutcomeRoutes,type MeasuredOutcomes} from "./measured-outcomes"
 import {join,dirname,isAbsolute} from "node:path"
 import { calibratedRoutes,type DispatchForecasts } from "./calibrated-dispatch"
 import { readCalibrations,accountRegime,updateBurnControls,readQuotaObservations } from "../usage/telemetry-api"
-import { assertConfiguredModel } from "./access-policy"
+import { assertConfiguredModel, assertConfiguredSelection } from "./access-policy"
 import { accountsForRoute, relevantAccountWindows } from "../usage/account-api"
 import { liveDispatchRoutes } from "./live-routes"
 import { recordedRouteCosts, withRecordedCosts } from "./route-cost"
@@ -25,16 +25,17 @@ export type SelectorResult={code:string;route?:Route;candidates:{selector:string
  *  account. `allowedRouteIDs` is the pool automatic selection ranks, never a veto on an explicit
  *  choice. Silent substitution stays forbidden: an unresolvable selector still fails closed. */
 export function resolveDispatchSelector(policy: DispatchPolicy, selector: string, snapshot?: AccountSnapshot): SelectorResult {
- const allowed=policy.routes.filter(r=>policy.request.allowedRouteIDs?.includes(r.id))
+ const permitted=(route:Route)=>{try{assertConfiguredSelection(route);return true}catch{return false}}
+ const allowed=policy.routes.filter(r=>permitted(r)&&policy.request.allowedRouteIDs?.includes(r.id))
  const candidates=allowed.map(r=>({selector:'route:'+r.id,model:`${r.providerID}/${r.modelID}#${r.reasoning}`,accountID:r.accountID,serviceTier:r.serviceTier}))
- if(selector.startsWith('route:')){const route=policy.routes.find(r=>r.id===selector.slice(6));return route?{code:'ROUTE_CONFIGURED',route,candidates}:{code:'AUTHORIZED_ROUTE_UNAVAILABLE',candidates}}
+ if(selector.startsWith('route:')){const route=policy.routes.find(r=>r.id===selector.slice(6));return route&&!permitted(route)?{code:'MODEL_SELECTION_PROHIBITED',candidates}:route?{code:'ROUTE_CONFIGURED',route,candidates}:{code:'AUTHORIZED_ROUTE_UNAVAILABLE',candidates}}
  const [identity,reasoning,...extra]=selector.split('#')
  if(extra.length)return {code:'INVALID_ROUTE_SELECTOR',candidates}
  const models=policy.routes.filter(r=>`${r.providerID}/${r.modelID}`===identity)
  if(models.length&&!reasoning)return {code:'REASONING_REQUIRED',candidates:candidates.filter(c=>c.model.startsWith(identity+'#'))}
  const matches=models.filter(r=>r.reasoning===reasoning)
  if(matches.length>1)return {code:'AMBIGUOUS_ACCOUNT_SERVICE_ROUTE',candidates}
- if(matches.length===1)return {code:'ROUTE_CONFIGURED',route:matches[0],candidates}
+ if(matches.length===1)return permitted(matches[0])?{code:'ROUTE_CONFIGURED',route:matches[0],candidates}:{code:'MODEL_SELECTION_PROHIBITED',candidates}
  const slash=identity.indexOf('/'),providerID=identity.slice(0,slash),modelID=identity.slice(slash+1)
  if(slash<1||!modelID)return {code:'INVALID_ROUTE_SELECTOR',candidates}
  // Reachability before reasoning: asking which effort level to use on a model no connected
@@ -44,6 +45,7 @@ export function resolveDispatchSelector(policy: DispatchPolicy, selector: string
  const linked=accountsForRoute(snapshot,providerID,modelID)
  if(linked.length!==1)return {code:linked.length?'AMBIGUOUS_ACCOUNT_SERVICE_ROUTE':'AUTHORIZED_ROUTE_UNAVAILABLE',candidates}
  if(!reasoning)return {code:'REASONING_REQUIRED',candidates}
+ try{assertConfiguredSelection({providerID,id:modelID,reasoning})}catch{return {code:'MODEL_SELECTION_PROHIBITED',candidates}}
  return {code:'ROUTE_CONFIGURED',candidates,route:{id:'chosen-'+providerID+'-'+modelID+'-'+reasoning,accountID:linked[0].id,providerID,modelID,harness:'native',agent:'worker',reasoning,serviceTier:'default',verified:true,admission:'configured-choice',evidence:[],quotaPerTask:{}}}
 }
 /** A route that answered an error when probed is not a candidate, however much quota it holds.
@@ -105,7 +107,7 @@ export async function dispatchPlanInput(input:{model?:string;policyFile:string;n
  }
  const unusable=unusableRoutes()
  policy.routes=policy.routes.map(route=>{const probed=unusable.byRoute.get(route.id)??unusable.byModel.get(route.providerID+"/"+route.modelID);return probed?{...route,verified:false,outcomeIssue:{task:policy.request.task,reason:"Probed unusable: "+probed.slice(0,160)}}:route})
- policy.routes=policy.routes.map(route=>{if(route.admission)assertConfiguredModel({providerID:route.providerID,id:route.modelID});const linked=accountsForRoute(snapshot,route.providerID,route.modelID);return linked.length===1&&linked[0].id===route.accountID?route:{...route,verified:false}})
+ policy.routes=policy.routes.map(route=>{try{assertConfiguredSelection(route)}catch(error){return {...route,verified:false,outcomeIssue:{task:policy.request.task,reason:String(error)}}};const linked=accountsForRoute(snapshot,route.providerID,route.modelID);return linked.length===1&&linked[0].id===route.accountID?route:{...route,verified:false}})
  const pacing=updateBurnControls(snapshot.accounts,readQuotaObservations(ACCOUNT_USAGE_FILE+".observations").observations,now)
  const accounts:PlannerInput["accounts"]=snapshot.accounts.filter(a=>policy.routes.some(r=>r.accountID===a.id)).map(a=>({id:a.id,pacing:pacing.find(p=>p.accountID===a.id),billing:policy.billing[a.id],authenticated:a.state!=="auth-required"&&a.connections.length>0,observedAt:a.observedAt??"",capacity:a.state==="available"?"available":a.state==="exhausted"?"exhausted":"unknown",windows:a.windows.filter(w=>(w.scope==="shared"||w.scope==="model")&&!(w.state==="available"&&(w.remainingPercent==null||!w.resetAt))).map(w=>({id:w.id,...(w.scope==="model"?{routeIDs:policy.routes.filter(r=>r.accountID===a.id&&relevantAccountWindows(a,r.modelID).includes(w)).map(r=>r.id)}:{}),remaining:w.state==="unknown"?NaN:w.state==="exhausted"?0:w.remainingPercent??NaN,reserved:0,resetAt:w.resetAt??"",periodSeconds:w.durationSeconds??undefined}))}))
  const unbilled=accounts.filter(a=>!a.billing).map(a=>a.id)

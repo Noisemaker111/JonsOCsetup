@@ -42,7 +42,7 @@ bun test test/quest-redesign.test.ts test/quest-workflow.test.ts test/quest-host
 node --check harnesses/opencode-mcp-stdio.mjs
 node --check quest/worker-observation.mjs
 bun scripts/verify-quest-installed-navigation.ts $candidate
-bun scripts/verify-quest-installed-dispatch.ts $candidate $reservations
+bun scripts/verify-single-giver-installed.ts $candidate $reservations
 ```
 
 - Full `bun test`: **947 passed, 1 skipped, 0 failed**, 7,316 assertions, 948 tests / 140 files, 315.63 seconds. Log: `run-all-tests-acceptance.log`.
