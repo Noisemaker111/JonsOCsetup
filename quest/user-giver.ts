@@ -56,15 +56,34 @@ export async function ensureUserGiver(store:QuestStore,host:any,currentID?:strin
  try{if(readUserGiver(store.runtime))throw new QuestError('GIVER_CREATION_BUSY','Another request is establishing your giver; refresh');saveUserGiver(store.runtime,{state:'launching'});try{const created=unwrap(await host.create({title:'Quest Giver',agent:'quest-giver',location:{directory:physicalDirectory(directory)}})),row=unwrap(await host.get({sessionID:created?.id}));if(row?.id!==created?.id)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different created giver');eligible(store,row);saveUserGiver(store.runtime,{state:'bound',sessionID:row.id,directory:physicalDirectory(row.location.directory),model:row.model});return row}catch(error){saveUserGiver(store.runtime,{state:'unknown',reason:String(error)});throw error}}finally{lock.release()}
 }
 export function adoptQuestGiver(store:QuestStore,id:string){const sessionID=userGiverID(store),q=store.read(id);if(!sessionID||!q||q.integrationOwner===sessionID)return q;return store.apply(id,'patched',{integrationOwner:sessionID,extensions:{...q.extensions,previousGivers:[...new Set([...(q.extensions.previousGivers as string[]??[]),...(q.integrationOwner?[q.integrationOwner]:[])])] }},'quest:user-giver',{expectedRevision:q.revision})}
-export function selectUserGiverProject(store:QuestStore,sessionID:string,targets:{directory:string}[],revision:number){
- const lock=acquireLock(store.runtime,'user-giver',{timeoutMs:0});try{const row=readUserGiver(store.runtime);if(row?.sessionID!==sessionID)throw new QuestError('SINGLE_GIVER_REQUIRED','Select the project in your existing Quest Giver');const selected=targets.map(t=>({project:projectIdentity(t.directory),directory:physicalDirectory(t.directory)}));saveUserGiver(store.runtime,{...row,selection:{revision,targets:selected}})}finally{lock.release()}
+export type GiverProjectSelection = {
+ version:2;revision:number;targets:{project:ReturnType<typeof projectIdentity>;directory:string}[];
+ pin?:string;asked:boolean;pending?:string
 }
-export function giverContext(store:QuestStore,session:any,requestID:string,questID?:string):QuestContext {
+/** The giver record owns selection for both routing and Quest creation. */
+export function readGiverProjectSelection(store:QuestStore,sessionID:string){
+ const row=readUserGiver(store.runtime)
+ return row?.sessionID===sessionID?{current:true,selection:row.selection}: {current:false,selection:undefined}
+}
+export function selectUserGiverProject(store:QuestStore,sessionID:string,targets:{directory:string}[],revision:number,options:{pin?:string;asked?:boolean;pending?:string;expectedRevision?:number}={}){
+ const lock=acquireLock(store.runtime,'user-giver',{timeoutMs:0})
+ try{
+  const row=readUserGiver(store.runtime)
+  if(row?.sessionID!==sessionID)throw new QuestError('SINGLE_GIVER_REQUIRED','Select the project in your existing Quest Giver')
+  if(options.expectedRevision!==undefined&&(row.selection?.revision??0)!==options.expectedRevision)throw new QuestError('SELECTION_CHANGED','The saved selection changed; read it again before correcting it')
+  const selected=options.pending?(row.selection?.targets??[]):targets.map(t=>({...t,project:projectIdentity(t.directory),directory:physicalDirectory(t.directory)}))
+  const selection:GiverProjectSelection={version:2,revision,targets:selected,asked:options.asked??false,...(options.pin?{pin:options.pending?options.pin:physicalDirectory(options.pin)}:{}),...(options.pending?{pending:options.pending}:{})}
+  saveUserGiver(store.runtime,{...row,selection})
+  return selection
+ }finally{lock.release()}
+}
+export function giverContext(store:QuestStore,session:any,requestID:string,questID?:string,creating=false):QuestContext {
  const registered=readUserGiver(store.runtime),origin=physicalDirectory(session.location.directory)
  if(!registered||registered.sessionID!==session.id)return {sessionID:session.id,requestID,directory:origin,project:projectIdentity(origin)}
  rootConversation(store,session)
  const q=questID?store.read(questID):undefined,selected=registered.selection?.targets??[]
- if(!q&&selected.length>1)throw new QuestError('PROJECT_SELECTION_REQUIRED','Select one project for this Quest; all Quests stay with the same giver')
+ if(!q&&creating&&registered.selection?.pending)throw new QuestError('PROJECT_SELECTION_REQUIRED','No Quest was created. '+registered.selection.pending+' Select one explicit project with project_select before creating work.')
+ if(!q&&creating&&selected.length>1)throw new QuestError('PROJECT_SELECTION_REQUIRED','Select one project for this Quest; all Quests stay with the same giver')
  const directory=q?physicalDirectory((q.extensions.giverSourceDirectory as string)??q.project!.root):selected[0]?.directory??origin
  const project=projectIdentity(directory);if(q?.project&&project.id!==q.project.id)throw new QuestError('PROJECT_MISMATCH','The recorded Quest source no longer belongs to its project')
  return {sessionID:session.id,requestID,project,directory,giverDirectory:origin}

@@ -1,4 +1,4 @@
-import {singleUserGiver,selectGiverProject,succeedUserGiver} from '../quest/giver-public'
+import {singleUserGiver,succeedUserGiver} from '../quest/giver-public'
 import { define } from '@opencode-ai/plugin/v2/promise'
 import { routerQuestInventory, routerWorker } from '../quest/router-public'
 import { createGoalFacade } from '../quest/goal-public'
@@ -16,7 +16,7 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
   if (!ctx.tool?.transform || !ctx.session?.create || !ctx.session?.get || !ctx.session?.prompt || !ctx.storage) throw new RouterError('HOST_CAPABILITY_MISSING', 'Project-router requires supported typed tools, session create/get/prompt and plugin storage')
   const memory=new RouterMemory(ctx.storage)
   const state = (id:string)=>memory.selection(id)
-  const save = (id: string, selection: Selection) => ctx.storage.set('selection/' + id, selection)
+  const save = (id:string,selection:Selection,expectedRevision?:number)=>memory.saveSelection(id,selection,expectedRevision)
   const worker = (id: string) => routerWorker(id).length > 0
   const goals = createGoalFacade(ctx.session)
   const known = ()=>memory.known()
@@ -45,11 +45,12 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
     } },
     { name: 'project_resolve', description: 'Resolve explicit paths/names/approved aliases or current selection. Multiple selectors remain multiple targets. Discussion creates no work; ambiguity asks once and never launches.', input: schema({ selectors, discussion: { type: 'boolean' } }), execute: async (input, context) => memory.selectionChange(context.sessionID,async()=>{
       const selection = await state(context.sessionID), result = resolveTargets(selection, await known(), input)
-      if (result.state === 'clarify') { selection.asked = true; await save(context.sessionID, selection) }
+      if ((result.state === 'clarify'||result.state==='unresolved')&&memory.isCurrent(context.sessionID)) { const revision=selection.revision;selection.asked=true;if(input.selectors?.length)selection.pending='The requested project could not be resolved.';selection.revision++;save(context.sessionID,selection,revision) }
       return { ...result, revision: selection.revision }
     }) },
     { name: 'project_select', description: 'Explicitly select/pin/correct a project or multiple targets; register an alias, forget selection/alias, or succeed a Quest Giver whose context is spent. Invalidates old route revisions. Does not start work.', input: schema({ action: { enum: ['select', 'pin', 'correct', 'alias', 'forget', 'succeed-giver'] }, selectors, alias: { type: 'string', minLength: 1, maxLength: 80 } }, ['action']), execute: async (input, context) => memory.selectionChange(context.sessionID,async()=>{
       if (worker(context.sessionID)) throw new RouterError('WORKER_DELEGATION_DENIED', 'Workers retain their assigned destination')
+      if(!['select','pin','correct','alias','forget','succeed-giver'].includes(input.action))throw new RouterError('INVALID_INPUT','Unknown project selection action')
       // Succeeding the giver is the one action the current giver may take about itself, so it is
       // handled before the guard that would send every other request back to the bound session.
       if (input.action === 'succeed-giver') {
@@ -61,28 +62,39 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
       const giver=await singleUserGiver(ctx.session,context.sessionID)
       if(giver.id!==context.sessionID)throw new RouterError('SINGLE_GIVER_REQUIRED','Continue in your existing Quest Giver: '+giver.id)
       const selection = await state(context.sessionID)
-      if (input.action === 'forget') { if (input.alias) {delete selection.aliases[input.alias.toLowerCase()];await memory.alias(input.alias)} else { selection.targets = []; delete selection.pin } }
+      // A correction is an intent to stop using the previous destination. Persist that before
+      // resolving it so missing/ambiguous inputs and failed validation cannot create in the old root.
+      if(['select','pin','correct'].includes(input.action)){
+        const revision=selection.revision
+        selection.pending='The requested project selection has not been confirmed.';selection.revision++
+        save(context.sessionID,selection,revision)
+      }
+      const unknown=Object.keys(input).filter(key=>!['action','selectors','alias'].includes(key))
+      if(unknown.length)throw new RouterError('INVALID_INPUT','Unknown project_select fields: '+unknown.join(', ')+'. Use selectors: ["<absolute project directory>"].')
+      if(['select','pin','correct'].includes(input.action)&&(!Array.isArray(input.selectors)||!input.selectors.length||input.selectors.some((s:any)=>typeof s!=='string'||!s.trim())))throw new RouterError('TARGET_REQUIRED','Provide selectors containing the explicit project directory; the previous destination was not reused')
+      if (input.action === 'forget') { if (input.alias) {delete selection.aliases[input.alias.toLowerCase()];await memory.alias(input.alias)} else { selection.targets = []; delete selection.pin;delete selection.pending } }
       else {
         const result = resolveTargets(selection, await known(), { selectors: input.selectors })
-        if (result.state !== 'resolved') return result
+        if (result.state !== 'resolved') {selection.asked=true;save(context.sessionID,selection,selection.revision);return {...result,revision:selection.revision}}
         const targets = result.targets.map(revalidate); for (const target of targets) instructions(target)
         if (input.action === 'alias') {
           if (!input.alias || targets.length !== 1 || ['__proto__', 'constructor', 'prototype'].includes(input.alias.toLowerCase())) throw new RouterError('INVALID_ALIAS', 'Alias requires one explicit target and an ordinary name')
           selection.aliases[input.alias.toLowerCase()] = targets[0]
           await memory.alias(input.alias,targets[0])
-        } else { selection.targets = targets; delete selection.pin; if (input.action === 'pin') { if (targets.length !== 1) throw new RouterError('INVALID_PIN', 'Pin one target'); selection.pin = targets[0] } }
+        } else { selection.targets = targets; delete selection.pin;delete selection.pending; if (input.action === 'pin') { if (targets.length !== 1) throw new RouterError('INVALID_PIN', 'Pin one target'); selection.pin = targets[0] } }
         await register(targets)
       }
-      selection.revision++; selection.asked = false; await save(context.sessionID, selection);selectGiverProject(context.sessionID,selection.targets,selection.revision)
+      const revision=selection.revision;selection.revision++;selection.asked=false;save(context.sessionID,selection,revision)
       return { ...selection, note: 'Previously delivered work is not cancelled by correction. Inspect its receipt before rerouting.' }
     }) },
-    { name: 'project_route', description: 'Confirm the selected project revision for work in your one persistent Quest Giver. Never creates a destination conversation. Create or run each Quest here; workers execute in their verified project.', input: schema({ revision: { type: 'integer', minimum: 0 }, requestKey: { type: 'string', minLength: 1, maxLength: 150 }, text: { type: 'string', minLength: 1, maxLength: 16000 } }, ['revision', 'requestKey', 'text']), execute: async (input, context) => {
+    { name: 'project_route', description: 'Confirm the selected project revision for work in your one persistent Quest Giver. Never creates a destination conversation. Create or run each Quest here; workers execute in their verified project.', input: schema({ revision: { type: 'integer', minimum: 0 } }, ['revision']), execute: async (input, context) => {
       const selection = await state(context.sessionID)
+      if(selection.pending)throw new RouterError('TARGET_REQUIRED',selection.pending)
       if (!selection.targets.length) throw new RouterError('TARGET_REQUIRED', 'Use project_select with the explicit destination before routing')
       const giver=await singleUserGiver(ctx.session,context.sessionID)
       if(giver.id!==context.sessionID)throw new RouterError('SINGLE_GIVER_REQUIRED','Continue in your existing Quest Giver: '+giver.id)
       if(selection.revision!==input.revision)throw new RouterError('SELECTION_CHANGED','Use the exact current project_select revision')
-      const targets=selection.targets.map(revalidate);selectGiverProject(giver.id,targets,selection.revision)
+      const targets=selection.targets.map(revalidate)
       return {giverSessionID:giver.id,targets,revision:selection.revision,createdSessions:0,next:'Create and run Quests in this same conversation. Project selection changes worker location, never the user giver.'}
     } },
     { name: 'project_result',description:'List Quest results and worker references for your selected projects in the one user giver. Use quest get for authoritative progress.',input:schema({}),execute:async(_input,context)=>{
