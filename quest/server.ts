@@ -1,4 +1,3 @@
-import {workerPermissionTool} from './worker-permissions'
 import {installWorkerInstructionReads} from './worker-instructions'
 import {cleanupQuests} from "./cleanup"
 import {connectHostObservation,disconnectHostObservation,recordHostObservation,registerHostObservation} from "./host-observation"
@@ -143,12 +142,12 @@ const HOST_EVENTS = Symbol.for("opencode-config.quests.host-events")
  * ends when the host shuts down. State lives on globalThis so a plugin reload
  * reuses the running subscription instead of stacking a second one.
  */
-export function installQuestEvents(ctx: { event?: { subscribe?: Function }; session?: any; permission?: any }, quests: QuestTracker) {
+export function installQuestEvents(ctx: { event?: { subscribe?: Function }; session?: any; permission?: any; generate?:any }, quests: QuestTracker) {
   const state = globalThis as { [HOST_EVENTS]?: WeakMap<object, { controller: AbortController }> }
   const connections = state[HOST_EVENTS] ??= new WeakMap()
   const owner = ctx.session ?? ctx.event
   if (!owner) return
-  if(ctx.session)registerHostObservation(ctx.session,ctx.permission)
+  if(ctx.session)registerHostObservation(ctx.session,ctx.permission,ctx.generate)
   if (connections.has(owner)) return
   const subscribe = ctx?.event?.subscribe
   if (typeof subscribe !== "function") {
@@ -294,7 +293,7 @@ export async function installQuestTools(ctx: { tool?: { transform?: Function }; 
   if (typeof transform !== "function") return
   await transform((draft: { add: (tool: unknown) => void }) => {
     draft.add(ctx.session ? typedQuestTool(api.store, ctx.session) : questTool(api))
-    if(ctx.session){draft.add(workerPermissionTool(api.store,ctx.session,ctx.permission));draft.add(nativeWorkspaceTool(api.store,ctx.session));draft.add(guidanceTool(api.store,ctx.session));draft.add(outcomeTool(api.store,ctx.session));draft.add(workSupplyTool(api.store,ctx.session))}
+    if(ctx.session){draft.add(nativeWorkspaceTool(api.store,ctx.session));draft.add(guidanceTool(api.store,ctx.session));draft.add(outcomeTool(api.store,ctx.session));draft.add(workSupplyTool(api.store,ctx.session))}
   })
 }
 

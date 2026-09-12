@@ -70,7 +70,7 @@ export function reduceQuest(input: Quest, event: QuestEvent): Quest {
     }
     case "session-state": {
       const s = findSession(q, p)
-      if(s&&p.permissionDecision){const decision=p.permissionDecision;if(['once','reject'].includes(decision.reply)&&['sending','acknowledged','unknown'].includes(decision.state)&&['user','giver'].includes(decision.actor)&&typeof decision.requestID==='string')s.permissionDecisions=bounded([...(s.permissionDecisions??[]).filter(d=>d.requestID!==decision.requestID),{...decision,reason:redact(String(decision.reason??''),1500)}])}
+      if(s&&p.permissionDecision){const decision=p.permissionDecision;if(['once','reject'].includes(decision.reply)&&['sending','acknowledged','unknown'].includes(decision.state)&&['user','reviewer'].includes(decision.actor)&&typeof decision.requestID==='string')s.permissionDecisions=bounded([...(s.permissionDecisions??[]).filter(d=>d.requestID!==decision.requestID),{...decision,reason:redact(String(decision.reason??''),1500)}])}
       if(s && p.preserveTerminal && ["completed","failed","cancelled"].includes(s.state)){if(p.evidence)s.evidence=bounded([...s.evidence,redact(p.evidence)]);break}
       if (!s) q.unresolvedWork.push(`missing exact session link for ${p.callID ?? p.sessionID ?? "unknown"}`)
       else {

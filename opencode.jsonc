@@ -329,7 +329,6 @@
         { "action": "project_discover", "resource": "*", "effect": "allow" },
         { "action": "project_resolve", "resource": "*", "effect": "allow" },
         { "action": "project_select", "resource": "*", "effect": "allow" },
-        { "action": "quest_permission", "resource": "*", "effect": "allow" },
         { "action": "project_route", "resource": "*", "effect": "allow" },
         { "action": "project_result", "resource": "*", "effect": "allow" },
         { "action": "project_clone", "resource": "*", "effect": "allow" },

@@ -1,12 +1,13 @@
 /** Live observations belong to the connected session client, never a process-wide singleton. */
-type State = { connected: boolean; sessions: Map<string, { active: boolean; at: string }>; permission?: any }
+type State = { connected: boolean; sessions: Map<string, { active: boolean; at: string }>; permission?: any; generate?: any }
 const KEY = Symbol.for('opencode-config.quest.host-observations')
 const registry = globalThis as typeof globalThis & { [KEY]?: WeakMap<object, State> }
 const hosts = registry[KEY] ??= new WeakMap<object, State>()
-export function registerHostObservation(host: object, permission?: any) {
+export function registerHostObservation(host: object, permission?: any, generate?: any) {
  let state = hosts.get(host)
  if (!state) { state = { connected: false, sessions: new Map() }; hosts.set(host, state) }
  if (permission) state.permission = permission
+ if (generate) state.generate = generate
  return state
 }
 export function connectHostObservation(host: object, permission?: any) {
@@ -34,4 +35,12 @@ export function hostExecution(host: object, id: string) {
 export async function hostPermissions(host: object, id: string) {
  const state = hosts.get(host)
  return state?.permission?.list ? await state.permission.list({ sessionID: id }) : []
+}
+
+/** These domains are location-scoped; invoke them only from the worker's owning plugin. */
+export function hostPermissionDomain(host:object){return hosts.get(host)?.permission}
+export function hostReviewText(host:object,input:{prompt:string;model:any}){
+ const generate=hosts.get(host)?.generate
+ if(!generate?.text)throw Error('Native permission reviewer generation is unavailable')
+ return generate.text(input)
 }
