@@ -129,3 +129,32 @@ export function conditionMet(input: { condition: "quest-step-done" | "worker-com
       ? (quest.sessions ?? []).some(s => s.state === "completed" && !input.baseline.has(`${quest.id}/run/${s.runID}`))
       : (quest.stages ?? []).some(s => s.status === "done" && !input.baseline.has(`${quest.id}/stage/${s.id}`)))
 }
+
+/** Every run id a Quest already carried, so a later pass can tell this run's workers from the rest. */
+export function knownRuns(quests: QuestRecord[]): Set<string> {
+  const runs = new Set<string>()
+  for (const quest of quests) for (const session of quest.sessions ?? []) if (session.runID) runs.add(`${quest.id}/${session.runID}`)
+  return runs
+}
+
+const TERMINAL = new Set(["completed", "failed", "cancelled"])
+
+/**
+ * Workers this run started that have not finished.
+ *
+ * A drive stops the host when its wait ends, and the host takes its workers with it. Asked to
+ * dispatch a step of the OVH VPS Quest, the giver launched a worker that read 502,165 input tokens
+ * and wrote 1,085 of real investigation -- and every token of it was lost, because the wait ended
+ * and the drive stopped. Twice, on two different routes. The giver was right each time; the harness
+ * simply killed what it had asked for.
+ *
+ * So stopping is not unconditional any more: a drive waits out the work it caused. `planned` and
+ * `waiting` count as in flight, because a worker that has been admitted but has not reached a
+ * terminal state is exactly the one a stop would strand.
+ */
+export function inFlightWorkers(input: { quests: QuestRecord[]; known: Set<string> }): { quest?: string; runID?: string; state?: string }[] {
+  return input.quests.flatMap(quest =>
+    (quest.sessions ?? [])
+      .filter(s => s.runID && !input.known.has(`${quest.id}/${s.runID}`) && !TERMINAL.has(String(s.state)))
+      .map(s => ({ quest: quest.id, runID: s.runID, state: s.state })))
+}

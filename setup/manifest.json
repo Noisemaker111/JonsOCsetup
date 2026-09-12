@@ -5,7 +5,7 @@
     {
       "source": "setup/files/Projects/opencode-hub/AGENTS.md",
       "target": "Projects/opencode-hub/AGENTS.md",
-      "sha256": "3c29d832a66f7bbb2ed93692cbef5cec01e9fa3fa9dfc66ec1db79eb6abb263d",
+      "sha256": "dd0e2eec373faaeb97e139fa6992279624690ff74994a7b76b7c8541932b6bad",
       "importedFrom": "Projects/opencode-hub/AGENTS.md"
     },
     {
@@ -33,9 +33,15 @@
       "importedFrom": ".agents/plugins/marketplace.json"
     },
     {
+      "source": "setup/files/.agents/quest-api.mjs",
+      "target": ".agents/quest-api.mjs",
+      "sha256": "3a07d2024560e49acb4881a2330a0f480024f57948e0701bf7000d5b84848e51",
+      "importedFrom": ".agents/quest.mjs"
+    },
+    {
       "source": "setup/files/.agents/quest.mjs",
       "target": ".agents/quest.mjs",
-      "sha256": "0b8098bfe14f7f78e7da15ee83c8edbec638827e6816647c7ad5b48479d2d07f",
+      "sha256": "2bfdd942b8c374d185b6a4d3e95bc17050a1e5ac4b69f76661eda9d6fa1d125a",
       "importedFrom": ".agents/quest.mjs"
     },
     {
@@ -839,7 +845,7 @@
     {
       "source": "setup/files/Projects/opencode-hub/MEMORY.md",
       "target": "Projects/opencode-hub/MEMORY.md",
-      "sha256": "c5709c8561b481abe6ee5c19e7351e19e362d858945a47e0709ddb7f744f70ad",
+      "sha256": "8aa729a7e369a88ff8eb32fe64cdb3c92da4942b2531de9f3f609cdbb21724df",
       "importedFrom": "Projects/opencode-hub/MEMORY.md"
     },
     {
