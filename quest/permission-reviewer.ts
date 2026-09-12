@@ -3,7 +3,7 @@ import {join} from 'node:path'
 import {acquireLock} from './locking'
 import {digest,redact} from './privacy'
 import {WorkerPermissions} from './worker-permissions'
-import {hostPermissionDomain,hostReviewText} from './host-observation'
+import {hostPermissionDomain} from './host-observation'
 import {reviewerSettings,reviewerSettingsKey,reservePermissionReview} from './reviewer-settings'
 import type {QuestStore} from './store'
 
@@ -44,6 +44,7 @@ export class PermissionReviewer {
     const directory=join(this.store.runtime,'permission-reviewers'),file=join(directory,input.giverID+'.json')
     let pin=existsSync(file)?JSON.parse(readFileSync(file,'utf8')):undefined
     const settings=before.authority.reviewer,settingsKey=reviewerSettingsKey(settings)
+    const previous=pin,selectionChanged=!!pin&&pin.settingsKey!==settingsKey
     if(pin?.settingsKey!==settingsKey)pin=undefined
     const reviewID='permission-'+digest(input.giverID+input.requestKey+before.key)
     reserved=await reservePermissionReview(this.store.runtime,reviewID,settings,pin)
@@ -51,9 +52,28 @@ export class PermissionReviewer {
     if(route.harness!=='native'||route.serviceTier!=='default')throw Error('Permission reviewer requires the exact supported native model service')
     if(pin&&pin.accountID!==route.accountID)throw Error('The pinned reviewer account changed; no substitute selected')
     if(!pin){pin={selector:'route:'+route.id,model:route.providerID+'/'+route.modelID+'#'+route.reasoning,settingsKey,selectionReason:reserved.decision?.summary,accountID:route.accountID,giverID:input.giverID,createdAt:new Date().toISOString()};mkdirSync(directory,{recursive:true});const tmp=file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(pin));renameSync(tmp,file)}
+    const savePin=()=>{mkdirSync(directory,{recursive:true});const tmp=file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(pin));renameSync(tmp,file)}
+    const model={providerID:route.providerID,id:route.modelID,...(route.reasoning!=='unknown'?{variant:route.reasoning}:{})}
+    if(!pin.reviewerSessionID&&previous?.reviewerSessionID){pin.reviewerSessionID=previous.reviewerSessionID;savePin()}
+    if(!pin.reviewerSessionID){
+     if(pin.sessionState==='creating')throw Error('Reviewer creation is uncertain; inspect the original launch before retrying')
+     pin.sessionState='creating';savePin()
+     const giver=unwrap(await this.host.get({sessionID:input.giverID}))
+     const created=unwrap(await this.host.create({title:'Permission reviewer',agent:'permission-reviewer',model,location:{directory:giver.location.directory}}))
+     if(!created?.id)throw Error('Native reviewer session identity was not returned')
+     pin.reviewerSessionID=created.id;pin.sessionState='ready';savePin()
+    }
+    const verifySession=async()=>{
+     const session=unwrap(await this.host.get({sessionID:pin.reviewerSessionID}))
+     if(session?.id!==pin.reviewerSessionID||session.agent!=='permission-reviewer')throw Error('Reviewer session identity changed; no inference sent')
+     if(session.model?.providerID!==model.providerID||session.model?.id!==model.id||session.model?.variant!==model.variant)throw Error('Reviewer model changed; update the user reviewer setting before continuing')
+    }
+    if(selectionChanged&&previous?.reviewerSessionID)await this.host.switchModel({sessionID:pin.reviewerSessionID,model})
+    await verifySession()
     save({model:pin.model})
     const prompt=policy+'\nUSER INSTRUCTIONS:\n'+JSON.stringify(before.authority.instructions)+'\nASSIGNMENT:\n'+JSON.stringify(before.authority.assignment)+'\nWORKER REQUEST:\n'+JSON.stringify(request)
-    const response=unwrap(await hostReviewText(this.host,{model:{providerID:route.providerID,id:route.modelID,...(route.reasoning!=='unknown'?{variant:route.reasoning}:{})},prompt}))
+    const response=unwrap(await this.host.generate({sessionID:pin.reviewerSessionID,prompt}))
+    await verifySession()
     reserved.ledger.settle(reviewID,{state:'settled',completedAt:new Date().toISOString()});reserved=undefined
     const decision=parsePermissionReview(response.text,input.requestKey)
     const after=await snapshot()
