@@ -274,7 +274,7 @@ const worktrees = quests().flatMap(q => (parse(q, "sessions") ?? []).map((s: any
 const report: Record<string, unknown> = {
   ok: done,
   condition,
-  generation: (()=>{try{return JSON.parse(readFileSync(join(release,"plugin-activation.json"),"utf8")).evidence?.sourceCommit}catch{return undefined}})(),
+  generation: (()=>{try{return JSON.parse(readFileSync(join(release,"plugin-activation.json"),"utf8")).activeGeneration}catch{return undefined}})(),
   release,
   model,
   wallSeconds: +((finished - started) / 1000).toFixed(1),
