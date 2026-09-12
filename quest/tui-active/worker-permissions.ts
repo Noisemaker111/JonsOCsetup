@@ -3,7 +3,7 @@ import {questRoot} from '../root'
 import {userGiverID} from '../user-giver'
 import {activeSessionID} from '../../scripts/runtime-contract.mjs'
 import {boundedInspection} from '../worker-observation.mjs'
-import {permissionReplyInput,permissionSummary,workerSessionID} from '../worker-permissions'
+import {WorkerPermissions,permissionKey,permissionSummary,workerSessionID} from '../worker-permissions'
 import {readAllQuests} from '../index'
 import {redact} from '../privacy'
 import type {Quest,QuestSession} from '../types'
@@ -36,12 +36,7 @@ export async function reviewWorkerPermissions(context:any,questID?:string,runID?
   ]})
   if(choice==='worker'){context.ui.router.navigate({type:'session',sessionID:id});return}
   if(choice!=='once'&&choice!=='reject')return
-  const [worker,pending]=await Promise.all([
-   boundedInspection(signal=>context.client.session.get({sessionID:id},{signal})),
-   boundedInspection(signal=>context.client.permission.list({sessionID:id},{signal})),
-  ])
-  const input=permissionReplyInput({quest:new QuestStore(questRoot()).read(row.quest.id),runID:row.run.runID??row.run.callID,giverID:userGiverID(),activeID:activeSessionID(context),worker:unwrap(worker),shown:row.request,pending:unwrap(pending),reply:choice})
-  await context.client.permission.reply(input)
+  await new WorkerPermissions(new QuestStore(questRoot()),context.client.session,context.client.permission).reply(activeSessionID(context),{questID:row.quest.id,runID:row.run.runID??row.run.callID,requestID:row.request.id,requestKey:permissionKey(row.request),reply:choice,reason:'User chose '+(choice==='once'?'Allow once':'Reject and stop worker')+' in the Quest Giver.'},'user')
   context.data?.session?.permission?.invalidate?.(id)
   await context.data?.session?.permission?.sync?.(id)
  }catch(error){await dialog.alert({title:'Worker permission',message:redact(String(error),800)})}

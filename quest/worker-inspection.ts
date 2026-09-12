@@ -37,7 +37,9 @@ async function reconcile(store:QuestStore,host:any) {
    store.apply(entry.quest!.id,'session-state',{callID:run.callID,state:'failed',result:run.result,evidence:'Dispatch reported an outcome without binding a worker session; settled as failed so this step can be dispatched again on this Quest'},'quest:reconcile')
    continue
   }
-  const observation=await inspectWorker(host,run);observations[run.runID??run.callID]=observation
+  if(run.permissionDecisions?.some(d=>d.reply==='reject'&&d.state==='acknowledged'))try{await tracker.settlePermissionRejection(entry.quest!.id,run.runID!,host)}catch(error){observations[run.runID??run.callID]=observationFailure(error);continue}
+  const currentRun=store.read(entry.quest!.id)?.sessions.find(s=>s.callID===run.callID)??run
+  const observation=await inspectWorker(host,currentRun);observations[run.runID??run.callID]=observation
   if(observation.outcome&&observation.completedAt&&Date.parse(observation.completedAt)>=Date.parse(run.updatedAt))tracker.onHostEvent({type:'session.execution.'+observation.outcome,data:{sessionID:run.openCodeSessionId??run.sessionID,observedAt:observation.completedAt}})
  }
  }

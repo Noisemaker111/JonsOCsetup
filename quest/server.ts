@@ -1,3 +1,4 @@
+import {workerPermissionTool} from './worker-permissions'
 import {installWorkerInstructionReads} from './worker-instructions'
 import {cleanupQuests} from "./cleanup"
 import {connectHostObservation,disconnectHostObservation,recordHostObservation,registerHostObservation} from "./host-observation"
@@ -288,12 +289,12 @@ export function questTool(api = createQuestAgentAPI(questRoot())) {
   }
 }
 
-export async function installQuestTools(ctx: { tool?: { transform?: Function }; session?: any }, api = createQuestAgentAPI(questRoot())) {
+export async function installQuestTools(ctx: { tool?: { transform?: Function }; session?: any;permission?:any }, api = createQuestAgentAPI(questRoot())) {
   const transform = ctx?.tool?.transform
   if (typeof transform !== "function") return
   await transform((draft: { add: (tool: unknown) => void }) => {
     draft.add(ctx.session ? typedQuestTool(api.store, ctx.session) : questTool(api))
-    if(ctx.session){draft.add(nativeWorkspaceTool(api.store,ctx.session));draft.add(guidanceTool(api.store,ctx.session));draft.add(outcomeTool(api.store,ctx.session));draft.add(workSupplyTool(api.store,ctx.session))}
+    if(ctx.session){draft.add(workerPermissionTool(api.store,ctx.session,ctx.permission));draft.add(nativeWorkspaceTool(api.store,ctx.session));draft.add(guidanceTool(api.store,ctx.session));draft.add(outcomeTool(api.store,ctx.session));draft.add(workSupplyTool(api.store,ctx.session))}
   })
 }
 

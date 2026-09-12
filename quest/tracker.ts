@@ -1,3 +1,4 @@
+import {boundedInspection} from './worker-observation.mjs'
 import { readRequests } from "../usage/telemetry-api"
 import { aggregateTelemetry } from "../usage/telemetry-api"
 import { existsSync } from "node:fs"
@@ -345,14 +346,33 @@ export class QuestTracker {
       const error = data.error as { message?: unknown; data?: { message?: unknown } } | string | undefined
       const detail = typeof error === "string" ? error : typeof error?.message === "string" ? error.message : typeof error?.data?.message === "string" ? error.data.message : undefined
       const result = "Host reported execution " + type.split(".").pop() + (detail ? ": " + redact(detail, 2000) : "")
-      this.store.apply(ref.questID, "session-state", { callID: ref.session.callID, state: terminal, evidence: result, result }, "host:execution")
+      return this.settleWorker(data.sessionID,terminal,result,"host:execution",typeof data.observedAt==="string"?data.observedAt:undefined)
+    }
+  }
+  /** A rejected permission is an explicit cancellation, not a fabricated host execution event. */
+  async settlePermissionRejection(questID:string,runID:string,host:any) {
+    const run=this.store.read(questID)?.sessions.find(s=>s.runID===runID)
+    const decision=run?.permissionDecisions?.find(d=>d.reply==='reject'&&d.state==='acknowledged')
+    if(!run||!decision||!ACTIVE_SESSION.has(run.state))return
+    const sessionID=run.openCodeSessionId??run.sessionID
+    if(!sessionID||typeof host.wait!=='function')return
+    // Native wait means awaitIdle: it never starts or resumes work.
+    await boundedInspection(signal=>host.wait({sessionID},{signal}))
+    const fresh=this.store.read(questID)?.sessions.find(s=>s.runID===runID)
+    if(!fresh||(fresh.openCodeSessionId??fresh.sessionID)!==sessionID||!ACTIVE_SESSION.has(fresh.state)||!fresh.permissionDecisions?.some(d=>d.requestID===decision.requestID&&d.reply==='reject'&&d.state==='acknowledged'))return
+    return this.settleWorker(sessionID,'cancelled','Permission rejected by '+decision.actor+'. Owning host confirmed execution idle. '+decision.reason,'quest:permission-rejection')
+  }
+  private settleWorker(sessionID:string,terminal:'completed'|'failed'|'cancelled',result:string,actor:string,observedAt?:string) {
+    const ref=this.sessionIndex(0).get(sessionID)
+    if(!ref||!ACTIVE_SESSION.has(ref.session.state))return
+    this.store.apply(ref.questID, "session-state", { callID: ref.session.callID, state: terminal, evidence: result, result }, actor)
       if (ref.session.runID) {
-        try { const workspaces=new QuestWorkspaces(this.store.runtime);if(workspaces.get(ref.session.runID)){workspaces.collect(ref.session.runID);workspaces.releaseShared(ref.session.runID,this.store,"Observed host terminal outcome")} } catch(error) { console.error("[quests] Could not collect completed worker changes",error) }
+        try { const workspaces=new QuestWorkspaces(this.store.runtime);if(workspaces.get(ref.session.runID)){workspaces.collect(ref.session.runID);workspaces.releaseShared(ref.session.runID,this.store,result)} } catch(error) { console.error("[quests] Could not collect completed worker changes",error) }
         const file=dispatchReservationFile(this.store.runtime)
-        if(existsSync(file))try{const ledger=new RouteReservations(file),reservation=ledger.get(ref.session.runID),requests=readRequests().records.filter(r=>r.sessionID===data.sessionID);const currency=reservation?.cash?.currency;const cash=currency&&requests.length&&requests.every(r=>r.completedAt!==undefined&&r.actualCharge?.currency===currency&&Number.isFinite(r.actualCharge.value)&&r.actualCharge.value>=0)?{currency,value:aggregateTelemetry(requests).actualCharges[currency]}:undefined;ledger.settle(ref.session.runID,{state:"settled",completedAt:typeof data.observedAt==="string"?data.observedAt:new Date().toISOString(),cash})}catch(error){console.error("[quests] Could not settle route reservation",error)}
+        if(existsSync(file))try{const ledger=new RouteReservations(file),reservation=ledger.get(ref.session.runID),requests=readRequests().records.filter(r=>r.sessionID===sessionID);const currency=reservation?.cash?.currency;const cash=currency&&requests.length&&requests.every(r=>r.completedAt!==undefined&&r.actualCharge?.currency===currency&&Number.isFinite(r.actualCharge.value)&&r.actualCharge.value>=0)?{currency,value:aggregateTelemetry(requests).actualCharges[currency]}:undefined;ledger.settle(ref.session.runID,{state:"settled",completedAt:observedAt??new Date().toISOString(),cash})}catch(error){console.error("[quests] Could not settle route reservation",error)}
       }
       this.indexedAt = 0
       return "settled"
-    }
   }
+
 }

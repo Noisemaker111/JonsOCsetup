@@ -71,11 +71,12 @@ test('workspace snapshots preserve tracked ignored files without importing ignor
  }
 })
 
-import {permissionReplyInput,permissionSummary} from '../quest/worker-permissions'
+import {permissionReplyInput,permissionSummary,permissionKey} from '../quest/worker-permissions'
 test('giver decisions cannot approve another worker, changed requests, or persistent access',()=>{
  const session={...run,runID:'run',callID:'call',state:'executing',sessionID:'ses_worker'}
  const request={id:'permission',sessionID:'ses_worker',action:'external_directory',resources:['C:/fixture/*'],source:{type:'tool',id:'tool',messageID:'message'}}
  const input:any={quest:{state:'Working',sessions:[session]},runID:'run',giverID:'ses_giver',activeID:'ses_giver',worker:{...actual,id:'ses_worker'},shown:request,pending:[request],reply:'once'}
+ expect(permissionKey(request)).not.toBe(permissionKey({...request,source:{...request.source,id:'another-tool'}}))
  expect(permissionReplyInput(input)).toEqual({sessionID:'ses_worker',requestID:'permission',reply:'once'})
  expect(permissionReplyInput({...input,reply:'reject'}).reply).toBe('reject')
  for(const change of [{activeID:'ses_other'},{giverID:undefined},{runID:'other'},{pending:[]},{reply:'always'},{worker:{...input.worker,id:'ses_other'}},{pending:[{...request,resources:['C:/*']}]},{quest:{state:'Archived',sessions:[session]}},{worker:{...input.worker,model:{...actual.model,variant:'medium'}}}])expect(()=>permissionReplyInput({...input,...change})).toThrow()
@@ -102,4 +103,15 @@ test('worker setup reads cover only real instruction files in explicitly assigne
   if(!target.toLowerCase().startsWith((allowed+'\\quest-instruction-').toLowerCase()))throw Error('Unexpected test cleanup target')
   rmSync(target,{recursive:true,force:true})
  }
+})
+
+import {observeWorker} from '../quest/worker-observation.mjs'
+test('recorded rejection is cancellation only after acknowledged reply and confirmed idle',()=>{
+ const rejected={state:'cancelled',permissionDecisions:[{requestID:'request',reply:'reject',state:'acknowledged'}],result:'Permission rejected by giver; owning host confirmed idle'}
+ expect(observeWorker({}, {active:false,expected:rejected}).state).toBe('interrupted')
+ expect(observeWorker({}, {active:true,expected:rejected}).state).toBe('running')
+ expect(observeWorker({}, {expected:rejected}).state).toBe('unknown')
+ expect(observeWorker({}, {active:false,expected:{...rejected,state:'executing'}}).state).toBe('unknown')
+ expect(observeWorker({}, {active:false,expected:{...rejected,permissionDecisions:[{reply:'reject',state:'unknown'}]}}).state).toBe('unknown')
+ expect(observeWorker({}, {active:false,expected:rejected}).outcome).toBeUndefined()
 })
