@@ -145,6 +145,14 @@ function retireReleasesLocked(repository){
   if(!existsSync(file)){results.push({root,removed:false,reason:'No release ownership receipt'});continue}
   const release=read(file)
   if(release.cleanupProtocol!==1){results.push({root,removed:false,reason:'Older release has no complete process lifetime record'});continue}
+  // A release built by trying a branch records the ref it belongs to. Judging it against
+  // origin/agents would keep an unmerged candidate forever, so its own ref decides -- and while it
+  // is still that ref's tip it is what the next try of that branch reuses, so it is kept.
+  const integration=release.integrationRef??'refs/remotes/origin/agents'
+  if(release.integrationRef){
+   let tip;try{tip=git(repository,['rev-parse','--verify',integration+'^{commit}'])}catch{tip=undefined}
+   if(tip===release.commit){results.push({root,removed:false,reason:'Still the tip of '+integration+'; the next try of that ref reuses this preparation'});continue}
+  }
   if(!within(dir,realpathSync(root))||pathKey(root)!==pathKey(realpathSync(root))||pathKey(release.root)!==pathKey(root)||release.channel!=='dev')throw Error('Release ownership mismatch')
   const records=launchRecords(root)
   if(records.some(r=>!r.record.releaseLease)){results.push({root,removed:false,reason:'A launch has no process lifetime lease; ownership review required'});continue}
@@ -165,7 +173,7 @@ function retireReleasesLocked(repository){
   try{
    const evidence=join(registry,'retired-evidence',entry.name)
    for(const name of ['run','.visual-e2e'])if(existsSync(join(root,name)))preserveTree(join(root,name),join(evidence,name))
-   const result=removeIntegratedWorktree({root:repository,path:root,head:release.commit,ref:'refs/remotes/origin/agents',allowedIgnored:['node_modules/','generations/','.candidates/','.cache/','run/','.visual-e2e/','plugin-activation.json','channel-release.json']})
+   const result=removeIntegratedWorktree({root:repository,path:root,head:release.commit,ref:integration,allowedIgnored:['node_modules/','generations/','.candidates/','.cache/','run/','.visual-e2e/','plugin-activation.json','channel-release.json']})
    atomic(join(registry,'retirements',entry.name+'.json'),{root,evidence,...result,at:new Date().toISOString()});results.push({root,...result})
   }catch(error){results.push({root,removed:false,reason:String(error)})}
  }
