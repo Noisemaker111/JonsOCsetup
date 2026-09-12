@@ -23,7 +23,10 @@ export async function inspectWorker(host:any, run:QuestSession):Promise<any> {
 async function reconcile(store:QuestStore,host:any) {
  const tracker=new QuestTracker(store,host),observations:Record<string,any>={}
  for(const entry of readAllQuests(store.projectRoot,{includeArchived:true})){
-  if(entry.quest&&entry.quest.state!=='Archived')for(const update of terminalStepUpdates(entry.quest))store.apply(entry.quest.id,'stage-state',update,'quest:terminal-step-reconcile')
+  let current=entry.quest
+  if(current&&current.state!=='Archived')for(const update of terminalStepUpdates(current)) {
+   current=store.apply(current.id,'stage-state',update,'quest:terminal-step-reconcile',{expectedRevision:current.revision})
+  }
   for(const run of entry.quest?.sessions??[]){
   if(!['planned','executing','waiting','blocked'].includes(run.state))continue
   // A planned run that already reported a dispatch outcome and never bound a worker session has
