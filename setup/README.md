@@ -1,6 +1,6 @@
 # Tracked personal setup
 
-`manifest.json` maps 154 external instruction, configuration, skill and helper files to their tracked sources, covering every harness that reads instructions on this machine: hub, Codex and Claude Code instructions, `.codex/config.toml` and its command rules, `.claude/settings.json`, shared active and disabled skills, and personal helper scripts. Most OpenCode extensions already live in their owner directories at repository root.
+`manifest.json` maps 153 external instruction, configuration, skill and helper files to their tracked sources, covering every harness that reads instructions on this machine: hub, Codex and Claude Code instructions, `.codex/config.toml` and its command rules, `.claude/settings.json`, shared active and disabled skills, and personal helper scripts. Most OpenCode extensions already live in their owner directories at repository root.
 
 Upstream skills that are their own checkouts are pinned under `dependencies` by origin and commit rather than copied, so this tree does not republish another project's repository or bury real configuration under vendored files.
 

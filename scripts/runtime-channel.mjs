@@ -2,11 +2,10 @@ import {retireReleases} from './release-retirement.mjs'
 import {prepareDevRelease, resolveRef, envFor as channelEnv, atomic, run, git as gitIn} from './channel-prepare.mjs'
 import {retryFinishedWorktrees} from './worktree-cleanup.mjs'
 /** Explicit, isolated OpenCode2 release channels. No host updates, mirror publishing, or stable activation. */
-import { existsSync, mkdirSync, readFileSync, writeFileSync, realpathSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, realpathSync, rmSync } from 'node:fs'
 import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { homedir } from 'node:os'
-import { createHash } from 'node:crypto'
 const source = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const args = process.argv.slice(2), action = args.shift(), channel = args.shift()
 const option = name => { const at=args.indexOf(name); return at < 0 ? undefined : args[at+1] }
@@ -35,19 +34,19 @@ if(action==='prepare'){
   if(!report.ok||report.root!==root||report.sourceCommit!==release.commit||report.runs?.length!==2||report.runs.some(r=>!r.ok||!r.automaticReturn||!r.screenshots?.length))throw Error('Two real automatic-return runs with captures are required for this release')
   if(pointer.evidence?.ok!==true||pointer.evidence.sourceCommit!==release.commit)throw Error('Candidate validation does not match source')
   const path=join(registry,'dev.json'),previous=existsSync(path)?read(path):undefined
-  const skillPath=join(homedir(),'.agents','skills','opencode-dev-workflow','SKILL.md')
-  const skill=readFileSync(join(root,'skills/opencode-dev-workflow/SKILL.md'),'utf8')
-  const skillReceipt=join(registry,'installed-workflow.json'),hash=value=>createHash('sha256').update(value).digest('hex')
-  const independentSkill=existsSync(skillPath)&&readFileSync(skillPath,'utf8')!==skill&&(!existsSync(skillReceipt)||read(skillReceipt).hash!==hash(readFileSync(skillPath,'utf8')))
-  if(independentSkill)console.warn('Existing workflow skill has independent changes; preserving it while activating the runtime.')
-  else{
-    mkdirSync(dirname(skillPath),{recursive:true});writeFileSync(skillPath,skill)
-    atomic(skillReceipt,{path:skillPath,hash:hash(skill),sourceCommit:release.commit})
-  }
+  // Activation used to install a workflow skill into ~/.agents. Jon did not know it existed, and a
+  // file rewritten by a runtime step is a file whose corrections keep getting lost -- this one was
+  // reworded twice before the wording reached the repository. The few rules that mattered are in
+  // AGENTS.md, where they are read without a skill having to match, and the mechanics stay in
+  // docs/development-workflow.md. Any copy left from an earlier activation is removed here.
+  const retiredSkill=join(homedir(),'.agents','skills','opencode-dev-workflow')
+  const retiredReceipt=join(registry,'installed-workflow.json')
+  if(existsSync(retiredSkill))rmSync(retiredSkill,{recursive:true,force:true})
+  if(existsSync(retiredReceipt))rmSync(retiredReceipt,{force:true})
   writeFileSync(join(registry,'start.mjs'),"import {readFileSync} from 'node:fs';import {dirname,join} from 'node:path';import {fileURLToPath,pathToFileURL} from 'node:url';const root=JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)),'dev.json'),'utf8')).root;process.argv.splice(2,0,'start');await import(pathToFileURL(join(root,'scripts/runtime-channel.mjs')).href);\n")
   atomic(path,{...release,generation:pointer.activeGeneration,evidence:reportPath,previous:previous?{...previous,previous:undefined}:undefined,activatedAt:new Date().toISOString()})
   await run('node',[join(root,'scripts/install-channel-shortcuts.mjs')],root,process.env)
-  console.log(JSON.stringify({active:true,channel,root,commit:release.commit,workflowSkill:independentSkill?'independent edits preserved':'installed',existingSessions:'unchanged',cleanup:{tasks:retryFinishedWorktrees(repository),releases:retireReleases(repository)}},null,2))
+  console.log(JSON.stringify({active:true,channel,root,commit:release.commit,existingSessions:'unchanged',cleanup:{tasks:retryFinishedWorktrees(repository),releases:retireReleases(repository)}},null,2))
 }else if(action==='status'){
   console.log(JSON.stringify(channel==='dev'?(existsSync(join(registry,'dev.json'))?read(join(registry,'dev.json')):{active:false}):{channel,root:runtimeHome,activation:read(join(runtimeHome,'plugin-activation.json'))},null,2))
 }else if(action==='start'){

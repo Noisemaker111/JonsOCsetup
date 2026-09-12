@@ -171,12 +171,6 @@
       "importedFrom": ".agents/skills/help-i-cant-work-right/SKILL.md"
     },
     {
-      "source": "setup/files/.agents/skills/opencode-dev-workflow/SKILL.md",
-      "target": ".agents/skills/opencode-dev-workflow/SKILL.md",
-      "sha256": "689b4cf9f80a13ca6c112095817f4bccc3cc801c09383b2ab07cded67250705f",
-      "importedFrom": ".agents/skills/opencode-dev-workflow/SKILL.md"
-    },
-    {
       "source": "setup/files/.agents/skills/README.md",
       "target": ".agents/skills/README.md",
       "sha256": "32c6596f492d16587692f7b5792e36c53dab7cb681ace03947ee36463100b206",
