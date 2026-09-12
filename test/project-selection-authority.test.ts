@@ -12,6 +12,7 @@ import {giverContext,selectUserGiverProject} from '../quest/user-giver'
 import {RouterMemory} from '../project-router/memory'
 import {verifyTarget,resolveTargets} from '../project-router/resolution'
 import {installProjectRouter} from '../project-router/server'
+import {DiscoveryHost} from '../project-router/host'
 const sessionID='ses_selectioncheck'
 const fixture=()=>{
  const root=mkdtempSync(join(tmpdir(),'selection-authority-')),prior=process.env.OPENCODE_QUEST_ROOT
@@ -43,7 +44,7 @@ test('a failed correction blocks new creation, leaves existing Quest destination
  const f=fixture();let dispose:(()=>void)|undefined
  try{
   const operations=new Map<string,any>()
-  dispose=await installProjectRouter({storage:f.storage,tool:{transform:async(fn:Function)=>fn({add:(op:any)=>operations.set(op.name,op)})},session:{get:async()=>f.session,create:async()=>{throw Error('Selection must never create a conversation')},prompt:async()=>{},hook:async()=>{}}})
+  dispose=await installProjectRouter({storage:f.storage,tool:{transform:async(fn:Function)=>fn({add:(op:any)=>operations.set(op.name,op)})},session:{get:async()=>f.session,create:async()=>{throw Error('Selection must never create a conversation')},prompt:async()=>{},hook:async()=>{}}},new DiscoveryHost('unused',async()=>{throw Error('Selection does not use host discovery')}))
   const call=(input:any)=>operations.get('project_select').execute(input,{sessionID,id:'selection-call'})
   const selected=await call({action:'pin',selectors:[f.a]})
   expect(selected.output.targets[0].directory).toBe(verifyTarget(f.a).directory)
