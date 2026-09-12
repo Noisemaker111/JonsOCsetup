@@ -126,21 +126,7 @@ export function subagentChipLabel(quest: Quest, session: QuestSession): string {
  * Terminal states (completed/failed/cancelled/missing/stale) never show
  * here — a live status line is for work happening right now.
  */
-const LIVE_STATE: Record<string, { label: string; emoji: string }> = {
-  executing: { label: "Running", emoji: "🟢" },
-  waiting: { label: "Waiting", emoji: "🟡" },
-  blocked: { label: "Blocked", emoji: "🔴" },
-  planned: { label: "Planned", emoji: "⚪" },
-}
-
-/**
- * Short-title form for the footer: trim a quest title to at most `max`
- * characters, cutting only at a word boundary and marking the cut with a
- * single "…" — never mid-word. A single word longer than the budget is the
- * only case that hard-cuts (nothing else fits). The footer row keeps
- * `truncate` as a backstop, but a pre-fit line never reaches it, so the host
- * can no longer slice a word in half ("plugin f...2").
- */
+/** Fit board summaries at word boundaries, with an ellipsis when shortened. */
 export function fitTitle(title: string, max: number): string {
   const clean = title.replace(/\s+/g, " ").trim()
   if (max <= 1) return "…"
@@ -154,48 +140,6 @@ export function fitTitle(title: string, max: number): string {
   }
   if (!out) out = clean.slice(0, max - 1)
   return `${out}…`
-}
-
-/** Footer rows are capped so the live block never collides with the composer hint row. */
-export const FOOTER_MAX_LINES = 2
-
-/** Real footer width from the live renderer; falls back to a narrow 80-col budget. */
-export function footerWidth(context: any): number {
-  const raw = context?.renderer?.width ?? context?.ui?.renderer?.width
-  return Math.max(40, (typeof raw === "number" && raw > 0 ? raw : 80) - 2)
-}
-
-/**
- * One line, straight off the ledger: `<emoji> <State> — <short title> —
- * <model>[, <reasoning>][, fast]`. The title is pre-fit to `maxWidth` at a
- * word boundary, so the whole-line ellipsis is the only cut — never mid-word.
- * A session with no model/reasoning yet omits those parts instead of leaking
- * a raw "model pending"/"reasoning pending" placeholder onto the face.
- */
-export function workerStatusLine(quest: Quest, session: QuestSession, maxWidth = 120): string | undefined {
-  const state = LIVE_STATE[session.state]
-  if (!state) return undefined
-  const model = session.providerID && session.modelID ? `${session.providerID}/${session.modelID}` : session.model
-  const details = [model, session.reasoningEffort].filter(Boolean) as string[]
-  if (session.fast) details.push("fast")
-  const head = `${state.emoji} ${state.label} — `
-  const tail = details.length ? ` — ${details.join(", ")}` : ""
-  return `${head}${fitTitle(quest.title, Math.max(1, maxWidth - head.length - tail.length))}${tail}`
-}
-
-/** One footer row: the rendered line, paired with the one Quest it is 1:1 with — click it and you land on that Quest, nothing else. */
-export type LiveWorkerLine = { questID: string; line: string }
-
-/** Every live worker line across every Quest, newest quest first — the whole board's live status, teleported. Capped at `maxLines` (default 2) so the footer block stays clear of the composer hint row. */
-export function liveWorkerLines(quests: Quest[], maxWidth = 120, maxLines = FOOTER_MAX_LINES): LiveWorkerLine[] {
-  return quests
-    .slice()
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .flatMap((quest) => quest.sessions
-      .map((session) => workerStatusLine(quest, session, maxWidth))
-      .filter((line): line is string => line !== undefined)
-      .map((line) => ({ questID: quest.id, line })))
-    .slice(0, Math.max(0, maxLines))
 }
 
 /** The id worth showing/clicking: short enough for a footer row, long enough to be unambiguous. */

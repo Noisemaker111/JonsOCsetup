@@ -542,15 +542,13 @@ function useContextGauge(context: any, sessionTotals = false) {
   return { text, pct }
 }
 
-// Session token totals. The Quest count and the Quest Log belong to the quests
-// plugin, which owns its own slots; this footer used to duplicate both, which
-// reached across a plugin boundary and rendered the count twice once quests
-// mounted its own chrome.
-export function ContextFooter(props: { context: any }) {
+// Cumulative session counters have their own row above the composer. The native
+// footer retains its request context, command shortcut and directory controls.
+export function SessionUsage(props: { context: any }) {
   const context: any = props.context
   const { text: usage } = useContextGauge(context,true)
   const colors = themeColors(context)
-  return <text fg={colors.muted} wrapMode="none" truncate aria-label="Open usage details" onMouseUp={(event: any) => activateOnMouseUp(event, () => openDialog(context, () => <UsageDialog context={context} />))}>↓ {usage()}</text>
+  return <text fg={colors.muted} width="100%" flexShrink={0} wrapMode="word" aria-label="Open usage details" onMouseUp={(event: any) => activateOnMouseUp(event, () => openDialog(context, () => <UsageDialog context={context} />))}>↓ {usage()}</text>
 }
 
 // Cockpit header (variation C): the current session's context gauge, mounted
@@ -687,12 +685,12 @@ export default Plugin.define({
       console.error("[usage] ui.slot(app) failed", error)
     }
     try {
-      context.ui.slot({ append: "prompt.footer", render: () => <ContextFooter context={context} /> })
-      dbg("ui.slot(prompt.footer) ok")
+      context.ui.slot({ append: "session.composer.top", render: () => <SessionUsage context={context} /> })
+      dbg("ui.slot(session.composer.top) ok")
     } catch (error) {
       const text = error instanceof Error ? (error.stack ?? error.message) : String(error)
-      dbg(`ui.slot(prompt.footer) failed: ${text}`)
-      console.error("[usage] ui.slot(prompt.footer) failed", error)
+      dbg(`ui.slot(session.composer.top) failed: ${text}`)
+      console.error("[usage] ui.slot(session.composer.top) failed", error)
     }
   },
 })
