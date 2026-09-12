@@ -50,7 +50,7 @@ if(action==='prepare'){
 }else if(action==='start'){
   const root=channel==='stable'?runtimeHome:read(join(registry,'dev.json')).root
   const env=envFor(root,channel)
-  if(channel==='dev'&&!args.includes('--model'))args.push('--model',read(join(registry,'dev.json')).model)
+  if(channel==='dev'&&!args.includes('--model')&&!args.includes('--session')&&!args.includes('-s'))args.push('--model',read(join(registry,'dev.json')).model)
   const supervisor=join(source,'scripts/opencode-runtime.mjs')
   // Automation wants the relayed transcript on this process's pipes, so it keeps its own node.
   // An interactive start runs the supervisor here instead: one process between the console and
