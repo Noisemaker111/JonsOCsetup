@@ -8,11 +8,13 @@ import {mkdirSync,readFileSync,writeFileSync,appendFileSync,existsSync} from 'no
 import {join,resolve} from 'node:path'
 import {freePort} from './plugin-deploy'
 import {driveEnvironment,driveIdentity} from './drive-isolation'
+import {settleBounds,settleOutcome} from './drive-settle'
 
 const option=(name:string)=>{const i=process.argv.indexOf(name);return i<0?undefined:process.argv[i+1]}
 if(process.argv.includes('--help')){
  console.log('bun run runtime:drive -- --config-root <prepared release> --cwd <project> --model <exact route> --out <new evidence directory> [--agent quest-giver] [--auto] [--live]')
- console.log('Append one JSON command per line to commands.jsonl: paste {text}; key {name,ctrl?,shift?,option?,meta?}; raw {hex}; click {x,y,button?}; scroll {x,y,direction}; capture {name}; stop. Coordinates are 1-based terminal cells. Paste does not submit; send key name=return separately. Captures render actual terminal output, never app source.')
+ console.log('Append one JSON command per line to commands.jsonl: paste {text}; key {name,ctrl?,shift?,option?,meta?}; raw {hex}; click {x,y,button?}; scroll {x,y,direction}; settle {quiet_ms?,timeout_ms?}; capture {name}; stop. Coordinates are 1-based terminal cells. Paste does not submit; send key name=return separately. Captures render actual terminal output, never app source.')
+ console.log('The queue runs every line appended to it, in order, so append a whole scenario at once and put settle between the input and the capture that should show its result. settle waits until the host has printed nothing for quiet_ms (default 2500, timeout_ms default 180000) and records settled true or false in actions.jsonl, so a caller never has to poll this process to find out whether the turn finished.')
  console.log('key encodes through this embedded terminal, which answers the host\'s kitty keyboard query and then reports modifiers, so key never reproduces a terminal that lacks that protocol. raw {hex} writes the exact bytes such a terminal sends -- Windows Terminal Ctrl-Backspace is raw {"hex":"08"} and ordinary Backspace raw {"hex":"7f"}.')
  process.exit(0)
 }
@@ -54,9 +56,9 @@ const identity=driveIdentity({attaching:!!session,model:option('--model'),agent:
 const child=spawn('node',[join(root,'scripts/opencode-runtime.mjs'),'--config-root',root,'--json',...(process.argv.includes('--auto')?['--auto']:[]),'--cwd',cwd,...identity,...(session?['--session',session]:[]),'--cols',String(cols),'--rows',String(rows)],{cwd:root,env,windowsHide:true,stdio:['pipe','pipe','pipe']})
 const send=(data:string|Buffer)=>child.stdin.write(JSON.stringify({type:'write',data:Buffer.from(data as any).toString('base64')})+'\n')
 terminal.onData=data=>send(Buffer.from(data).toString())
-let buffer='',seen=0,busy=false,done=false,stopping=false
+let buffer='',seen=0,busy=false,done=false,stopping=false,lastOutput=Date.now()
 const events:any[]=[]
-child.stdout.on('data',part=>{buffer+=part;for(;;){const n=buffer.indexOf('\n');if(n<0)break;const line=buffer.slice(0,n);buffer=buffer.slice(n+1);try{const event=JSON.parse(line);if(event.type==='data'){const raw=Buffer.from(event.data,'base64').toString();terminal.write(raw);appendFileSync(join(out,'terminal.ansi'),raw)}else{events.push(event);console.log(JSON.stringify(event));writeFileSync(join(out,'events.json'),JSON.stringify(events,null,2))}}catch{appendFileSync(join(out,'errors.txt'),line+'\n')}}})
+child.stdout.on('data',part=>{buffer+=part;for(;;){const n=buffer.indexOf('\n');if(n<0)break;const line=buffer.slice(0,n);buffer=buffer.slice(n+1);try{const event=JSON.parse(line);if(event.type==='data'){const raw=Buffer.from(event.data,'base64').toString();lastOutput=Date.now();terminal.write(raw);appendFileSync(join(out,'terminal.ansi'),raw)}else{events.push(event);console.log(JSON.stringify(event));writeFileSync(join(out,'events.json'),JSON.stringify(events,null,2))}}catch{appendFileSync(join(out,'errors.txt'),line+'\n')}}})
 child.stderr.on('data',part=>appendFileSync(join(out,'errors.txt'),part))
 child.on('error',error=>{console.error(String(error));finish(1)})
 function finish(code:number){if(done)return;done=true;clearInterval(timer);terminal.onData=undefined;terminal.destroy();canvas.renderer.destroy();console.log(JSON.stringify({exit:code,out}));process.exit(code)}
@@ -81,6 +83,14 @@ async function command(c:any){
   const button=c.action==='scroll'?(c.direction==='up'?64:c.direction==='down'?65:-1):(c.button??0)
   if(![0,1,2,64,65].includes(button))throw Error('Invalid mouse button or scroll direction')
   send(`\x1b[<${button};${c.x};${c.y}M`);if(c.action==='click')send(`\x1b[<${button};${c.x};${c.y}m`)
+ }else if(c.action==='settle'){
+  const bounds=settleBounds(c),deadline=Date.now()+bounds.limit
+  for(;;){
+   if(done)throw Error('The drive ended while settling')
+   const result=settleOutcome(bounds,lastOutput,Date.now(),deadline)
+   if(result){console.log(JSON.stringify(result));return result}
+   await new Promise(r=>setTimeout(r,Math.min(250,bounds.quiet)))
+  }
  }else if(c.action==='capture'){
   if(typeof c.name!=='string'||! /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(c.name))throw Error('Use a simple unique capture name')
   const path=join(out,c.name);if(existsSync(path+'.png')||existsSync(path+'.txt'))throw Error('Capture already exists')
@@ -90,5 +100,5 @@ async function command(c:any){
  }else if(c.action==='stop'){stopping=true;child.stdin.write(JSON.stringify({type:'stop'})+'\n')}
  else throw Error('Unknown terminal action')
 }
-const timer=setInterval(async()=>{if(busy||done)return;busy=true;try{const lines=readFileSync(queue,'utf8').split('\n');lines.pop();while(seen<lines.length){const line=lines[seen++];if(!line.trim())continue;try{await command(JSON.parse(line));appendFileSync(join(out,'actions.jsonl'),JSON.stringify({line:seen,ok:true,at:new Date().toISOString()})+'\n')}catch(error){const result={line:seen,ok:false,error:String(error)};console.error(JSON.stringify(result));appendFileSync(join(out,'actions.jsonl'),JSON.stringify(result)+'\n');break}}}finally{busy=false}},250)
+const timer=setInterval(async()=>{if(busy||done)return;busy=true;try{const lines=readFileSync(queue,'utf8').split('\n');lines.pop();while(seen<lines.length){const line=lines[seen++];if(!line.trim())continue;try{const detail=await command(JSON.parse(line));appendFileSync(join(out,'actions.jsonl'),JSON.stringify({line:seen,ok:true,...detail,at:new Date().toISOString()})+'\n')}catch(error){const result={line:seen,ok:false,error:String(error)};console.error(JSON.stringify(result));appendFileSync(join(out,'actions.jsonl'),JSON.stringify(result)+'\n');break}}}finally{busy=false}},250)
 console.log(JSON.stringify({commands:queue,out,root,cwd,model,cols,rows}))
