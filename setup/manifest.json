@@ -5,7 +5,7 @@
     {
       "source": "setup/files/Projects/opencode-hub/AGENTS.md",
       "target": "Projects/opencode-hub/AGENTS.md",
-      "sha256": "c4c7763e804d236f4210799f290d0489529eb4738d69709934a4858ee41d3498",
+      "sha256": "9c18ee8f6bb7b6ca1701e7012a23f6b0ef5c9955ea099cc04689c5e0c8d57fef",
       "importedFrom": "Projects/opencode-hub/AGENTS.md"
     },
     {
@@ -15,10 +15,22 @@
       "importedFrom": "Projects/opencode-hub/CLAUDE.md"
     },
     {
+      "source": "setup/files/Projects/opencode-hub/MEMORY.md",
+      "target": "Projects/opencode-hub/MEMORY.md",
+      "sha256": "f9bf749c590369c19173216aa82fec766870c0e73f97e0dde415f1786069cca1",
+      "importedFrom": "Projects/opencode-hub/MEMORY.md"
+    },
+    {
       "source": "setup/files/.agents/matt-pocock.md",
       "target": ".agents/matt-pocock.md",
       "sha256": "8ccacd0bbeea8c578ab0f82e255a33a5ef56c43ab102c6d4ac7ea324e6782ad0",
       "importedFrom": ".agents/matt-pocock.md"
+    },
+    {
+      "source": "docs/user-verification.md",
+      "target": ".agents/user-verification.md",
+      "sha256": "3cddf22347e67df60aad2e04eda8afa9bbb488724a35ed2d192131fa3335cc54",
+      "importedFrom": ".agents/user-verification.md"
     },
     {
       "source": "setup/files/.agents/.skill-lock.json",
@@ -33,12 +45,6 @@
       "importedFrom": ".agents/plugins/marketplace.json"
     },
     {
-      "source": "setup/files/.agents/quest-api.mjs",
-      "target": ".agents/quest-api.mjs",
-      "sha256": "3a07d2024560e49acb4881a2330a0f480024f57948e0701bf7000d5b84848e51",
-      "importedFrom": ".agents/quest.mjs"
-    },
-    {
       "source": "setup/files/.agents/quest.mjs",
       "target": ".agents/quest.mjs",
       "sha256": "2bfdd942b8c374d185b6a4d3e95bc17050a1e5ac4b69f76661eda9d6fa1d125a",
@@ -51,10 +57,34 @@
       "importedFrom": ".agents/quest-draft.mjs"
     },
     {
+      "source": "setup/files/.agents/quest-api.mjs",
+      "target": ".agents/quest-api.mjs",
+      "sha256": "3a07d2024560e49acb4881a2330a0f480024f57948e0701bf7000d5b84848e51",
+      "importedFrom": ".agents/quest-api.mjs"
+    },
+    {
       "source": "setup/files/.codex/AGENTS.md",
       "target": ".codex/AGENTS.md",
-      "sha256": "c7ca17f7e81db39245d7b48bb00f2c1df019cb879bc0f1cd57042cef5e3db239",
+      "sha256": "bcfd8d809d3788accf0d696f5b794187bae7176fa02188db7fe4f32cf37614b6",
       "importedFrom": ".codex/AGENTS.md"
+    },
+    {
+      "source": "setup/files/.codex/config.toml",
+      "target": ".codex/config.toml",
+      "sha256": "5f5881822ffed0cdd4df86fa0edda50fd4d9f8d48d337f069244f94bedb377fb",
+      "importedFrom": ".codex/config.toml"
+    },
+    {
+      "source": "setup/files/.claude/CLAUDE.md",
+      "target": ".claude/CLAUDE.md",
+      "sha256": "fd00063e9e0d08f4a3f911e7e1793d1a4dbfc89136e5a7ce29e54ca5afd49cc4",
+      "importedFrom": ".claude/CLAUDE.md"
+    },
+    {
+      "source": "setup/files/.claude/settings.json",
+      "target": ".claude/settings.json",
+      "sha256": "fe0eeec4262938270db9e0a98b5a78e5c3f054d8b020cdfda33d99bfe9ed283d",
+      "importedFrom": ".claude/settings.json"
     },
     {
       "source": "setup/files/.agents/scripts/apply-matt-pocock-preferences.ps1",
@@ -87,6 +117,42 @@
       "importedFrom": ".codex/skills/convex-deploy-guard/SKILL.md"
     },
     {
+      "source": "setup/files/.codex/rules/default.rules",
+      "target": ".codex/rules/default.rules",
+      "sha256": "3455aef0455a525519617708bdddc315364d0681d08ff13cdca8bfae1978968a",
+      "importedFrom": ".codex/rules/default.rules"
+    },
+    {
+      "source": "setup/files/.agents/skills/agents-and-main/agents/openai.yaml",
+      "target": ".agents/skills/agents-and-main/agents/openai.yaml",
+      "sha256": "801c2c2c1a018ca9fa46a1d49c90a5151d1d38e6dbd01356f64a39f1e4775a03",
+      "importedFrom": ".agents/skills/agents-and-main/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills/agents-and-main/references/project-policy.md",
+      "target": ".agents/skills/agents-and-main/references/project-policy.md",
+      "sha256": "5dcf6282f60ebd147d47d13b8f20a3405296f64e0a874e91c7da00a6243806a0",
+      "importedFrom": ".agents/skills/agents-and-main/references/project-policy.md"
+    },
+    {
+      "source": "setup/files/.agents/skills/agents-and-main/scripts/install.ps1",
+      "target": ".agents/skills/agents-and-main/scripts/install.ps1",
+      "sha256": "516e1c1ada037fc4b5a0aceb3baf2b30695b96350ed76f3072ee72afb3e4e583",
+      "importedFrom": ".agents/skills/agents-and-main/scripts/install.ps1"
+    },
+    {
+      "source": "setup/files/.agents/skills/agents-and-main/scripts/sb.ps1",
+      "target": ".agents/skills/agents-and-main/scripts/sb.ps1",
+      "sha256": "68d2532259c69024ae89d3ae330633fae80dbd81c341a8df39564289a227139b",
+      "importedFrom": ".agents/skills/agents-and-main/scripts/sb.ps1"
+    },
+    {
+      "source": "setup/files/.agents/skills/agents-and-main/SKILL.md",
+      "target": ".agents/skills/agents-and-main/SKILL.md",
+      "sha256": "cbce6a890869a691d901bbb69be85c341035b9c0c60ac71f0fe8f26de9e74a61",
+      "importedFrom": ".agents/skills/agents-and-main/SKILL.md"
+    },
+    {
       "source": "skills/github/SKILL.md",
       "target": ".agents/skills/github/SKILL.md",
       "sha256": "7bd1c2dffb6ebfc1f7277670f1941f1905444d6d140fd21e1a5cb6321448b8d5",
@@ -107,7 +173,7 @@
     {
       "source": "setup/files/.agents/skills/opencode-dev-workflow/SKILL.md",
       "target": ".agents/skills/opencode-dev-workflow/SKILL.md",
-      "sha256": "7bf76f70300db9faccfef4f432c0ba7242dd74bedb5e51a2f3f782aefb7d018f",
+      "sha256": "689b4cf9f80a13ca6c112095817f4bccc3cc801c09383b2ab07cded67250705f",
       "importedFrom": ".agents/skills/opencode-dev-workflow/SKILL.md"
     },
     {
@@ -115,6 +181,24 @@
       "target": ".agents/skills/README.md",
       "sha256": "32c6596f492d16587692f7b5792e36c53dab7cb681ace03947ee36463100b206",
       "importedFrom": ".agents/skills/README.md"
+    },
+    {
+      "source": "setup/files/.agents/skills/skill-maker/agents/openai.yaml",
+      "target": ".agents/skills/skill-maker/agents/openai.yaml",
+      "sha256": "047ac245eb81058a71ca2da86df32c0343cf36bae00c30c2835a872eb7215204",
+      "importedFrom": ".agents/skills/skill-maker/agents/openai.yaml"
+    },
+    {
+      "source": "setup/files/.agents/skills/skill-maker/references/publish-skills-sh.md",
+      "target": ".agents/skills/skill-maker/references/publish-skills-sh.md",
+      "sha256": "2f192de84b4e5409e6867a54bdcc2d20305d10afb515a226bf06334265467a28",
+      "importedFrom": ".agents/skills/skill-maker/references/publish-skills-sh.md"
+    },
+    {
+      "source": "setup/files/.agents/skills/skill-maker/SKILL.md",
+      "target": ".agents/skills/skill-maker/SKILL.md",
+      "sha256": "d17605e2cba91a3d20ad3f2269b2b8c89c9b761f1337aa480794a31dad13708c",
+      "importedFrom": ".agents/skills/skill-maker/SKILL.md"
     },
     {
       "source": "setup/files/.agents/skills/web-artifacts-builder/LICENSE.txt",
@@ -149,7 +233,7 @@
     {
       "source": "skills/windows-shell/SKILL.md",
       "target": ".agents/skills/windows-shell/SKILL.md",
-      "sha256": "b6dd2d17d56f0ec952e29e856bec4a06db65d4456451d511363e04b926b2dac2",
+      "sha256": "dc6855fa2ead554588928b468accc021667c2ffd59ccf462f2abd87432a23bd8",
       "importedFrom": ".agents/skills/windows-shell/SKILL.md"
     },
     {
@@ -841,22 +925,6 @@
       "target": ".agents/skills-disabled/wizard/template.sh",
       "sha256": "33cbe9dfb1d0e9185b60248a52aabed14bc64785a00cac695e302e739dd6c153",
       "importedFrom": ".agents/skills-disabled/wizard/template.sh"
-    },
-    {
-      "source": "setup/files/Projects/opencode-hub/MEMORY.md",
-      "target": "Projects/opencode-hub/MEMORY.md",
-      "sha256": "607f328ed735ff2cef1836b374c82e13d96f7e69ac0a5604c972c0fc1eb79ff9",
-      "importedFrom": "Projects/opencode-hub/MEMORY.md"
-    },
-    {
-      "source": "docs/user-verification.md",
-      "target": ".agents/user-verification.md",
-      "sha256": "3cddf22347e67df60aad2e04eda8afa9bbb488724a35ed2d192131fa3335cc54"
-    },
-    {
-      "source": "setup/files/.claude/CLAUDE.md",
-      "target": ".claude/CLAUDE.md",
-      "sha256": "fd00063e9e0d08f4a3f911e7e1793d1a4dbfc89136e5a7ce29e54ca5afd49cc4"
     }
   ],
   "dependencies": [
@@ -1037,6 +1105,13 @@
         "0.0.0+codex.guard.20260909024000"
       ],
       "ownership": "local-source"
+    },
+    {
+      "skill": "img2threejs",
+      "target": ".claude/skills/img2threejs",
+      "origin": "https://github.com/img2threejs/img2threejs.git",
+      "commit": "5d0eeac46373b9b293c495e794e6dec3e1cce205",
+      "ownership": "external-dependency"
     }
   ],
   "omitted": [],

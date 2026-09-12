@@ -1,0 +1,4 @@
+prefix_rule(pattern=["C:\\WINDOWS\\system32\\cmd.exe", "/c", "set CONVEX_AGENT_MODE=anonymous&& bunx convex dev"], decision="allow")
+prefix_rule(pattern=["C:\\WINDOWS\\system32\\cmd.exe", "/c", "bun run dev"], decision="allow")
+prefix_rule(pattern=["C:\\WINDOWS\\system32\\cmd.exe", "/c", "bun run test -- convex/__tests__/calendarListDates.test.ts convex/__tests__/tenantIsolationCalendar.test.ts"], decision="allow")
+prefix_rule(pattern=["C:\\WINDOWS\\system32\\cmd.exe", "/c", "bun run test -- src/features/calendar/lib/monthCalendarDrag.test.ts src/features/calendar/lib/jobDateCache.test.ts src/features/calendar/lib/calendarTasks.test.ts"], decision="allow")

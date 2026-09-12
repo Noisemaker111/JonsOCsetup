@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git remote:*)",
+      "Bash(git push:*)",
+      "Bash(node:*)"
+    ],
+    "defaultMode": "auto"
+  },
+  "model": "opus",
+  "feedbackDrafts": "quiet",
+  "tui": "default",
+  "skipDangerousModePermissionPrompt": true,
+  "theme": "dark",
+  "verbose": false,
+  "agentPushNotifEnabled": true
+}

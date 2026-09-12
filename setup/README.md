@@ -1,6 +1,10 @@
 # Tracked personal setup
 
-`manifest.json` maps 137 external instruction, skill and helper files to their tracked sources. The source files include hub and Codex instructions, shared active and disabled skills, and personal helper scripts. Most OpenCode extensions already live in their owner directories at repository root.
+`manifest.json` maps 154 external instruction, configuration, skill and helper files to their tracked sources, covering every harness that reads instructions on this machine: hub, Codex and Claude Code instructions, `.codex/config.toml` and its command rules, `.claude/settings.json`, shared active and disabled skills, and personal helper scripts. Most OpenCode extensions already live in their owner directories at repository root.
+
+Upstream skills that are their own checkouts are pinned under `dependencies` by origin and commit rather than copied, so this tree does not republish another project's repository or bury real configuration under vendored files.
+
+A file that is only installed is a file that gets corrected repeatedly and lost: the dev-workflow skill was reworded away from "dev release" twice before the wording ever reached here. `test/setup-manifest.test.ts` fails when an entry's recorded hash stops matching its source, and `setup:plan` reports an installed file that has drifted from the tree — run it before assuming the two agree.
 
 - `bun run setup:plan` verifies source hashes and previews installation.
 - `bun run setup:install` applies missing or previously managed files, refusing independent local edits.

@@ -1,8 +1,13 @@
 # OpenCode hub memory
 
-Load the `memory` skill before adding a line.
+There is no `memory` skill; this file's own Maintenance section at the bottom is the rule.
 
 ## Jon
+
+- Never hardcode a model for a role, helper, reviewer, default chat, fallback, or resumed session. Model selections and automatic-routing preferences belong to user-editable settings. Automatic selection uses that user's allowed accounts, actual pricing/entitlements, current usage and measured speed; missing evidence is unknown. Preserve explicit choices, allow the user to change them, and never turn this machine's setup into a universal default.
+- Routine worker permission requests go to a lower-cost capable reviewer selected from the user's routes, retained for the giver session until the user changes it. Keep routine reviews out of the SOTA giver conversation; escalate only new decisions or unresolved reviews. The reviewer acts within existing user authorization and records yes/no reasons. Manual approval controls remain a fallback. Choose permission reviewer (`/quest-reviewer`) owns automatic cost/speed/quota preferences or an exact model choice; a changed choice switches the existing native reviewer session and survives restart.
+
+- Call the development branch and ongoing development work `agents`. Do not relabel it as a "dev release" or "verified build" in conversation. Report merged into `agents` and tested in OpenCode; internal packaging identifiers are implementation details, not another user-managed release stage.
 
 - No Delete key. Backspace and Ctrl+Backspace behaviour is a constraint, not a preference.
 - Input is speech-to-text. Turn it into an assignment; do not forward it verbatim.
@@ -10,6 +15,8 @@ Load the `memory` skill before adding a line.
 - Never make Jon type a command or a path to operate or diagnose OpenCode2.
 
 ## Lessons
+
+- Worker permission APIs in the installed OpenCode2 host are location-scoped even though session get/context route across locations. Inspect and reply from the owning worker location. Permission reviews use a native reviewer session with session.generate: the stateless plugin generate.text path omitted the session headers required by the configured provider; the native session path completed the actual review and worker return.
 
 - Native worker agents must stay selectable by the host TUI; hidden as subagents, the composer falls back to the wrong model.
 - Worktree cleanup belongs to Quest turn-in and release lifecycle events, not a cron or age sweep.
@@ -66,10 +73,48 @@ Load the `memory` skill before adding a line.
   path is `app/src/composer/submit.ts sendPrompt()`, which calls `switchAgent` whenever the composer
   selection differs from the session — `session_v2.agent` follows the dropdown, nothing recovers
   anything. A claim naming a mechanism carries a file:line or says it is a guess.
+- Plain `oc` runs the latest merged `agents` commit, not the gated release (PR #85). The acceptance
+  gate was accidentally the delivery path -- `oc` opened `.channels/dev.json`, which only moves on a
+  gate pass, and 26 of 54 recorded runs pass -- so `/new` was fixed, merged and verified and Jon
+  still got the old behaviour with nothing on screen saying so. `oc --gated` is the gated release,
+  `oc --default branch|gated` flips it, `.channels/oc-default.json` holds it, and a missing or
+  corrupt file means branch because gated-by-default is the state that hid the fix. A gated release
+  behind the branch now says by how many commits.
+- Read the installed gate report as well as its exit code. The gate follows the currently bound giver after intentional `/new` succession, and selects Quests by exact identity because titles can repeat across projects (PR #86). A timeout watching the first giver or a same-title empty Quest is not evidence that the actual worker failed.
+- One command opens OpenCode: `oc`, with a branch name as its argument (PR #84). `oca`, `ocm`,
+  `ocd`, `ocs` and `ocb` are gone, and `oc` no longer cds -- `oh` does that. Five names existed for
+  two things because two launch paths each grew their own pair, and the name anyone would reach for
+  was taken by a directory change. `oc` launches at the hub so its AGENTS.md loads (`--here` or
+  `--cwd` opts out) and the banner names the directory, the commit and the branch.
+- `oc <branch>` prepares or reuses a dev candidate and launches it without gating or activating
+  (`scripts/try-ref.mjs`, shared preparation in `scripts/channel-prepare.mjs`, PR #83).
+  `.channels/dev.json` is never written, so plain `oc` keeps running the accepted release and
+  `activate` keeps both acceptance runs and its origin/agents tree check. A bare branch name resolves to `origin/<ref>` when that exists, which is the stale-local-ref
+  bug fixed rather than documented. A candidate records the ref it was built from so retirement can
+  judge it against that ref instead of origin/agents; it is kept while it is still that ref's tip --
+  but only once a release carrying that rule is activated, because a launch's teardown runs
+  `release-retirement.mjs` from `dev.root`, the activated release. Until then a candidate sitting
+  exactly at the agents tip is still swept by the old pass; an unmerged branch's candidate, which is
+  the actual use case, is not, and reuse on it survives a plain `oc` (verified on gate-diagnose).
+- Arriving at the home route means two opposite things and the route is `{type:"home"}` either way:
+  on startup with nothing open, opening the registered giver is the point; after a conversation has
+  been open, home is something the user asked for. `quest/tui-active/quests.tsx` navigated back to the
+  giver on *every* arrival, which is the whole of "/new teleports back" -- no session was ever
+  created, so the context hook never fired. `giverHomeEntry` in `quest/tui-navigation.ts` splits the
+  two cases. PR #82's own commit message and test blamed the hook throwing SINGLE_GIVER_REQUIRED;
+  driving the real TUI showed one `session_v2` row, both prompts in one conversation and no refusal
+  on screen. A fake-host unit test cannot tell you a route is being hijacked before the hook runs.
+
 - A report ends a turn; it never interrupts one. The two-heading format manufactured a closing every
   turn -- a tidy summary was available, so the turn ended and Jon had to say "continue" for work
   already decided. If the next action can be named, take it. Background work running is not a
   stopping point.
+
+- Quest `get` now returns current descriptions, step notes/readiness, latest outcomes and continuation; inspection pages contain typed whole records, not JSON fragments. Keep Code Mode returns narrow to avoid repeating reads after result-budget elision.
+- On Windows, a Quest claim can be journaled before snapshot replacement briefly fails with EPERM. Retry the same replacement under the Quest lock; replaying the claim or clearing the owner can lose coordination (PR #86).
+- Codex checkout protection applies to real Git checkouts and the configured hub, not a non-Git home/container directory. Existing ownership records must survive that scope correction.
+
+- Jon prohibits Luna medium for every role, selection, verification, fallback and resume. Require explicit permitted effort; do not use a lower-effort workaround or alias unsupported max. Astra medium remains independently authorized. Automatic selection has no universal primary model; access-policy.json owns enforcement and exact effort evidence must match the task/harness.
 
 ## Maintenance
 
