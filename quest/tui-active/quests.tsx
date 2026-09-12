@@ -11,6 +11,7 @@ import { questIndicator, filterQuests, QUEST_FILTERS, type QuestFilter } from ".
 import { boardProject, projectQuests, resolveBoardProject } from "../board-project"
 import { activeSessionID } from "../../scripts/runtime-contract.mjs"
 import { createGiver, hasQuestReturn, returnToQuest } from "../tui-workflow"
+import { giverHomeEntry } from "../tui-navigation"
 import type { Quest, QuestSession } from "../types"
 import { watchQuests } from "../watcher"
 import { progressGlyph, questProgress } from "../steps"
@@ -112,11 +113,13 @@ async function chooseWorkspaceMode(context:any) {
  const choice=await context.ui.dialog.select({title:"Quest workspace mode · all future runs",options:[{value:"worktree",title:"Separate worktrees"+(current==="worktree"?" (current)":"")},{value:"shared",title:"Shared project checkout"+(current==="shared"?" (current)":"")}]})
  if(choice==="worktree"||choice==="shared")setWorkspaceMode(choice)
 }
+// Startup with nothing open, as opposed to the user asking for home; see giverHomeEntry.
+const openRegisteredGiver = giverHomeEntry()
+
 function Commands(props: { context: any }) {
-  // Native New Session returns home. Reuse the one giver before a new prompt can create another.
   createEffect(() => {
     const route=props.context.ui.router.current()
-    if(route?.type!=="home")return
+    if(!openRegisteredGiver(route?.type))return
     // Let the native composer create the first session and retain its focus/model.
     if(!userGiverID()&&!quests(projectRoot(props.context)).some(q=>q.integrationOwner?.startsWith("ses_")))return
     let cancelled=false
