@@ -38,13 +38,16 @@ if(action==='prepare'){
   const skillPath=join(homedir(),'.agents','skills','opencode-dev-workflow','SKILL.md')
   const skill=readFileSync(join(root,'skills/opencode-dev-workflow/SKILL.md'),'utf8')
   const skillReceipt=join(registry,'installed-workflow.json'),hash=value=>createHash('sha256').update(value).digest('hex')
-  if(existsSync(skillPath)&&readFileSync(skillPath,'utf8')!==skill&&(!existsSync(skillReceipt)||read(skillReceipt).hash!==hash(readFileSync(skillPath,'utf8'))))throw Error('Existing workflow skill has independent changes; preserved')
-  mkdirSync(dirname(skillPath),{recursive:true});writeFileSync(skillPath,skill)
-  atomic(skillReceipt,{path:skillPath,hash:hash(skill),sourceCommit:release.commit})
+  const independentSkill=existsSync(skillPath)&&readFileSync(skillPath,'utf8')!==skill&&(!existsSync(skillReceipt)||read(skillReceipt).hash!==hash(readFileSync(skillPath,'utf8')))
+  if(independentSkill)console.warn('Existing workflow skill has independent changes; preserving it while activating the runtime.')
+  else{
+    mkdirSync(dirname(skillPath),{recursive:true});writeFileSync(skillPath,skill)
+    atomic(skillReceipt,{path:skillPath,hash:hash(skill),sourceCommit:release.commit})
+  }
   writeFileSync(join(registry,'start.mjs'),"import {readFileSync} from 'node:fs';import {dirname,join} from 'node:path';import {fileURLToPath,pathToFileURL} from 'node:url';const root=JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)),'dev.json'),'utf8')).root;process.argv.splice(2,0,'start');await import(pathToFileURL(join(root,'scripts/runtime-channel.mjs')).href);\n")
   atomic(path,{...release,generation:pointer.activeGeneration,evidence:reportPath,previous:previous?{...previous,previous:undefined}:undefined,activatedAt:new Date().toISOString()})
   await run('node',[join(root,'scripts/install-channel-shortcuts.mjs')],root,process.env)
-  console.log(JSON.stringify({active:true,channel,root,commit:release.commit,existingSessions:'unchanged',cleanup:{tasks:retryFinishedWorktrees(repository),releases:retireReleases(repository)}},null,2))
+  console.log(JSON.stringify({active:true,channel,root,commit:release.commit,workflowSkill:independentSkill?'independent edits preserved':'installed',existingSessions:'unchanged',cleanup:{tasks:retryFinishedWorktrees(repository),releases:retireReleases(repository)}},null,2))
 }else if(action==='status'){
   console.log(JSON.stringify(channel==='dev'?(existsSync(join(registry,'dev.json'))?read(join(registry,'dev.json')):{active:false}):{channel,root:runtimeHome,activation:read(join(runtimeHome,'plugin-activation.json'))},null,2))
 }else if(action==='start'){

@@ -26,15 +26,15 @@ export function useWorkerObservations(context:any,runs:()=>QuestSession[]) {
      if(context.client.message?.list){const response=unwrap(await boundedInspection(signal=>context.client.message.list({sessionID:id,limit:3,order:'desc'},{signal})));messages=Array.isArray(response)?response:response?.data??[]}
      if(context.client.permission?.list)permissions=unwrap(await boundedInspection(signal=>context.client.permission.list({sessionID:id},{signal})))??[]
      else if(context.data?.session?.permission?.list)permissions=context.data.session.permission.list(id)??[]
-     if(context.data?.session?.form?.sync)await boundedInspection(()=>context.data.session.form.sync(id))
-     if(context.data?.session?.form?.list)forms=context.data.session.form.list(id)??[]
+     if(context.client.form?.list)forms=unwrap(await boundedInspection(signal=>context.client.form.list({sessionID:id},{signal})))??[]
+     else if(context.data?.session?.form?.sync){context.data.session.form.invalidate?.(id);await boundedInspection(()=>context.data.session.form.sync(id));forms=context.data.session.form.list(id)??[]}
      result[key]=activeError?observationFailure(activeError):observeWorker(session,{active:active===undefined?undefined:Object.hasOwn(active,id),messages,permissions,forms,expected:run})
     }catch(error){result[key]=observationFailure(error)}
    }))
    if(!disposed)setObservations(result)
   }finally{busy=false;if(requested){requested=false;schedule()}}}
   // Native events trigger bounded reads; polling also reconciles events missed during reconnect.
-  const stop=context.data?.listen?.(({details}:any)=>{const id=details?.data?.sessionID??details?.data?.info?.sessionID;if(ids.has(id))schedule()})
+  const stop=context.data?.listen?.(({details}:any)=>{const id=details?.data?.sessionID??details?.data?.form?.sessionID??details?.data?.info?.sessionID;if(ids.has(id))schedule()})
   void refresh();const timer=setInterval(()=>void refresh(),4000)
   onCleanup(()=>{disposed=true;clearInterval(timer);if(scheduled)clearTimeout(scheduled);stop?.()})
  })

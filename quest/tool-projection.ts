@@ -4,7 +4,7 @@ import type { Quest, QuestSession } from './types'
 const active = (run: QuestSession) => ['planned', 'executing', 'waiting', 'blocked'].includes(run.state)
 const outcome = (run: QuestSession) => ({
   runID: run.runID ?? run.callID, sessionID: run.openCodeSessionId ?? run.sessionID,
-  state: run.state, model: run.model, steps: run.deliverables,
+  state: run.state, model: run.model, steps: run.deliverables, permissions: run.permissionDecisions,
   result: run.result ?? run.evidence.at(-1), updatedAt: run.updatedAt,
 })
 

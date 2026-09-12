@@ -387,8 +387,8 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
     excluded.push({ routeID: c.routeID, reasons: ["outside quality tolerance of best eligible route"] })
     return false
   }).sort((a, b) =>
-    (req.preference === "cash" ? (a.cashPerSuccess ?? Infinity) - (b.cashPerSuccess ?? Infinity) : req.preference === "latency" ? (a.millisecondsPerSuccess ?? 0) - (b.millisecondsPerSuccess ?? 0) : (b.expiryOpportunity ?? -Infinity) - (a.expiryOpportunity ?? -Infinity)) ||
-    (a.millisecondsPerSuccess ?? 0) - (b.millisecondsPerSuccess ?? 0) ||
+    (req.preference === "cash" ? (a.cashPerSuccess ?? Infinity) - (b.cashPerSuccess ?? Infinity) : req.preference === "latency" ? (a.millisecondsPerSuccess ?? Infinity) - (b.millisecondsPerSuccess ?? Infinity) : (b.expiryOpportunity ?? -Infinity) - (a.expiryOpportunity ?? -Infinity)) ||
+    (a.millisecondsPerSuccess ?? Infinity) - (b.millisecondsPerSuccess ?? Infinity) ||
     (a.cashPerSuccess ?? Infinity) - (b.cashPerSuccess ?? Infinity) ||
     (b.successRate ?? 0) - (a.successRate ?? 0) ||
     // Everything above is null or equal across an uncalibrated pool, which is why the published
@@ -417,7 +417,7 @@ function describe(selected: Candidate, req: RoutingRequest) {
     ? (selected.benchmarkPassAt1 === null ? "quality uncalibrated" : "no local outcomes; ranked on " + selected.evidenceSource)
     : "observed success " + (selected.successRate * 100).toFixed(1) + "%; " +
       (selected.cashPerSuccess === null ? "actual cash unavailable" : (req.cashCurrency ?? req.cashBudget?.currency ?? "USD") + " " + selected.cashPerSuccess.toFixed(4) + "/success") + "; " +
-      Math.round((selected.millisecondsPerSuccess ?? 0) / 1000) + "s/success; " +
+      (selected.millisecondsPerSuccess === null ? "speed unavailable" : Math.round(selected.millisecondsPerSuccess / 1000) + "s/success") + "; " +
       (selected.expiryOpportunity === null ? "expiry pressure unavailable" : "expiry pressure " + selected.expiryOpportunity.toFixed(2) + " task slots/hour")]
   // A cheaper effort was chosen on recorded numbers, so the numbers travel with the decision.
   parts.push(selected.reasoningTokensPerTurn === null

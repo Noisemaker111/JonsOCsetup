@@ -70,3 +70,5 @@ they supplement actual product use.
 Working on OpenCode itself? Its dev loop, branch policy, standing merge authorization, memory and
 verification rules live in the hub AGENTS.md and docs/development-workflow.md, which load when you
 are there. They are not repeated here, because every session in every project pays for this file.
+
+Model choices belong to user-editable settings for every role and default chat. Do not hardcode model names or universal fallbacks in implementation. Automatic routing uses the individual user's allowed accounts, pricing, current usage and measured speed; preserve explicit selections and deliberate changes.

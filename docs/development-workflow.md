@@ -12,9 +12,12 @@ These rules apply to OpenCode2 configuration and extensions, not other projects.
 The agent owns the full change: inspect existing work and PRs, use an isolated
 worktree, implement, exercise the intended operation in the installed host,
 save coherent commits, open a ready PR targeting `agents`, merge it after checking
-the result, and activate and exercise the dev release. Jon has authorized this
+the result, and exercise it in OpenCode. Jon has authorized this
 dev loop; do not ask him to perform a technical review or repeatedly approve it.
-Promotion from dev to stable still requires Jon's explicit instruction.
+Stable promotion still requires Jon's explicit instruction.
+
+Call development `agents` when reporting to Jon. Runtime channel keys are internal
+implementation details, not another release stage for him to manage.
 
 ## App use, removal and memory
 
