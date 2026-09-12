@@ -55,8 +55,10 @@ export function envFor(root, name, registry = registryRoot) {
  */
 export function resolveRef(repository, ref, {fetch = true} = {}) {
   if (!ref) throw Error('Name a ref to prepare')
-  if (fetch) spawnSync('git', ['-C', repository, 'fetch', 'origin', '--prune'], {encoding: 'utf8', windowsHide: true, timeout: 120000})
-  const explicit = ref.startsWith('origin/') || ref.startsWith('refs/') || /^[0-9a-f]{7,40}$/i.test(ref)
+  // Git revision syntax belongs to this checkout. Fetching first would even overwrite FETCH_HEAD.
+  const localRevision = /^(HEAD|FETCH_HEAD|ORIG_HEAD|MERGE_HEAD|REBASE_HEAD|REVERT_HEAD|CHERRY_PICK_HEAD|BISECT_HEAD|AUTO_MERGE|@)$/.test(ref) || /[~^:]|@\{/.test(ref)
+  if (fetch && !localRevision) spawnSync('git', ['-C', repository, 'fetch', 'origin', '--prune'], {encoding: 'utf8', windowsHide: true, timeout: 120000})
+  const explicit = localRevision || ref.startsWith('origin/') || ref.startsWith('refs/') || /^[0-9a-f]{7,40}$/i.test(ref)
   const attempts = explicit ? [ref] : ['origin/' + ref, ref]
   const tried = []
   for (const attempt of attempts) {
