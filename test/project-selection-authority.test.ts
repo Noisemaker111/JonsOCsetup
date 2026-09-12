@@ -47,6 +47,9 @@ test('a failed correction blocks new creation, leaves existing Quest destination
   const call=(input:any)=>operations.get('project_select').execute(input,{sessionID,id:'selection-call'})
   const selected=await call({action:'pin',selectors:[f.a]})
   expect(selected.output.targets[0].directory).toBe(verifyTarget(f.a).directory)
+  const reads=await Promise.all([{}, {selectors:[f.a]}].map(input=>operations.get('project_resolve').execute(input,{sessionID,id:'parallel-read'})))
+  expect(reads.map(r=>r.output.state)).toEqual(['resolved','resolved'])
+  expect(reads.map(r=>r.output.revision)).toEqual([selected.output.revision,selected.output.revision])
   const revision=selected.output.revision
   const routed=await operations.get('project_route').execute({revision},{sessionID,id:'confirm-route'})
   expect(routed.output.createdSessions).toBe(0)

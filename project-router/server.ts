@@ -43,11 +43,18 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
       const unique = [...new Map(items.map(t => [targetKey(t), t])).values()]; await register(unique)
       return { items: unique, unavailable, nextOffset: offset + page.length < filtered.length ? offset + page.length : null, limitation: 'Host-known roots, explicit registrations and Quest owner metadata; roots verified only for this bounded page' }
     } },
-    { name: 'project_resolve', description: 'Resolve explicit paths/names/approved aliases or current selection. Multiple selectors remain multiple targets. Discussion creates no work; ambiguity asks once and never launches.', input: schema({ selectors, discussion: { type: 'boolean' } }), execute: async (input, context) => memory.selectionChange(context.sessionID,async()=>{
-      const selection = await state(context.sessionID), result = resolveTargets(selection, await known(), input)
-      if ((result.state === 'clarify'||result.state==='unresolved')&&memory.isCurrent(context.sessionID)) { const revision=selection.revision;selection.asked=true;if(input.selectors?.length)selection.pending='The requested project could not be resolved.';selection.revision++;save(context.sessionID,selection,revision) }
-      return { ...result, revision: selection.revision }
-    }) },
+    { name: 'project_resolve', description: 'Resolve explicit paths/names/approved aliases or current selection. Multiple selectors remain multiple targets. Discussion creates no work; ambiguity asks once and never launches.', input: schema({ selectors, discussion: { type: 'boolean' } }), execute: async (input, context) => {
+      const read = async () => {const selection=await state(context.sessionID);return {selection,result:resolveTargets(selection,await known(),input)}}
+      const needsSave = (result:any) => (result.state==='clarify'||result.state==='unresolved')&&memory.isCurrent(context.sessionID)
+      const first=await read()
+      // Resolved lookups are independent reads. Only recording clarification needs a write lock.
+      if(!needsSave(first.result))return {...first.result,revision:first.selection.revision}
+      return memory.selectionChange(context.sessionID,async()=>{
+        const {selection,result}=await read()
+        if(needsSave(result)){const revision=selection.revision;selection.asked=true;if(input.selectors?.length)selection.pending='The requested project could not be resolved.';selection.revision++;save(context.sessionID,selection,revision)}
+        return {...result,revision:selection.revision}
+      })
+    } },
     { name: 'project_select', description: 'Explicitly select/pin/correct a project or multiple targets; register an alias, forget selection/alias, or succeed a Quest Giver whose context is spent. Invalidates old route revisions. Does not start work.', input: schema({ action: { enum: ['select', 'pin', 'correct', 'alias', 'forget', 'succeed-giver'] }, selectors, alias: { type: 'string', minLength: 1, maxLength: 80 } }, ['action']), execute: async (input, context) => memory.selectionChange(context.sessionID,async()=>{
       if (worker(context.sessionID)) throw new RouterError('WORKER_DELEGATION_DENIED', 'Workers retain their assigned destination')
       if(!['select','pin','correct','alias','forget','succeed-giver'].includes(input.action))throw new RouterError('INVALID_INPUT','Unknown project selection action')
