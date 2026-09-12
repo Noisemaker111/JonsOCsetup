@@ -2,19 +2,7 @@
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "quest-giver",
   "plugin": ["./plugin-bootstrap"],
-  "mcp": {
-    "mcp": {
-      "type": "local",
-      // Absolute path: the host spawns this relative to the instance cwd, so
-      // a relative "harnesses/..." only resolves when the instance happens to
-      // start in the config dir — every fresh instance elsewhere failed with
-      // "MCP error -32000: Connection closed" (1 MCP failed).
-      "command": ["C:/Program Files/nodejs/node.exe", "C:/Users/Jk101/.config/opencode/harnesses/opencode-mcp-stdio.mjs"],
-      "enabled": true,
-      // Desk wait/steer stays in the tool until COMPLETE; 10s was a one-shot.
-      "timeout": 86400000
-    }
-  },
+  "mcp": {},
   "experimental": {
     "subagent_depth": 1
   },
@@ -217,8 +205,8 @@
   "agents": {
     "proxy-claude": {
       "description": "Native subscription broker worker pinned to cliproxyapi/claude-opus-5.",
-      "mode": "subagent",
-      "hidden": true,
+      "mode": "all",
+      "hidden": false,
       "model": "cliproxyapi/claude-opus-5",
       "tools": {"task":false,"subagent":false},
       "permissions": [
@@ -232,8 +220,8 @@
     },
     "proxy-sonnet": {
       "description": "Native subscription broker worker pinned to cliproxyapi/claude-sonnet-5.",
-      "mode": "subagent",
-      "hidden": true,
+      "mode": "all",
+      "hidden": false,
       "model": "cliproxyapi/claude-sonnet-5",
       "tools": {"task":false,"subagent":false},
       "permissions": [
@@ -247,8 +235,8 @@
     },
     "proxy-haiku": {
       "description": "Native subscription broker worker pinned to cliproxyapi/claude-haiku-4-5-20251001.",
-      "mode": "subagent",
-      "hidden": true,
+      "mode": "all",
+      "hidden": false,
       "model": "cliproxyapi/claude-haiku-4-5-20251001",
       "tools": {"task":false,"subagent":false},
       "permissions": [
@@ -262,8 +250,8 @@
     },
     "proxy-sol": {
       "description": "Native subscription broker worker pinned to cliproxyapi/gpt-5.6-sol.",
-      "mode": "subagent",
-      "hidden": true,
+      "mode": "all",
+      "hidden": false,
       "model": "cliproxyapi/gpt-5.6-sol",
       "tools": {"task":false,"subagent":false},
       "permissions": [
@@ -277,8 +265,8 @@
     },
     "proxy-luna": {
       "description": "Native subscription broker worker pinned to cliproxyapi/gpt-5.6-luna.",
-      "mode": "subagent",
-      "hidden": true,
+      "mode": "all",
+      "hidden": false,
       "model": "cliproxyapi/gpt-5.6-luna",
       "tools": {"task":false,"subagent":false},
       "permissions": [
@@ -292,8 +280,8 @@
     },
     "proxy-terra": {
       "description": "Native subscription broker worker pinned to cliproxyapi/gpt-5.6-terra.",
-      "mode": "subagent",
-      "hidden": true,
+      "mode": "all",
+      "hidden": false,
       "model": "cliproxyapi/gpt-5.6-terra",
       "tools": {"task":false,"subagent":false},
       "permissions": [
@@ -307,8 +295,8 @@
     },
     "proxy-fable": {
       "description": "Native subscription broker worker pinned to cliproxyapi/claude-fable-5-1.",
-      "mode": "subagent",
-      "hidden": true,
+      "mode": "all",
+      "hidden": false,
       "model": "cliproxyapi/claude-fable-5-1",
       "tools": {"task":false,"subagent":false},
       "permissions": [
@@ -325,15 +313,13 @@
       "mode": "primary",
       "model": "opencode/muse-spark-1.3-contributor-free",
       "color": "#e8c547",
-      "tools": {
-        "task": true,
-        "subagent": true,
-        "mcp_agent": false,
-        "mcp_agent_status": false,
-        "mcp_agent_output": false,
-        "mcp_pick_model": false
-      },
+      "tools": { "task": true, "subagent": true, "read": false, "grep": false, "glob": false, "list": false, "bash": false },
       "permissions": [
+        { "action": "read", "resource": "*", "effect": "deny" },
+        { "action": "grep", "resource": "*", "effect": "deny" },
+        { "action": "glob", "resource": "*", "effect": "deny" },
+        { "action": "list", "resource": "*", "effect": "deny" },
+        { "action": "bash", "resource": "*", "effect": "deny" },
         { "action": "project_discover", "resource": "*", "effect": "allow" },
         { "action": "project_resolve", "resource": "*", "effect": "allow" },
         { "action": "project_select", "resource": "*", "effect": "allow" },
@@ -372,13 +358,15 @@
           "action": "shell",
           "resource": "*",
           "effect": "deny"
-        }
+        },
+        { "action": "edit", "resource": "MEMORY.md", "effect": "allow" },
+        { "action": "edit", "resource": "C:/Users/Jk101/Projects/opencode-hub/MEMORY.md", "effect": "allow" }
       ]
     },
     "build": {
       "description": "Hidden implementation capability used only by Quest-dispatched worker sessions.",
-      "mode": "subagent",
-      "hidden": true,
+      "mode": "all",
+      "hidden": false,
       "model": "opencode/muse-spark-1.3-contributor-free",
       "tools": {
         "task": false,
@@ -419,8 +407,8 @@
     },
     "claude": {
       "description": "Claude Code Opus worker (harness bridge). Picked by model hint claude/opus.",
-      "mode": "subagent",
-      "hidden": true,
+      "mode": "all",
+      "hidden": false,
       "model": "claude-code/opus",
       "tools": {
         "task": false,
@@ -461,8 +449,8 @@
     },
     "claude-sonnet": {
       "description": "Claude Code Sonnet worker (harness bridge). Picked by model hint sonnet.",
-      "mode": "subagent",
-      "hidden": true,
+      "mode": "all",
+      "hidden": false,
       "model": "claude-code/sonnet",
       "tools": {
         "task": false,
@@ -503,8 +491,8 @@
     },
     "claude-haiku": {
       "description": "Claude Code Haiku worker (harness bridge). Picked by model hint haiku.",
-      "mode": "subagent",
-      "hidden": true,
+      "mode": "all",
+      "hidden": false,
       "model": "claude-code/haiku",
       "tools": {
         "task": false,
@@ -545,8 +533,8 @@
     },
     "grok": {
       "description": "Grok 4.6 worker via CLIProxyAPI. Picked by model hint grok.",
-      "mode": "subagent",
-      "hidden": true,
+      "mode": "all",
+      "hidden": false,
       "model": "cliproxyapi/grok-4.6",
       "tools": {
         "task": false,
@@ -587,8 +575,8 @@
     },
     "astra": {
       "description": "GPT-6 Astra worker via OpenAI. Picked by model hint openai/gpt-6-astra; Quest policy controls the authorized reasoning variant.",
-      "mode": "subagent",
-      "hidden": true,
+      "mode": "all",
+      "hidden": false,
       "model": "openai/gpt-6-astra",
       "tools": {
         "task": false,
@@ -627,10 +615,57 @@
         }
       ]
     },
+    "audit": {
+      "description": "Read-only auditor: concrete findings with exact file:line, no edits, no broad scan.",
+      "mode": "all",
+      "model": "openai/gpt-6-astra",
+      "system": "You audit code and report findings. You cannot edit, write or patch anything and that is deliberate. Return at most 10 findings unless asked for more, ranked by impact. Every finding cites an exact file:line and states the impact in one sentence. Read what the scope names and follow references out of it; do not broad-scan the repository. Check whether a finding is already a known issue before reporting it as new. Say what you read; if the scope is too large to audit honestly, say which part you covered rather than thinning the whole thing.",
+      "tools": {
+        "task": false,
+        "subagent": false
+      },
+      "permissions": [
+        {
+          "action": "task",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "write",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "patch",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "read",
+          "resource": "*",
+          "effect": "allow"
+        }
+      ]
+    },
     "astra-proxy": {
       "description": "GPT-6 Astra worker via subscription broker. Picked by model hint cliproxyapi/gpt-6-astra.",
-      "mode": "subagent",
-      "hidden": true,
+      "mode": "all",
+      "hidden": false,
       "model": "cliproxyapi/gpt-6-astra",
       "tools": {
         "task": false,
@@ -669,10 +704,23 @@
         }
       ]
     },
-    "luna": {
-      "description": "GPT-5.6 Luna Fast worker via OpenAI. Picked by explicit model hint.",
+    "worker": {
+      "description": "Implementation worker for any dispatched route. Quest dispatch supplies the exact provider, model and reasoning variant, so this role carries the worker permissions rather than a pinned model.",
       "mode": "subagent",
       "hidden": true,
+      "model": "openai/gpt-6-astra",
+      "permissions": [
+        { "action": "subagent", "resource": "*", "effect": "deny" },
+        { "action": "edit", "resource": "*", "effect": "allow" },
+        { "action": "write", "resource": "*", "effect": "allow" },
+        { "action": "patch", "resource": "*", "effect": "allow" },
+        { "action": "shell", "resource": "*", "effect": "allow" }
+      ]
+    },
+    "luna": {
+      "description": "GPT-5.6 Luna Fast worker via OpenAI. Picked by explicit model hint.",
+      "mode": "all",
+      "hidden": false,
       "model": "openai/gpt-5.6-luna-fast",
       "tools": {
         "task": false,
@@ -713,8 +761,8 @@
     },
     "codex": {
       "description": "Codex worker (harness bridge). Picked by model hint codex.",
-      "mode": "subagent",
-      "hidden": true,
+      "mode": "all",
+      "hidden": false,
       "model": "codex/default",
       "tools": {
         "task": false,
@@ -759,16 +807,16 @@
       ]
     },
     "general": {
-      "mode": "subagent",
-      "hidden": true
+      "mode": "all",
+      "hidden": false
     },
     "explore": {
-      "mode": "subagent",
-      "hidden": true
+      "mode": "all",
+      "hidden": false
     },
     "plan": {
-      "mode": "subagent",
-      "hidden": true
+      "mode": "all",
+      "hidden": false
     }
   }
 }

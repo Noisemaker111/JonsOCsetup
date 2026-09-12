@@ -5,6 +5,10 @@ import {join,resolve} from 'node:path'
 import {homedir} from 'node:os'
 import {createInterface} from 'node:readline'
 import {codexExecutable} from '../quest/codex/recovery-command'
+import {assertConfiguredSelection} from '../models/access-policy'
+const effortArg=process.argv.indexOf('--effort'),effort=effortArg>=0?process.argv[effortArg+1]:undefined
+if(!effort)throw Error('Pass --effort with an explicitly authorized, supported Luna reasoning level; no default is selected')
+assertConfiguredSelection({providerID:'openai',id:'gpt-5.6-luna',reasoning:effort})
 const root=join(homedir(),'Projects','opencode-hub','.runtime-tests','luna-runtime-'+Date.now()),repo=join(root,'repo')
 mkdirSync(repo,{recursive:true})
 writeFileSync(join(repo,'AGENTS.md'),'This is an isolated runtime verification fixture. Read and write only this checkout. Use the installed shell and patch tools. Do not create Quests, spawn agents, use network tools, commit, deploy or change other files.\n')
@@ -12,7 +16,8 @@ writeFileSync(join(repo,'input.txt'),'LUNA_RUNTIME_INPUT\n')
 for(const args of [['init'],['add','AGENTS.md','input.txt'],['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','Runtime fixture']]){const r=spawnSync('git',args,{cwd:repo,windowsHide:true,encoding:'utf8'});if(r.status!==0)throw Error(r.stderr)}
 const executable=codexExecutable(),version=spawnSync(executable,['--version'],{windowsHide:true,encoding:'utf8'}).stdout.trim()
 const candidateArg=process.argv.indexOf('--candidate'),candidate=candidateArg>=0?resolve(process.argv[candidateArg+1]):undefined
-const env={...process.env,OPENCODE_QUEST_ROOT:join(root,'ledger')};delete env.CODEX_THREAD_ID
+// Every real home, or the check writes into one of them.
+const env={...process.env,OPENCODE_QUEST_ROOT:join(root,'ledger'),OPENCODE_DB:join(root,'host.db'),OPENCODE_ORCHESTRATION_LEDGER:join(root,'orchestration.jsonl'),OPENCODE_TELEMETRY_FILE:join(root,'requests.jsonl'),XDG_STATE_HOME:join(root,'state')};delete env.CODEX_THREAD_ID
 const config:string[]=[]
 if(candidate){
  const staged=join(root,'candidate');cpSync(candidate,staged,{recursive:true});env.PLUGIN_ROOT=staged
@@ -31,7 +36,7 @@ if(candidate){
   config.push('-c','hooks.state={'+own.map((h:any)=>JSON.stringify(h.key)+'={trusted_hash='+JSON.stringify(h.currentHash)+'}').join(',')+'}')
  }finally{clearTimeout(timeout);app.stdin.end();app.kill()}
 }
-const child=spawn(executable,['exec',...config,'-C',repo,'--json','--color','never','-c','approval_policy="never"','-c','model_reasoning_effort="medium"','--sandbox','workspace-write','-m','gpt-5.6-luna','-'],{cwd:repo,env,windowsHide:true,stdio:['pipe','pipe','pipe']})
+const child=spawn(executable,['exec',...config,'-C',repo,'--json','--color','never','-c','approval_policy="never"','-c','model_reasoning_effort='+JSON.stringify(effort),'--sandbox','workspace-write','-m','gpt-5.6-luna','-'],{cwd:repo,env,windowsHide:true,stdio:['pipe','pipe','pipe']})
 child.stdin.end('Verify the actual runtime tools: read input.txt; create output.txt with exactly LUNA_RUNTIME_OK using a patch or write tool; run a PowerShell command that reads output.txt and checks it equals LUNA_RUNTIME_OK. Report the observed command result. Do not claim success before reading the saved file. Stop after these checks.')
 let out='',err='';child.stdout.on('data',b=>{out+=b;writeFileSync(join(root,'stdout.jsonl'),out)});child.stderr.on('data',b=>{err+=b;writeFileSync(join(root,'stderr.txt'),err)})
 const timer=setTimeout(()=>child.kill(),180000)
@@ -43,6 +48,6 @@ try{
  const hookDir=join(root,'ledger/.opencode/.quest-runtime/codex'),hookReceipts=existsSync(hookDir)?readdirSync(hookDir).filter(name=>/^[a-f0-9]{64}\.json$/.test(name)).map(name=>{const r=JSON.parse(readFileSync(join(hookDir,name),'utf8'));return {events:r.events?.length??0,pending:r.pending?.length??0,ended:r.ended,diagnostics:r.diagnostics}}):[]
  const hooksComplete=!candidate||hookReceipts.some(r=>r.events>0&&r.pending===0&&r.ended===true&&!r.diagnostics)
  const ok=hooksComplete&&exit===0&&existsSync(join(repo,'output.txt'))&&readFileSync(join(repo,'output.txt'),'utf8').trim()==='LUNA_RUNTIME_OK'&&commands.some(c=>c.exit_code===0&&c.aggregated_output?.includes('LUNA_RUNTIME_OK'))&&!/hook failed|hook error|blocked by PreToolUse/i.test(err)
- const report={ok,candidate,hookReceipts,requestedModel:'gpt-5.6-luna',requestedReasoning:'medium',executable,version,exit,commands,errors:err.slice(-1800),root}
+ const report={ok,candidate,hookReceipts,requestedModel:'gpt-5.6-luna',requestedReasoning:effort,executable,version,exit,commands,errors:err.slice(-1800),root}
  writeFileSync(join(root,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify({ok,exit,report:join(root,'report.json'),stderr:err.slice(-700)}));if(!ok)process.exitCode=1
 }finally{clearTimeout(timer)}

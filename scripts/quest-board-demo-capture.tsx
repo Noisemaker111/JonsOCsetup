@@ -19,7 +19,7 @@ async function main() {
   if (!/^[a-z0-9-]+$/.test(label)) throw new Error("Invalid capture label")
   const width = Number(option("--width") ?? 132), height = Number(option("--height") ?? 72)
   if (!Number.isInteger(width) || width < 40 || width > 240 || !Number.isInteger(height) || height < 20 || height > 200) throw new Error("Capture dimensions must be 40–240 columns and 20–200 rows")
-  const setup = await testRender(() => <QuestBoard context={{...context,renderer:{width,height}}} initialQuestID={option("--quest")} />, { width, height })
+  const setup = await testRender(() => <QuestBoard context={{...context,renderer:{width,height}}} initialQuestID={option("--quest")} initialAllProjects={process.argv.includes("--all-projects")} />, { width, height })
   try {
     await setup.renderOnce()
     await Bun.sleep(50)

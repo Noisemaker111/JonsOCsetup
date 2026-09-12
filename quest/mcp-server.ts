@@ -1,3 +1,4 @@
+import {readContinuations} from './runtime-queues'
 import {existsSync,readFileSync} from 'node:fs'
 import {join} from 'node:path'
 import {questChanges} from './change-view'
@@ -39,7 +40,7 @@ export function questMCP(options:{store?:QuestStore}={}){
       let output:any
       switch(input.action){
        case 'list':{const result=api.list(input.query);output={...result,items:result.items.map(row=>toolSummary(store.read(row.id)!)),detail:'Use get for a compact record and inspect.section for full evidence'};break}
-       case 'get':api.get(input.id);output=toolDetail(store.read(input.id)!);break
+       case 'get':api.get(input.id);output=toolDetail(store.read(input.id)!,readContinuations(store.runtime).filter(row=>row.questID===input.id));break
        case 'create':{const saved=api.create(input.create);output={id:saved.id,title:input.create.title,steps:saved.steps};break}
        case 'update':api.update(input.id,input.update);output={ok:true};break
        case 'inspect':{
@@ -56,7 +57,7 @@ export function questMCP(options:{store?:QuestStore}={}){
          case 'runs':value=q.sessions;break
          case 'artifacts':value=q.evidence;break
          case 'changes':value=questChanges(q,new QuestWorkspaces(store.runtime));break
-         case 'continuation':{const file=join(store.runtime,'continuations.json');value=existsSync(file)?JSON.parse(readFileSync(file,'utf8')).filter((row:{questID:string})=>row.questID===q.id):[];break}
+         case 'continuation':{value=readContinuations(store.runtime).filter((row:{questID:string})=>row.questID===q.id);break}
          default:throw new QuestError('INVALID_INPUT','Unknown inspect section')
         }
         output={id:q.id,project:q.project,...toolSection(value,section,input.inspect.offset,input.inspect.limit)};break

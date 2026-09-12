@@ -6,13 +6,23 @@
     "quest/server.ts",
     "harnesses/server.ts",
     "usage/server.ts",
-    "project-router/server.ts"
+    "project-router/server.ts",
+    "context-graph/server.ts"
   ],
   "tuiEntrypoints": [
     "usage/tui-active/usage.tsx",
-    "quest/tui-active/quests.tsx"
+    "quest/tui-active/quests.tsx",
+    "composer/tui-active/composer.tsx",
+    "context-graph/tui-active/context-graph.tsx",
+    "duration-graph/tui-active/duration-graph.tsx"
   ],
   "entrypointOwners": {
+    "composer/tui-active/composer.tsx": "composer",
+    "context-graph/tui-active/context-graph.tsx": "context-graph",
+    "tui-bootstrap/context-graph/tui.tsx": "context-graph",
+    "duration-graph/tui-active/duration-graph.tsx": "duration-graph",
+    "tui-bootstrap/duration-graph/tui.tsx": "duration-graph",
+    "tui-bootstrap/composer/tui.tsx": "composer",
     "project-router/server.ts": "project-router",
     "plugins-active/models.ts": "models",
     "plugins-active/quests.ts": "quests",
@@ -26,16 +36,15 @@
     "plugins-active/papercut-memory.ts": "papercut",
     "models/server.ts": "models",
     "quest/server.ts": "quests",
-    "harnesses/server.ts": "harness"
+    "harnesses/server.ts": "harness",
+    "context-graph/server.ts": "context-graph"
   },
   "publicSurfaces": [
     "project-router/executable.mjs",
     "quest/router-public.ts",
     "quest/goal-public.ts",
     "quest/route-public.ts",
-    "models/model-routing.ts",
     "models/model-catalog.ts",
-    "models/capacity-registry.ts",
     "models/model-router.ts",
     "models/session-lifecycle.ts",
     "usage/usage-lib.ts",
@@ -59,8 +68,12 @@
     "usage/telemetry-api.ts",
     "quest/api.ts",
     "quest/tool-schema.mjs",
-    "harnesses/opencode-mcp-stdio.mjs",
-    "usage/benchmark-evaluation.ts"
+    "usage/benchmark-evaluation.ts",
+    "quest/worker-observation.mjs",
+    "quest/giver-public.ts",
+    "quest/giver-registry.mjs",
+    "context-graph/context-graph.ts",
+    "context-graph/execute-attribution.ts"
   ],
   "_helperComment": "Imported by a listed entrypoint, not loaded directly by the host. claude-code-session and harness-run are started from favorite-router's isolated component list.",
   "helpersOutsideDiscovery": [
@@ -72,8 +85,8 @@
     "plugins-active/claude-code-session.ts",
     "plugins-active/claude-code-task.ts",
     "plugins-active/harness-run.ts",
-    "models/model-routing.ts",
-    "orchestration/orchestration.ts"
+    "orchestration/orchestration.ts",
+    "context-graph/execute-timing.ts"
   ],
   "packages": [
     "usage/plugin.json",
@@ -81,6 +94,9 @@
     "models/plugin.json",
     "papercut/plugin.json",
     "harnesses/plugin.json",
-    "project-router/plugin.json"
+    "project-router/plugin.json",
+    "composer/plugin.json",
+    "context-graph/plugin.json",
+    "duration-graph/plugin.json"
   ]
 }

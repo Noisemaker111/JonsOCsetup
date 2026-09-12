@@ -5,7 +5,7 @@
     {
       "source": "setup/files/Projects/opencode-hub/AGENTS.md",
       "target": "Projects/opencode-hub/AGENTS.md",
-      "sha256": "b4cc49f46622cd2b8f210ca1c07353d1253e67b29965cc813957d826b986c47f",
+      "sha256": "c4c7763e804d236f4210799f290d0489529eb4738d69709934a4858ee41d3498",
       "importedFrom": "Projects/opencode-hub/AGENTS.md"
     },
     {
@@ -23,7 +23,7 @@
     {
       "source": "setup/files/.agents/.skill-lock.json",
       "target": ".agents/.skill-lock.json",
-      "sha256": "29e6317f0bb4e7cf61764f76e4b0193f6c97170a5adcd592fb7a29e66f9c8ba4",
+      "sha256": "bdaa0383baa931d72580cedf5a9d7f70260820bce6a282ee80d2c8f9d78ffd63",
       "importedFrom": ".agents/.skill-lock.json"
     },
     {
@@ -33,9 +33,27 @@
       "importedFrom": ".agents/plugins/marketplace.json"
     },
     {
+      "source": "setup/files/.agents/quest-api.mjs",
+      "target": ".agents/quest-api.mjs",
+      "sha256": "3a07d2024560e49acb4881a2330a0f480024f57948e0701bf7000d5b84848e51",
+      "importedFrom": ".agents/quest.mjs"
+    },
+    {
+      "source": "setup/files/.agents/quest.mjs",
+      "target": ".agents/quest.mjs",
+      "sha256": "2bfdd942b8c374d185b6a4d3e95bc17050a1e5ac4b69f76661eda9d6fa1d125a",
+      "importedFrom": ".agents/quest.mjs"
+    },
+    {
+      "source": "setup/files/.agents/quest-draft.mjs",
+      "target": ".agents/quest-draft.mjs",
+      "sha256": "ac162541f5b9379bb28604c41bb243e8606582b685999b6a5462f18c1093a77a",
+      "importedFrom": ".agents/quest-draft.mjs"
+    },
+    {
       "source": "setup/files/.codex/AGENTS.md",
       "target": ".codex/AGENTS.md",
-      "sha256": "dda15e780433417ab96a6dd1423cee38162dc0db1abd4f18e5e77c1b511eaf77",
+      "sha256": "c7ca17f7e81db39245d7b48bb00f2c1df019cb879bc0f1cd57042cef5e3db239",
       "importedFrom": ".codex/AGENTS.md"
     },
     {
@@ -89,7 +107,7 @@
     {
       "source": "setup/files/.agents/skills/opencode-dev-workflow/SKILL.md",
       "target": ".agents/skills/opencode-dev-workflow/SKILL.md",
-      "sha256": "6c7c10d8323dedddc27008c0926ca80d30941239d409375201407c6b2e0eba96",
+      "sha256": "7bf76f70300db9faccfef4f432c0ba7242dd74bedb5e51a2f3f782aefb7d018f",
       "importedFrom": ".agents/skills/opencode-dev-workflow/SKILL.md"
     },
     {
@@ -823,6 +841,22 @@
       "target": ".agents/skills-disabled/wizard/template.sh",
       "sha256": "33cbe9dfb1d0e9185b60248a52aabed14bc64785a00cac695e302e739dd6c153",
       "importedFrom": ".agents/skills-disabled/wizard/template.sh"
+    },
+    {
+      "source": "setup/files/Projects/opencode-hub/MEMORY.md",
+      "target": "Projects/opencode-hub/MEMORY.md",
+      "sha256": "607f328ed735ff2cef1836b374c82e13d96f7e69ac0a5604c972c0fc1eb79ff9",
+      "importedFrom": "Projects/opencode-hub/MEMORY.md"
+    },
+    {
+      "source": "docs/user-verification.md",
+      "target": ".agents/user-verification.md",
+      "sha256": "3cddf22347e67df60aad2e04eda8afa9bbb488724a35ed2d192131fa3335cc54"
+    },
+    {
+      "source": "setup/files/.claude/CLAUDE.md",
+      "target": ".claude/CLAUDE.md",
+      "sha256": "fd00063e9e0d08f4a3f911e7e1793d1a4dbfc89136e5a7ce29e54ca5afd49cc4"
     }
   ],
   "dependencies": [

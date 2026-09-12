@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { QuestStore } from "./store"
+import { cleanupQuests } from "./cleanup"
 import { questRoot } from "./root"
 import { generateQuestIndex, readAllQuests } from "./index"
 import { requestFingerprint } from "./privacy"
@@ -17,8 +18,7 @@ function print(value: unknown) { console.log(JSON.stringify(withRoot(value), nul
 function printCompact(value: unknown) { console.log(JSON.stringify(withRoot(value))) }
 function quests() { return readAllQuests(root).flatMap((x) => x.quest ? [x.quest] : []) }
 const cmd = args.shift() ?? "list"
-if(cmd==="api"){const input=JSON.parse(await Bun.stdin.text());console.log(JSON.stringify(await (await import("./cli-api")).runTypedQuestCLI(input)))}
-else if (cmd === "create" || cmd === "admit" || cmd === "prepend") {
+if (cmd === "create" || cmd === "admit" || cmd === "prepend") {
   const title = args.join(" ") || "Untitled Quest"
   print(store.admit({ title, objective: title, kind: inferQuestKind(title), requestFingerprint: requestFingerprint({ title, objective: title }) }))
 } else if (cmd === "view") print(runQuestCommand(store, "view", args[0]))
@@ -34,8 +34,7 @@ else if (cmd === "refresh" || cmd === "get") printCompact(store.read(args[0]))
 else if (cmd === "step") {
   // Harness-CLI worker path (Claude Code/Codex/Grok): no in-process `quest`
   // tool exists there, so this CLI is the native equivalent of
-  // quest(action="step") for a subprocess caller. Keep the argument order in
-  // step with opencode-mcp-stdio.mjs's `quest` tool.
+  // quest step updates for an explicitly invoked subprocess caller.
   const api = (await import("./agent-api")).createQuestAgentAPI(root)
   if(!args[2])throw new Error("Explicit step state is required")
   printCompact(api.step(args[0], args[1], args[2], args.slice(3).join(" ") || undefined))
@@ -57,6 +56,7 @@ else if (cmd === "mappings" || cmd === "map" || cmd === "claims") {
   const api = (await import("./agent-api")).createQuestAgentAPI(root)
   printCompact(api.mappings(args[0] ? { questID: args[0] } : {}))
 }
+else if (cmd === "cleanup") print(await cleanupQuests(store,undefined,args[0]))
 else if (cmd === "index") console.log(generateQuestIndex(root))
 else if (cmd === "migrate-preview") print(previewMigration(root))
 else if (cmd === "migrate-apply") print(applyMigration(root))

@@ -6,18 +6,27 @@ import { stagesFromSteps, nextQuestStep } from "./steps"
 import { normalizeArtifact } from "./artifacts"
 import { acquireLock } from "./locking"
 import { redact } from "./privacy"
+import { questRequestFingerprint, unresolvedDuplicate } from "./duplicates"
+import { namingProblems } from "./naming"
 import type { ProjectIdentity } from "./project"
 import type { Quest, QuestStageStatus } from "./types"
+import { TASK_CLASSES } from "../models/task-demand"
 
 export class QuestError extends Error {
   constructor(public code: string, message: string, public retryable = false, public runID?: string) { super(message) }
 }
-export type QuestContext = { project: ProjectIdentity; /** Internal host-derived location; never tool input. */ directory?: string; sessionID: string; requestID: string }
+export type QuestContext = { project: ProjectIdentity; /** Internal host-derived location; never tool input. */ directory?: string; /** Verified user-giver origin, separate from the selected worker project. */ giverDirectory?: string; sessionID: string; requestID: string }
 export type CreateQuest = { title: string; description: string; steps: { title: string; detail?:string; needs?: string[]; id?: string; commandID?: string }[]; reward?: string }
 export type UpdateQuest = { title?: string; description?: string; reward?: string; steps?: { id: string; state: QuestStageStatus; title?: string; detail?: string; needs?: string[]; note?: string }[]; artifacts?: { name: string; path?: string; uri?: string; label?: string }[]; archive?: { reason?: string; accepted: boolean } | null }
-export type RunQuest = { readOnly?: boolean; stepIDs?: string[]; model?: string; files?: string[] }
-export type StartRun = (input: { quest: Quest; runID: string; stepIDs: string[]; readOnly?: boolean; model?: string; files?: string[]; context: QuestContext }) => Promise<{ sessionID: string }>
+/** `task` is what kind of work this dispatch is: coding, review, planning or utility. It is the
+ *  only thing that can name a class the dispatch does not enforce, and it decides how much
+ *  published accuracy the route may trade for a cheaper reasoning effort. Omitting it is safe --
+ *  an unclassified dispatch runs at the default coding demand, never a cheaper one. */
+export type RunQuest = { readOnly?: boolean; stepIDs?: string[]; model?: string; files?: string[]; task?: string }
+export type StartRun = (input: { quest: Quest; runID: string; stepIDs: string[]; readOnly?: boolean; model?: string; files?: string[]; task?: string; context: QuestContext }) => Promise<{ sessionID: string }>
 const hash = (value: string) => createHash("sha256").update(value).digest("hex")
+/** A dispatch failure leaves the request with its Quest; the recovery is another run, never another Quest. */
+const retryHere = (questID: string) => ` The Quest is intact and still owns this request: fix the cause and call action=run on Quest ${questID} again. Creating a second Quest for the same request is refused.`
 const text = (value: unknown, label: string): string => {
   if (typeof value !== "string" || !value.trim()) throw new QuestError("INVALID_INPUT", label + " must be nonempty text")
   return value
@@ -66,12 +75,30 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
       const ids = new Set(stages.map(s => s.id))
       if (stages.some(s => s.needs.some(id => !ids.has(id) || id === s.id))) throw new QuestError("INVALID_INPUT", "Step dependency does not identify another step")
       const id = hash(context.project.id + ":" + context.sessionID + ":" + context.requestID + ":create").slice(0, 26)
-      const q = store.create({ id, title: input.title, objective: input.description, description: input.description, reward: input.reward ?? "", stages, contractVersion: 2, project: context.project, integrationOwner: context.sessionID, requestFingerprint: hash(JSON.stringify(input)) })
+      // One tool call admits one Quest. A redelivered call returns what it already created.
+      const admitted = store.read(id)
+      if (admitted) return questView(admitted)
+      // Jk reads the Quest, not the conversation that made it. A record that cannot say what it is
+      // is refused here rather than discouraged in a prompt, which this repo has watched fail twice.
+      const unreadable = namingProblems({ title: input.title, objective: input.description, steps: input.steps })
+      if (unreadable.length) throw new QuestError("UNREADABLE_QUEST", "No Quest was created. " + unreadable.join(" ") + " Retry create with the corrected wording; the request itself does not change.")
+      const fingerprint = questRequestFingerprint({ projectID: context.project.id, title: input.title, objective: input.description })
+      const duplicate = unresolvedDuplicate(readAllQuests(store.projectRoot).flatMap(x => x.quest ? [x.quest] : []), { projectID: context.project.id, title: input.title, objective: input.description, fingerprint })
+      // A failed dispatch does not consume the request. Re-stating it as a second Quest
+      // duplicates the work and hides the run that has to be inspected, so it is refused here
+      // rather than discouraged in a prompt.
+      if (duplicate) throw new QuestError("DUPLICATE_QUEST", `Quest ${duplicate.id} already holds this request for this project and is unresolved (${duplicate.state}: ${duplicate.stages.map(s => s.id + "=" + s.status).join(", ") || "no steps"}). No second Quest was created. Retry the dispatch with action=run on ${duplicate.id}, inspect its runs with get inspect.section=runs, or change that Quest with update. Archive or finish it before opening a different Quest for the same work.`)
+      const q = store.create({ id, title: input.title, objective: input.description, description: input.description, reward: input.reward ?? "", stages, contractVersion: 2, project: context.project, integrationOwner: context.sessionID, requestFingerprint: fingerprint })
       return questView(q)
     },
     update(id: string, input: UpdateQuest) {
       keys(input, ["title", "description", "reward", "steps", "artifacts", "archive"])
       const q = getOwned(id)
+      // Admission alone left the record renameable: driven against the create-only guard, the giver
+      // took the refusal, created a readable Quest, then patched it back to the refused wording.
+      // Only the text this call writes is judged, so an older badly-named Quest stays editable.
+      const rewritten = namingProblems({ title: input.title, objective: input.description, steps: input.steps })
+      if (rewritten.length) throw new QuestError("UNREADABLE_QUEST", "Nothing was saved. " + rewritten.join(" ") + " Retry the update with wording the Quest can be read by.")
       const patch: Record<string, unknown> = {}
       for (const key of ["title", "description", "reward"] as const) if (input[key] !== undefined) {
         if (typeof input[key] !== "string" || (key !== "reward" && !input[key]!.trim())) throw new QuestError("INVALID_INPUT", key + " must be text")
@@ -118,8 +145,9 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
       return questView(store.apply(id, "patched", patch, "quest:update", { expectedRevision: q.revision }))
     },
     async run(id: string, input: RunQuest = {}) {
-      keys(input, ["stepIDs", "model", "files", "readOnly"])
+      keys(input, ["stepIDs", "model", "files", "readOnly", "task"])
       if(input.readOnly!==undefined&&typeof input.readOnly!=="boolean")throw new QuestError("INVALID_INPUT","readOnly must be a boolean")
+      if(input.task!==undefined&&!TASK_CLASSES.includes(String(input.task).trim().toLowerCase() as any))throw new QuestError("INVALID_INPUT","task must be one of "+TASK_CLASSES.join(", "))
       if(input.files!==undefined&&(!Array.isArray(input.files)||!input.files.length||input.files.length>100||input.files.some(x=>typeof x!=="string"||!x.trim())))throw new QuestError("INVALID_INPUT","files must be 1–100 literal relative file/directory scopes")
       if (input.model !== undefined) text(input.model, "Model")
       const runID = hash(context.project.id + ":" + context.sessionID + ":" + context.requestID + ":run:" + id).slice(0, 26)
@@ -133,7 +161,7 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
           if(!!input.readOnly!==!!(prior.scope as any)?.readOnly)throw new QuestError("REQUEST_CONFLICT","This request already selected another access mode")
           if (JSON.stringify(input.files??["."])!==JSON.stringify((prior.scope as any)?.requestedFiles??(prior.scope as any)?.files??["."]))throw new QuestError("REQUEST_CONFLICT","This request already reserved different file scopes")
           if (input.model !== undefined && prior.model !== input.model) throw new QuestError("REQUEST_CONFLICT", "This request already selected another model; use a new request identity")
-          if (prior.state === "failed" || prior.state === "planned" && prior.result) throw new QuestError(prior.state === "failed" ? "DISPATCH_FAILED" : "DISPATCH_OUTCOME_UNKNOWN", prior.result ?? "Previous launch failed", false, runID)
+          if (prior.state === "failed" || prior.state === "planned" && prior.result) throw new QuestError(prior.state === "failed" ? "DISPATCH_FAILED" : "DISPATCH_OUTCOME_UNKNOWN", (prior.result ?? "Previous launch failed") + retryHere(id), false, runID)
           return { runID, state: prior.state, sessionID: prior.openCodeSessionId ?? null, result: prior.result ?? null }
         }
         const next = nextQuestStep(q)
@@ -142,13 +170,16 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
         for (const id of stepIDs) {
           const step = q.stages.find(s => s.id === id)
           if (!step || step.status !== "pending" || step.needs.some(dep => !q.stages.some(s => s.id === dep && s.status === "done"))) throw new QuestError("STEP_NOT_ELIGIBLE", "The selected step is not ready")
-          if (q.sessions.some(s => ["planned", "executing", "waiting", "blocked"].includes(s.state) && s.deliverables.includes(id))) throw new QuestError("STEP_RUNNING", "The step already has an active run")
+          if (q.sessions.some(s => ["planned", "executing", "waiting", "blocked"].includes(s.state) && s.deliverables.includes(id))) throw new QuestError("STEP_RUNNING", "The step already has an active run on this Quest; inspect it with get inspect.section=runs. Another Quest for the same request is not a retry.")
+          // A worker that finished without recording its step leaves the step pending forever.
+          // Re-dispatching repeats the same work in a second worktree; reconcile the result instead.
+          if (q.sessions.some(s => s.state === "completed" && s.deliverables.includes(id))) throw new QuestError("STEP_UNRECONCILED", "A worker already completed this step without recording a result; inspect that session and update the step instead of dispatching again")
         }
         const previous = [...q.sessions].reverse().find(s => ["failed", "cancelled"].includes(s.state) && JSON.stringify([...s.deliverables].sort()) === JSON.stringify([...stepIDs].sort()))
         store.apply(q.id, "session-planned", { callID: runID, runID, parentID: context.sessionID, role: "worker", model: input.model, scope:{readOnly:input.readOnly===true,files:input.files??["."],requestedFiles:input.files??["."]}, deliverables: stepIDs, attempt: previous ? previous.attempt + 1 : 1, resumedFrom: previous?.callID, resumeRoot: previous?.resumeRoot ?? previous?.callID }, "quest:run")
       } finally { lock.release() }
       try {
-        const started = await startRun({ quest: q!, runID, stepIDs: stepIDs!, model: input.model, files: input.files, readOnly:input.readOnly, context })
+        const started = await startRun({ quest: q!, runID, stepIDs: stepIDs!, model: input.model, files: input.files, readOnly:input.readOnly, task: input.task, context })
         if (!started?.sessionID) throw new QuestError("DISPATCH_OUTCOME_UNKNOWN", "Host did not confirm a worker session; reconcile this run before retrying", false, runID)
         store.apply(id, "session-bound", { callID: runID, sessionID: started.sessionID }, "quest:run")
         return { runID, state: store.read(id)?.sessions.find(s=>s.runID===runID)?.state ?? "executing", sessionID: started.sessionID }
@@ -158,8 +189,8 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
         // An unclassified transport failure may have started work: retain planned intent.
         store.apply(id, "session-state", { callID: runID, state: unknown ? "planned" : "failed", result: message, evidence: message, preserveTerminal:true }, "quest:run")
         const actual=store.read(id)?.sessions.find(s=>s.runID===runID)
-        if(actual && ["completed","failed","cancelled"].includes(actual.state) && (unknown||actual.result!==message))throw new QuestError("DISPATCH_RESPONSE_FAILED", "Worker outcome: "+actual.state+". Dispatch response error: "+message,false,runID)
-        throw new QuestError(unknown ? "DISPATCH_OUTCOME_UNKNOWN" : (error as QuestError).code, message, false, runID)
+        if(actual && ["completed","failed","cancelled"].includes(actual.state) && (unknown||actual.result!==message))throw new QuestError("DISPATCH_RESPONSE_FAILED", "Worker outcome: "+actual.state+". Dispatch response error: "+message+retryHere(id),false,runID)
+        throw new QuestError(unknown ? "DISPATCH_OUTCOME_UNKNOWN" : (error as QuestError).code, message + retryHere(id), false, runID)
       }
     },
   }

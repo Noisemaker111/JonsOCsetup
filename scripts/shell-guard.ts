@@ -77,24 +77,3 @@ export function assertSafeShell(command: string, cwd?: string): void {
   }
   if (hits.length) throw new Error(`[shell-guard] ${hits.map((h) => h.message).join("; ")}`)
 }
-
-function selfTest(): void {
-  const bad = ["ls -la", "cd vendor\\t3code && pnpm run build", "git ls-tree --name-only HEAD"]
-  const good = ["Set-Location vendor/t3code; pnpm -C vendor/t3code run build", "Get-Content README.md", "rg -n pattern .", "git ls-tree -r HEAD", "git ls-tree --recursive --name-only HEAD"]
-  for (const command of bad) if (!shellViolations(command).length) throw new Error(`did not reject: ${command}`)
-  for (const command of good) if (shellViolations(command).length) throw new Error(`rejected: ${command}`)
-
-  const tempCwd = "C:\\Users\\dev\\AppData\\Local\\Temp\\opencode\\candidate-123"
-  if (!workspaceViolations(tempCwd).length) throw new Error("did not reject a temp working directory")
-  if (workspaceViolations("C:\\Users\\dev\\.config\\opencode").length) throw new Error("rejected a real working directory")
-  let threw = false
-  try { assertSafeShell("bun install", tempCwd) } catch { threw = true }
-  if (!threw) throw new Error("did not reject a build in a temp working directory")
-  threw = false
-  try { assertSafeShell("git clone https://x/y C:\\Users\\dev\\AppData\\Local\\Temp\\scratch") } catch { threw = true }
-  if (!threw) throw new Error("did not reject cloning into a temp path")
-  assertSafeShell("Get-Content C:\\Users\\dev\\AppData\\Local\\Temp\\probe.log")
-  console.log("PASS: shell guard rejects bad commands, temp workspaces, and temp builds.")
-}
-
-if (import.meta.main && process.argv.includes("--self-test")) selfTest()

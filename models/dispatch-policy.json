@@ -8,7 +8,6 @@
     "maxUsageAgeSeconds": 120,
     "maxEvidenceAgeDays": 30,
     "reserveFraction": 0,
-    "primaryRouteID": "proxy-sol-xhigh",
     "allowedRouteIDs": [
       "proxy-sol-xhigh",
       "proxy-sol-max",
@@ -16,10 +15,26 @@
       "proxy-fable-xhigh",
       "proxy-fable-max",
       "proxy-claude-unknown",
-      "proxy-luna-unknown",
       "proxy-terra-unknown",
       "openai-astra-medium"
-    ]
+    ],
+    "subscriptionConcurrency": "unlimited",
+    "minBenchmarkPassAt1": 0.5,
+    "byTask": {
+      "planning": {
+        "qualityTolerance": 0
+      },
+      "coding": {
+        "qualityTolerance": 0.02
+      },
+      "review": {
+        "qualityTolerance": 0.1
+      },
+      "utility": {
+        "qualityTolerance": 0.2,
+        "minBenchmarkPassAt1": 0.4
+      }
+    }
   },
   "routes": [
     {
@@ -107,20 +122,6 @@
       "quotaPerTask": {}
     },
     {
-      "id": "proxy-luna-unknown",
-      "accountID": "openai-429c9885edc3fc7113fc",
-      "providerID": "cliproxyapi",
-      "modelID": "gpt-5.6-luna",
-      "harness": "native",
-      "agent": "proxy-luna",
-      "reasoning": "unknown",
-      "serviceTier": "default",
-      "verified": true,
-      "admission": "configured-choice",
-      "evidence": [],
-      "quotaPerTask": {}
-    },
-    {
       "id": "proxy-terra-unknown",
       "accountID": "openai-429c9885edc3fc7113fc",
       "providerID": "cliproxyapi",
@@ -151,13 +152,28 @@
   ],
   "billing": {
     "openai-429c9885edc3fc7113fc": "subscription",
-    "claude-8ca596da07b766ac72c8": "subscription"
+    "claude-8ca596da07b766ac72c8": "subscription",
+    "opencode-go-d9f819e2b95cc656f794": "subscription"
   },
   "bootstrapByProject": {
     "ba7f7ae7bb584ce63b3afa36920b467c644b4a7effdef2f93c5ba39ff98f8576": [
       "bun",
       "install",
       "--frozen-lockfile"
+    ],
+    "4b6a7cabcc32327a2a818e946a71beffdcf24e3f41e8f2426de86f70b94ab0ce": [
+      "bun",
+      "install",
+      "--frozen-lockfile"
     ]
+  },
+  "sourceByProject": {
+    "4b6a7cabcc32327a2a818e946a71beffdcf24e3f41e8f2426de86f70b94ab0ce": {
+      "projectRoot": "C:/Users/Jk101/Projects/opencode-hub",
+      "directory": "C:/Users/Jk101/.config/opencode/.worktrees/jonsocsetup-public",
+      "root": "C:/Users/Jk101/.config/opencode/.worktrees/jonsocsetup-public",
+      "scopePrefix": "config",
+      "loadedDevRelease": true
+    }
   }
 }

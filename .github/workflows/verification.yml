@@ -1,0 +1,43 @@
+name: Verification
+on:
+  pull_request:
+    branches: [agents, master]
+  push:
+    branches: [agents]
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun run check:core
+      - run: bun run check:repo
+      - run: node --check scripts/runtime-channel.mjs
+  release-notes:
+    if: github.base_ref == 'master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Generate exact candidate notes
+        shell: bash
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          printf '# Frozen candidate changes\n\n' > release-notes.md
+          git log --format='- %s' "$BASE..$HEAD" >> release-notes.md
+          printf '\n## Changed files\n\n```\n' >> release-notes.md
+          git diff --stat "$BASE" "$HEAD" >> release-notes.md
+          printf '\n```\n' >> release-notes.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md

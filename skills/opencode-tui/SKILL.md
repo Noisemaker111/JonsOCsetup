@@ -16,13 +16,13 @@ If you only read one section, read **Host brick invariants** — breaking any of
 
 These notes combine observations from multiple historical beta builds. Read the installed package versions and isolated host receipts before relying on them. Check host behavior and SDK types together; neither a stale version in this skill nor a type declaration alone proves runtime support.
 
-- **Export shape:** `export default Plugin.define({ id, setup })` where `id` === filename stem. `{ id, tui }` without `setup` is rejected as *Invalid V2 TUI plugin module* (see `test/tui-slots.test.ts`, `smoke-test.ps1`).
+- **Export shape:** `export default Plugin.define({ id, setup })` where `id` === filename stem. `{ id, tui }` without `setup` is rejected as *Invalid V2 TUI plugin module* (verify by loading the plugin in the installed host).
 - **Mount chrome via `context.ui.slot({ <placement>: "<slot>", render })`** where placement is exactly one of `prepend | append | before | after | replace`. Two or none throws *Slot claim requires exactly one placement key*. `context.slots.register` / `context.keymap.registerLayer` / `ui.dialog.replace` are **gone** — each throws and takes the rest of `setup()` down. Grep `tui-usage.log` for `undefined is not an object (evaluating 'context.slots.register')`.
-- **Slot names are dotted** (host renderer paths): `app` · `home.footer` · `prompt.footer` · `prompt.footer.file` · `prompt.footer.status` · `session.composer.top` · `sidebar.content` · `sidebar.footer`. Underscored `app_bottom` / `sidebar_content` never matches. `RUNTIME_SLOTS` in `test/tui-slots.test.ts` is derived from the binary (`_\(to,{path:"..."`) — re-derive if host bumps.
+- **Slot names are dotted** (host renderer paths): `app` · `home.footer` · `prompt.footer` · `prompt.footer.file` · `prompt.footer.status` · `session.composer.top` · `sidebar.content` · `sidebar.footer`. Underscored `app_bottom` / `sidebar_content` never matches. Inspect the current installed renderer when the host changes.
   - `app` renders nothing itself; mount a component there **just to get a render context** for `keymap.layer()`.
   - `prompt.footer` is the always-present composer footer (count/badge lives here).
   - `sidebar.content` / `sidebar.footer` render beside Subagents and receive `{ sessionID }`.
-  - **The native background-subagent chip carries the live line via dispatch `description`.** Decompiled from the live `opencode2.exe` (`@opencode-ai/cli`, not the older `opencode-ai` npm package binary — they differ): the chip's label is literally `` `${titlecase(input.agent ?? input.subagent_type ?? "General")} Subagent — ${input.description ?? "Subagent"}` ``, read straight off the raw Task-tool call args (`e.input`), plus a `Background` badge while `metadata.background` and status `running`. `"General"` is the host's own hardcoded fallback for a Task call whose `agent`/`subagent_type` came through empty — not a bug in our dispatch code, and `subagent_type` is a fixed small enum of agent personas (`general-purpose`, `Explore`, `Plan`, …), not free text, so it can never carry quest/model/fast/reasoning info. But `description` IS free text: every Quest dispatch surface (`quest/spawn.ts`, the `opencode-mcp` harness gateway session title, the claude-code task title/label) sets it to the exact live line `(quest title, model, reasoning[, fast])` built by `subagentChipLabel` in `orchestration/dispatch.ts`, so the host chip itself is the one worker face. `onClick` already does `router.navigate({type:"session", sessionID})` natively — the chip's click-through was never broken, only its label. There is no slot placement that targets this specific element (`prepend|append|before|after|replace` only hit named slots, and none of them is "the chip"), so never render a second chip beside it: `sidebar.content` stays the general board list.
+  - Native Quest workers use real root sessions in owned workspaces. Open their native sessions through the board or /session. The role strip and session titles distinguish workers from the one giver; /giver returns to that same conversation. Native subagent chips remain the host's own navigation for native child sessions.
   - **beta-19059+:** `cli.json` `plugins` entries must be plugin **directories** (`./tui-bootstrap/quests`), resolved by the host as `<dir>/tui.tsx` (`Host.resolve` in `@opencode-ai/plugin/host`). An entry that names a **file** is skipped silently — no toast, no log line, the plugin just never appears (this is how the Quest board vanished after the 18999 -> 19059 auto-update). `tui.json` is dead: the host only reads it to seed a missing `cli.json`. Failures that do surface show as a toast plus `/plugins`.
 - **Commands via `context.keymap.layer(() => ({ mode, commands }))` from a *mounted* component.** Calling from `setup()` throws `Keymap.Provider is missing` and no slash ever appears. Live keys: `active,commands,dispatch,layer,mode,pending,shortcuts`. Slash is `slash: { name, aliases? }` — flat `slashName` string is gone (host reads `command.slash.name` for palette). Colliding with host `/sessions` hides your command.
 - **Dialog is `{ alert, clear, confirm, prompt, select, set, show }`.** `replace` is gone — guarding on it turns every command into a silent no-op. Use:
@@ -101,7 +101,7 @@ export default Plugin.define({
 Read these three files before writing new chrome — they already solved the hard parts:
 
 - `usage/tui-active/usage.tsx` — table dialog with `COL`/`TABLE_WIDTH`/`DIALOG_INNER` budget, `ColText` cell, `contentHeight()` capping, skeleton fallback, `openDialog` via `openTuiDialog`, `activateOnMouseUp` consume-release, `themeColors`.
-- `quest/tui-active/quests.tsx` + `quest/tui-active/quest-board.tsx` — count in `prompt.footer`, sidebar entry, full-screen plugin route, and fresh Quest Giver intake turns. Workers are evidence first, but each `AGENT LOG` row also shows a clickable short session id: `navigateQuestSession` (`quest/tui-navigation.ts`) resolves it to `router.navigate({type:"session", sessionID})` for native (bridge-backed) workers once a live `session.get` confirms the id, else falls back to `dialog.alert` with what's known (external harness session, or pruned). The host renders chat transcript text itself with no hook to linkify a bare `ses_…` a model prints in prose (confirmed against the beta-19086 binary — no href/internal-link scheme reaches transcript text), so the `/session` command (`quests.tsx`) is the click-equivalent for ids seen in chat: a searchable `dialog.select` picker over every Quest's sessions that jumps through the same path.
+- `quest/tui-active/quests.tsx` + `quest/tui-active/quest-board.tsx` — count in `prompt.footer`, sidebar entry, full-screen plugin route, and one persistent user Quest Giver across projects. The full-width board composer opens the native giver prompt. Each `AGENT LOG` row shows live observation separately from saved state and a clickable recorded model; `w` opens the same native worker picker: `navigateQuestSession` (`quest/tui-navigation.ts`) resolves it to `router.navigate({type:"session", sessionID})` for native (bridge-backed) workers once a live `session.get` confirms the id, else falls back to `dialog.alert` with what's known (external harness session, or pruned). The host renders chat transcript text itself with no hook to linkify a bare `ses_…` a model prints in prose (confirmed against the beta-19086 binary — no href/internal-link scheme reaches transcript text), so the `/session` command (`quests.tsx`) is the click-equivalent for ids seen in chat: a searchable `dialog.select` picker over every Quest's sessions that jumps through the same path.
 - `usage/tui-usage-format.ts` / `usage/tui-dialog.ts` — pure formatters (`formatWindowRow`, `fmtMoney`, `sourceState`, `sourceHint`) and dialog gate.
 
 ### 2. Layout — Yoga flexbox in terminal cells
@@ -110,7 +110,7 @@ Terminal = grid of cells, not pixels. Core docs: `@opentui` skill → `docs/core
 
 Rules that matter for host plugins:
 
-- **Budget first.** Pick `DIALOG_INNER` (e.g. 44) and `TABLE_WIDTH` (sum `COL.win + COL.bar + COL.pct + COL.reset + gaps`) and keep `TABLE_WIDTH ≤ DIALOG_INNER ≤ ~72`. Assert it (`test/tui-usage.test.ts` does: `expect(TABLE_WIDTH).toBeLessThanOrEqual(DIALOG_INNER)`). Use `pad(value, w, align)` from `tui-usage-format.ts` for fixed columns.
+- **Budget first.** Pick `DIALOG_INNER` (e.g. 44) and `TABLE_WIDTH` (sum `COL.win + COL.bar + COL.pct + COL.reset + gaps`) and keep `TABLE_WIDTH ≤ DIALOG_INNER ≤ ~72`. Inspect the real terminal at the intended widths.toBeLessThanOrEqual(DIALOG_INNER)`). Use `pad(value, w, align)` from `tui-usage-format.ts` for fixed columns.
 - **Row = no-wrap.** Every `<box flexDirection="row" flexWrap="no-wrap" gap={2}>` + each `<text truncate wrapMode="none" flexShrink={0} width={w}>`. Wrapping chrome bleeds into host composer. Use `scrollbox` when content must exceed viewport (`height={contentHeight(lines, ctx)}`, `scrollbarOptions={{ visible: lines > 12 }}`).
 - **Cap height.** `contentHeight(lines, ctx)` = `min(maxHeightCap, min(max(lines, 3), floor(renderer.height) - 12))`. Without cap, dialog grows off-screen on small terminals.
 - **Skeleton while loading.** `UsageSkeleton` (muted `░░░░` bars) + `<Show when={view()} fallback={<UsageSkeleton/>}>` — instant chrome, no pop.
@@ -217,20 +217,19 @@ function Row(p:{row:UsageRowOut, colors:any}){
 - [ ] Theme via `themeColors(ctx)`; tone mapping via `pctTone`/`sourceStateTone`; muted for secondary; `TextAttributes.BOLD` only for cap.
 - [ ] Layout budget: `TABLE_WIDTH ≤ DIALOG_INNER ≤ 72`; `flexWrap="no-wrap"`; `truncate` + `wrapMode="none"` + `flexShrink={0}` on every cell; `scrollbox` with `contentHeight` cap; skeleton fallback.
 - [ ] No raw `block.doc` dump; `sourceHint` + `formatDoc` filtering; `pad()` for columns; `fmtBar`/`fmtMoney`/`fmtReset` for cells.
-- [ ] Tests: `tui-slots.test.ts` (real slots from binary) + `tui-usage.test.ts` pattern (problems() gate on src) + `tui-dialog.test.ts` (show/select/confirm) + `captureCharFrame()` not hand-drawn ASCII.
+- [ ] Use the actual installed UI, capture its terminal output and reopen the saved result.
 
-## Testing your chrome (don't fabricate frames)
+## Use the actual chrome
 
-- **Never hand-draw a session frame and assert on it.** That test passed for weeks while chrome mounted nowhere. Assert against real `Plugin.define` src and real `SlotMap` from binary (`test/tui-slots.test.ts` does `_(to,{path:"..."})` extraction).
-- **Source gate test:** `problems(src)` stripping comments, checking `setup()` doesn't call `keymap.layer`, checking `ui.slot("prompt.footer")` exists, checking `slash:{name:"..."}`.
-- **Format unit test:** `tui-usage-format.ts` pure functions — `fmtBar`, `pctTone`, `sourceState`, `formatDoc`, `formatWindowRow`.
-- **Dialog contract:** `tui-dialog.test.ts` — `openTuiDialog({show}, render)` succeeds; `{replace}` alone fails with `"dialog.show unavailable"`.
-- **Headless render:** `@opentui/solid` → `testRender(()=><App/>, {width:40, height:10})` → `await setup.renderOnce()` → `setup.captureCharFrame()` / `captureSpans()`. Always `setup.renderer.destroy()` in `finally`. For Core imperative: `createTestRenderer({width, height})`.
+Follow docs/development-workflow.md. Load the candidate in the installed host,
+use the affected controls, inspect the actual terminal capture, and reopen the
+saved result. Do not add source-shape, unit or snapshot assertions. A temporary
+PTY driver may operate and capture the real app; do not hand-draw expected frames.
 
 ## When to read what next
 
 - Layout/recipes → `@opentui` skill: `docs/core-concepts/layout.mdx`, `docs/components/box.mdx`, `docs/components/text.mdx`, `docs/components/overview.mdx`.
-- Slot deep-dive → `@opentui` skill: `docs/plugins/slots.mdx` + `docs/plugins/solid.mdx` + `test/tui-slots.test.ts` + live log `~/.local/state/opencode/tui-usage.log`.
+- Slot deep-dive → `@opentui` skill: `docs/plugins/slots.mdx` + `docs/plugins/solid.mdx` + live log `~/.local/state/opencode/tui-usage.log`.
 - Keymap scoping → `@opentui` skill: `docs/keymap/overview.mdx` + live keys `active,commands,dispatch,layer,mode,pending,shortcuts`.
 - Visual checks: use this repository's headless capture or isolated standalone acceptance tools. Do not open or capture the user's live terminal or desktop.
 
@@ -242,3 +241,12 @@ function Row(p:{row:UsageRowOut, colors:any}){
 4. Add `scrollbox` with `contentHeight` + `DIALOG_INNER` minWidth and `UsageSkeleton` fallback.
 5. Switch list UIs from manual `<box>` lists to `dialog.select` with `category` + `searchText`.
 6. Add `sidebar.content` panel if you only had `prompt.footer` count — users can't see quests from inside session without it (see `tui-slots.test.ts:quests mount the count on composer footer AND in sidebar`).
+
+## Session roles
+
+The bound user giver has the persistent title Quest Giver, yellow role chrome and
+a /giver (Ctrl+Alt+G) entry from any session. Worker sessions have Worker titles
+and cyan role chrome based on Quest receipts. Native worker agents are mode all
+and visible so the host composer can restore their actual persisted identity;
+hidden subagent-only agents caused the composer to fall back to the giver.
+Worker permissions and exact agent/model/reasoning guards still apply.

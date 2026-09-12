@@ -1,9 +1,7 @@
-import { assertConfiguredModel } from "./access-policy"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { type CatalogModel, exactIdentity, overlayProviderLane } from "./model-catalog"
-import { routeAccountCapacity, type CapacitySnapshot } from "../usage/usage-lib"
+import { overlayProviderLane } from "./model-catalog"
 
 export type Fav = { providerID: string; modelID: string }
 
@@ -35,70 +33,15 @@ export type ModelData = {
   structured?: boolean
   source: "models-dev" | "profile"
 }
-
-export type UsageTelemetry = { capacity?: "available" | "exhausted" | "resetting" | "unknown"; resetAt?: number; authenticated?: boolean; recentSuccess?: number }
-
-function isSubscriptionProvider(providerID: string): boolean {
-  return ["opencode-go", "openai", "cursor", "grok-sub", "cliproxyapi", "claude-code", "codex", "grok-build"].includes(providerID.toLowerCase())
-}
-
-export function telemetryFromCapacity(models: CatalogModel[], snapshot: CapacitySnapshot): Record<string, UsageTelemetry> {
-  return Object.fromEntries(models.map((model) => {
-    const key = `${model.providerID}/${model.modelID}${model.variant ? `#${model.variant}` : ""}`
-    const account = snapshot.accounts ? routeAccountCapacity(snapshot.accounts, model.providerID, model.modelID) : undefined
-    const source = account && (account.accountIDs.length > 0 || model.providerID === "cliproxyapi") ? account : snapshot.providers[model.providerID]
-    return [key, { capacity: source?.state ?? "unknown", resetAt: source?.resetAt, authenticated: source?.authenticated }]
-  }))
-}
-
-/** Apply the picker's exact provider/model to an otherwise unpinned native Task. */
-export function applyPickedModel(input: Record<string, unknown>, models: CatalogModel[], telemetry: Record<string, UsageTelemetry>): string | undefined {
-  if (typeof input.model === "string" && input.model.trim()) return input.model
-  const role = String(input.agent ?? input.subagent_type ?? "").trim().toLowerCase()
-  if (role !== "build" && role !== "explore") return
-  const task = String(input.task ?? input.prompt ?? input.description ?? input.title ?? "").trim()
-  if (!task) return
-  const picked = pickAvailableModel(task, models, telemetry)
-  if (!picked) return
-  const model = `${picked.model.providerID}/${picked.model.modelID}`
-  input.model = model
-  if (picked.model.variant) input.variant = picked.model.variant
-  return model
-}
-
-/** Astra is plan-only escalation: explicit requests return early above; the automatic scorer must never spend it. */
-function isPlanOnlyModel(model: Pick<CatalogModel, "providerID" | "modelID">): boolean {
-  const provider = model.providerID.toLowerCase()
-  return (provider === "openai" || provider === "cliproxyapi") && /gpt-6-astra/i.test(model.modelID)
-}
-
-/** Select across the connected-provider catalog. Favorites are presentation metadata only. */
-export function pickAvailableModel(task: string, models: CatalogModel[], telemetry: Record<string, UsageTelemetry> = {}, explicit?: string) {
-  const keyOf = (m: CatalogModel) => `${m.providerID}/${m.modelID}${m.variant ? `#${m.variant}` : ""}`
-  const named = explicit ? models.find((m) => keyOf(m).toLowerCase() === explicit.toLowerCase() || (`${m.providerID}/${m.modelID}`.toLowerCase() === explicit.toLowerCase() && !m.variant)) : undefined
-  if (explicit && !named) throw new Error(`Requested model is not in the authoritative provider catalog: ${explicit}`)
-  if (named) { assertConfiguredModel(named); return { model: named, reason: `explicit user choice: ${exactIdentity(named)}` } }
-  const text = task.toLowerCase()
-  const planning = /orchestrat|architect|plan(?:ning)?|hard reason|complex reason|strategy|design review/.test(text)
-  const scored = models.filter((m) => !m.harness && !isPlanOnlyModel(m) && overlayProviderLane(m.providerID) !== "metered").map((model) => {
-    const usage = telemetry[keyOf(model)] ?? {}; let score = 0
-    const fit = (re: RegExp, cap: keyof NonNullable<CatalogModel["capabilities"]>, points: number) => { if (re.test(text) && model.capabilities?.[cap] === true) score += points }
-    fit(/vision|image|visual/, "vision", 30); fit(/reason|architect|hard|debug|long rewrite/, "reasoning", 24); fit(/tool|code|implement|test|refactor/, "tools", 18); fit(/schema|json|contract/, "structured", 16)
-    if (typeof model.context === "number" && /long|huge|1m|context/.test(text)) score += Math.min(20, model.context / 100_000)
-    if (typeof model.priceOutput === "number") score -= Math.min(18, model.priceOutput)
-    if (usage.capacity === "exhausted") score -= 100
-    if (usage.capacity === "resetting") score += usage.resetAt && usage.resetAt <= Date.now() + 15 * 60_000 ? 8 : -25
-    if (usage.capacity === "unknown" || usage.capacity == null) score -= 4
-    if (usage.authenticated === false) score -= 100
-    if (typeof usage.recentSuccess === "number") score += Math.max(-10, Math.min(10, usage.recentSuccess * 10))
-    if (usage.capacity === "available") score += 35
-    if (model.providerID === "openai" && /gpt-5\.6-sol/i.test(model.modelID)) score += planning ? 90 : -35
-    if (model.providerID === "openai" && /gpt-5\.6-luna-fast/i.test(model.modelID)) score += planning ? 10 : 85
-    return { model, score }
-  }).sort((a, b) => b.score - a.score || (a.model.priceOutput ?? Infinity) - (b.model.priceOutput ?? Infinity))
-  const best = scored.find((x) => telemetry[keyOf(x.model)]?.capacity !== "exhausted" && telemetry[keyOf(x.model)]?.authenticated !== false)
-  return best ? { model: best.model, reason: `dynamic task fit ${best.score.toFixed(1)}; telemetry is ${telemetry[keyOf(best.model)]?.capacity ?? "unknown"}` } : undefined
-}
+/* Task-aware model selection used to live here, as three hand-tuned keyword scorers:
+ * `pickAvailableModel`, `applyPickedModel` and `pickModel` matched regexes against the task text
+ * and then added or subtracted points by model name (`gpt-5.6-sol` +90 when the text looked like
+ * planning, `gpt-5.6-luna-fast` +85 when it did not). Nothing called them, and nothing should
+ * have: a table of names cannot see a model that shipped this morning and cannot say what an
+ * effort level buys. That decision is now `models/route-planner.ts`, ranking live candidates on
+ * a published per-effort board and recorded per-effort consumption, with the task class deciding
+ * how much accuracy it may trade (`models/task-demand.ts`). What is left in this file is the
+ * favorites catalog and profile presentation that `favorite-agents.ts` reads. */
 
 type CacheEntry = {
   key: string
@@ -331,7 +274,7 @@ export function routingCard(favs: Fav[], profiles = loadProfiles(), cache = read
   }
   lines.push("")
   lines.push(
-    "DEFAULT: routing is task × usage × speed × correctness — never a silent default; a model the user names always wins. Absent a name, Muse Spark 1.3 Contributor (go-quota) covers ~90% of tasks — impl, tests, refactors, debug, UI/HUD, frontend, scene/codegen, grunt, bulk edits, docs, parallel fan-out, most coding (also most ops); reach for the free twin opencode/muse-spark-1.3-contributor-free when go-quota is capped or to spare quota on low-stakes fan-out (still not an automatic override of a named model). GLM Flash only for tiny utility/ops when explicitly requesting cheapest 1M run — not default. Grok 4.6 (cliproxyapi/grok-4.6 only, never xai/*) only for hard debugging/long rewrites/when Muse shortcuts. DeepSeek Flash not default (Muse replaces it). Design/creativity/architecture -> Kimi K3 (slow, deliberate). Review -> hy3 (luna-fast while Go capped). Luna (fast/max, openai sub) is an approved cheap sub-lane workhorse — 1M ctx, reliable general coding — usable alongside Muse, not just on failure; Sol stays the named/frontier escalation for hard design/architecture.",
+    "SELECTION: preserve an explicitly authorized exact model and effort. Otherwise rank permitted routes for this task using current benchmark methodology, measured task outcomes, available quota and observed cost/latency. There is no universal model default. Apply access-policy.json restrictions to givers, workers, reviews, retries and resumes; never substitute a banned or unsupported effort. Missing evidence stays unknown. Profile descriptions are curation, not comparative proof.",
   )
   lines.push(
     "Curation lives in model-profiles.json; costs come from models-cache.json (auto-refreshed from models.dev). Edit profiles, then `bun favorite-agents.ts sync`.",
@@ -339,95 +282,6 @@ export function routingCard(favs: Fav[], profiles = loadProfiles(), cache = read
   return lines.join("\n")
 }
 
-export function pickModel(
-  task: string,
-  favs: Fav[],
-  profiles = loadProfiles(),
-  cache = readModelCache(),
-): { agent: string; model?: string; reason: string; profile: ModelProfile; outputCost: number | undefined } | undefined {
-  const text = task.toLowerCase()
-  const named = favs.find((fav) => {
-    const profile = inferProfile(fav, profiles)
-    return [fav.modelID, fav.providerID, profile.name, profile.id].some((part) =>
-      text.includes(part.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()),
-    )
-  })
-  if (named) {
-    assertConfiguredModel(named)
-    return {
-      agent: inferProfile(named, profiles).tier === "explore" ? "explore" : "build",
-      model: modelKey(named),
-      reason: `user named ${modelKey(named)}`,
-      profile: inferProfile(named, profiles),
-      outputCost: effectiveCost(named, inferProfile(named, profiles), cache).output,
-    }
-  }
-
-  const scored = favs
-    .filter((fav) => inferProfile(fav, profiles).lane !== "metered" && !isPlanOnlyModel(fav))
-    .map((fav) => {
-      const profile = inferProfile(fav, profiles)
-      const cost = effectiveCost(fav, profile, cache)
-      let score = 0
-      if (profile.lane === "go-quota") score += 22
-      if (profile.lane === "free") score += 24
-      if (profile.lane === "sub") score += 16
-      if (profile.lane === "metered") score -= 40
-
-      const out = cost.output
-      if (typeof out === "number") {
-        if (out <= 0.3) score += 6
-        else if (out <= 2) score -= 8
-        else score -= 28
-        if (profile.lane === "go-quota" && out > 2) score -= 12
-      }
-
-      const wantPrecise = /schema|type|contract|fail-?closed|fidelity|instruction/.test(text)
-      const wantUi = /\bui\b|hud|frontend|css|react|scene|visual|player|hud/.test(text)
-      const wantHeavy = /architect|long-?horizon|huge context|multimodal|vision|1m context|hard agentic|hard debug|long rewrite|big rewrite|reasoning-heavy|shortcut/.test(text)
-      const wantUtility = /git|commit|verify|smoke|deploy|status|cleanup|rebase|merge|release|format|lint|typecheck|tripwire|check/.test(text)
-      const wantCreative = /design|creative|creativ|concept|direction|aesthetic|art|novel|wireframe/.test(text)
-      const wantGrunt = /impl|test|refactor|grunt|bulk|parallel|loop|motor|docs|mechanical|migrate/.test(text)
-      const wantExplore = /preview|throwaway|second opinion/.test(text)
-      const isMuse = profile.id === "muse-spark"
-
-      // Muse is default workhorse for ~90% of tasks — boost unless task truly wants heavy/precise
-      if (isMuse && !wantHeavy && !wantPrecise) score += 28
-      if (isMuse && (wantGrunt || wantUtility || wantUi)) score += 10
-
-      const wantGrok = /hard debug|long rewrite|big rewrite|reasoning-heavy|shortcut/.test(text)
-      if (wantGrok && profile.id === "grok-4-6") score += 45
-      if (wantGrok && profile.tier === "worker") score += 15
-      if (wantGrok && isMuse) score -= 12
-      if (wantPrecise && profile.tier === "precise") score += 25
-      if (wantUi && profile.tier === "codegen") score += 25
-      if (wantHeavy && profile.tier === "heavy") score += 30
-      if (wantGrunt && profile.tier === "codegen") score += 18
-      if (wantGrunt && profile.tier === "worker") score += 8
-      if (wantExplore && profile.tier === "explore") score += 15
-      if (wantUtility && profile.tier === "utility") score += 12
-      if (wantUtility && profile.tier === "codegen") score += 14
-      if (wantUtility && (profile.tier === "heavy" || profile.tier === "escalate")) score -= 40
-      if (wantCreative && profile.tier === "heavy") score += 25
-      if (!wantHeavy && profile.tier === "heavy") score -= 20
-      if (!wantUi && profile.tier === "codegen" && wantPrecise) score -= 15
-      if (profile.tier === "escalate" && !wantHeavy) score -= 20
-      if (isMuse && wantPrecise) score -= 12
-      return { fav, profile, score, outputCost: out }
-    })
-    .toSorted((a, b) => b.score - a.score || (a.outputCost ?? Infinity) - (b.outputCost ?? Infinity))
-
-  const best = scored[0]
-  if (!best) return
-  return {
-    agent: best.profile.tier === "explore" ? "explore" : "build",
-    model: modelKey(best.fav),
-    reason: `${best.profile.name} scored ${best.score} (cost ` +
-      (typeof best.outputCost === "number" ? `$${best.outputCost}/1M out` : "n/a") + ")",
-    profile: best.profile,
-    outputCost: best.outputCost,
-  }
-}
 
 const AGENTS_MARK_START = "<!-- model-routing:start -->"
 const AGENTS_MARK_END = "<!-- model-routing:end -->"

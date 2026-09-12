@@ -1,3 +1,4 @@
+import {removeIntegratedWorktree,integrationRef} from "./cleanup-git.mjs"
 import {workspaceBootstrap} from "./workspace-bootstrap"
 import {coordination} from "./coordination"
 import type {QuestStore} from "./store"
@@ -9,7 +10,7 @@ import { projectIdentity, sourceCheckout, physicalDirectory, type ProjectIdentit
 import { acquireLock } from "./locking"
 
 export type Changes = { available: boolean; files: { path: string; additions: number | null; deletions: number | null; untracked: boolean }[]; commits: string[]; at: string; error?: string }
-export type Workspace = { source?:string; version: 1; runID: string; questID: string; projectID: string; root: string; path: string; branch: string; base: string; comparisonTree?:string; changes?: Changes; removed?: boolean; mode?: "shared" | "worktree" | "research"; fileScopes?: string[]; sharedReleased?: boolean; allocationVersion?: 2; physicalRunID?: string; claimedRunID?: string; preparedHead?: string; preparedStamp?: string; preparedBootstrap?: string; preparationMs?: number; bootstrapComplete?: boolean; inheritedRunIDs?: string[]; integration?:{workerHead:string;projectHead:string;verifiedAt:string;method:"ancestor"} }
+export type Workspace = { source?:string; cleanupProtocol?:1; cleanup?:{removed:boolean;reason:string;at:string;logicalBytes?:number}; version: 1; runID: string; questID: string; projectID: string; root: string; path: string; branch: string; base: string; comparisonTree?:string; changes?: Changes; removed?: boolean; mode?: "shared" | "worktree" | "research"; fileScopes?: string[]; sharedReleased?: boolean; allocationVersion?: 2; physicalRunID?: string; claimedRunID?: string; preparedHead?: string; preparedStamp?: string; preparedBootstrap?: string; preparationMs?: number; bootstrapComplete?: boolean; inheritedRunIDs?: string[]; integration?:{workerHead:string;projectHead:string;verifiedAt:string;method:"ancestor"} }
 const inside = (root: string, path: string) => { const rel = relative(root, path); return !!rel && !rel.startsWith("..") && !isAbsolute(rel) }
 function git(cwd: string, args: string[]): string {
   const out = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8", windowsHide: true, maxBuffer: 16 * 1024 * 1024 })
@@ -71,7 +72,7 @@ export class QuestWorkspaces {
       const path = join(parent, "quest-" + input.runID), branch = "quest/" + input.runID
       if (existsSync(path)) throw new Error("Workspace path exists without runtime ownership; preserving it")
       git(root, ["worktree", "add", "-b", branch, path, base])
-      const value: Workspace = { version: 1, allocationVersion: 2, runID: input.runID, questID: input.questID, projectID: project.id, root, path, branch, base, bootstrapComplete: false, preparedBootstrap: input.skipPrepared ? JSON.stringify(input.bootstrap??[]) : undefined }
+      const value: Workspace = { version: 1, cleanupProtocol:1, allocationVersion: 2, runID: input.runID, questID: input.questID, projectID: project.id, root, path, branch, base, bootstrapComplete: false, preparedBootstrap: input.skipPrepared ? JSON.stringify(input.bootstrap??[]) : undefined }
       value.source=source
       this.save(value)
       if(git(source,["ls-files","--unmerged"]).trim())throw new Error("Resolve selected checkout conflicts before creating an editing worker; workspace retained")
@@ -238,14 +239,24 @@ export class QuestWorkspaces {
     // Include HEAD paths removed from the real index by staged deletions.
     const selectedFiles=()=>git(source,["ls-files","--cached","--with-tree="+head,"--others","--exclude-standard","-z","--",...scopes.map(scope=>":(literal)"+scope),":(exclude,glob)**/.claude/worktrees/**",...excluded])
     const paths=selectedFiles()
+    // Only paths already tracked by Git may override ignore rules. New files
+    // come from --others --exclude-standard and must still pass normal add.
+    const tracked=new Set(git(source,["ls-files","--cached","--with-tree="+head,"-z"]).split("\0").filter(Boolean))
+    const names=paths.split("\0").filter(Boolean)
+    const trackedPaths=names.filter(name=>tracked.has(name)).map(name=>name+"\0").join("")
+    const newPaths=names.filter(name=>!tracked.has(name)).map(name=>name+"\0").join("")
+    const stage=()=>{
+      if(trackedPaths)run(["add","-A","--force","--pathspec-from-file=-","--pathspec-file-nul"],trackedPaths)
+      if(newPaths)run(["add","-A","--pathspec-from-file=-","--pathspec-file-nul"],newPaths)
+    }
     try {
       run(["read-tree", head])
-      if(paths)run(["add","-A","--pathspec-from-file=-","--pathspec-file-nul"],paths)
+      stage()
       const tree=run(["write-tree"])
       // Rebuild from the same baseline: the first add removed deleted entries,
       // so adding those literal paths again to that index would fail to match.
       run(["read-tree", head])
-      if(paths)run(["add","-A","--pathspec-from-file=-","--pathspec-file-nul"],paths)
+      stage()
       const changed=selectedFiles()!==paths?"file list":run(["write-tree"])!==tree?"content":git(source,["rev-parse","HEAD"]).trim()!==head?"HEAD":JSON.stringify(worktreeExclusions(source))!==JSON.stringify(excluded)?"worktree registration":undefined
       if(changed)throw new Error("Source changed during workspace snapshot ("+changed+"); retry after edits settle")
       if(!target)return tree
@@ -298,24 +309,23 @@ export class QuestWorkspaces {
     value.changes = { available: true, files, commits: value.mode==="shared"?[]:git(value.path, ["rev-list", value.base + "..HEAD"]).trim().split("\n").filter(Boolean), at }
     this.save(value); return value
   }
-  cleanup(runID: string): { removed: boolean; reason: string } {
+  retain(runID:string,reason:string) {
+    const value=this.get(runID);if(!value)throw Error("Unknown workspace")
+    value.cleanup={removed:false,reason,at:new Date().toISOString()};this.save(value);return value.cleanup
+  }
+  cleanup(runID: string, beforeRemove:()=>void): { removed: boolean; reason: string } {
     this.file(runID)
-    if(this.get(runID)?.mode==="shared")return {removed:false,reason:"Shared project checkout is never removed"}
-    const lock = acquireLock(this.runtime, "workspace-" + runID)
+    let lock;try{lock=acquireLock(this.runtime,"workspace-"+runID,{timeoutMs:0})}catch{return {removed:false,reason:"Workspace tool or cleanup is still running"}}
     try {
-      const value = this.collect(runID)
-      if(value.mode==="research")return {removed:false,reason:"Research uses the original read-only directory; it is never removed"}
-      if (value.removed) return { removed: true, reason: "Already removed; retained records available" }
-      if (!value.changes?.available) return { removed: false, reason: "Workspace unavailable; retaining records" }
-      if (git(value.path, ["status", "--porcelain", "--untracked-files=all"]).trim()) return { removed: false, reason: "Uncommitted work is preserved" }
-      const head = git(value.path, ["rev-parse", "HEAD"]).trim()
-      const projectHead = git(value.root,["rev-parse","HEAD"]).trim()
-      const integrated = spawnSync("git", ["-C", value.root, "merge-base", "--is-ancestor", head, projectHead], { windowsHide: true })
-      if (integrated.status !== 0) return { removed: false, reason: "Unintegrated commits are preserved" }
-      value.integration={workerHead:head,projectHead,verifiedAt:new Date().toISOString(),method:"ancestor"};this.save(value)
-      git(value.root, ["worktree", "remove", value.path])
-      value.removed = true; this.save(value)
-      return { removed: true, reason: "Clean workspace removed after integration; commits and changes retained" }
-    } finally { lock.release() }
+      const value=this.get(runID)
+      if(!value)throw Error("Unknown workspace")
+      if(value.removed)return {removed:true,reason:"Already removed; retained records available"}
+      if(value.mode==="shared"||value.mode==="research")return this.retain(runID,"Original checkout is never removed")
+      Object.assign(value,this.collect(runID));this.verify(value);beforeRemove()
+      const result=removeIntegratedWorktree({root:value.root,path:value.path,ref:integrationRef(value.root,value.source??value.root),branch:value.branch,beforeRemove})
+      if(result.removed){value.removed=true;value.integration={workerHead:result.workerHead!,projectHead:result.projectHead!,verifiedAt:new Date().toISOString(),method:"ancestor"}}
+      value.cleanup={...result,at:new Date().toISOString()};this.save(value);return result
+    }catch(error){return this.retain(runID,error instanceof Error?error.message:String(error))}
+    finally {lock.release()}
   }
 }

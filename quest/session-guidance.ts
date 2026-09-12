@@ -1,3 +1,4 @@
+import {assertWorkerIdentity} from './worker-identity'
 import {createHash} from "node:crypto"
 import {existsSync,mkdirSync,readFileSync,writeFileSync,renameSync,realpathSync} from "node:fs"
 import {join} from "node:path"
@@ -20,6 +21,7 @@ export class SessionGuidance {
   const delivery=input.delivery??"queue",text=input.text?.trim();if(!text||text.length>4000||!["queue","steer"].includes(delivery))throw new QuestError("INVALID_INPUT","Provide relevant guidance of 1–4000 characters and queue or steer delivery")
   const owned=()=>{const q=this.quest(context,input.questID);if(q.integrationOwner!==context.sessionID||readAllQuests(this.store.projectRoot,{includeArchived:true}).some(row=>row.quest?.sessions.some(s=>s.sessionID===context.sessionID)))throw new QuestError("GUIDANCE_OWNER_REQUIRED","Only the owning giver can guide workers");if(["Archived","Complete"].includes(q.state))throw new QuestError("GUIDANCE_TERMINAL","Quest is terminal");const run=q.sessions.find(s=>s.runID===input.runID);if(!run?.sessionID||run.parentID!==context.sessionID||!["executing","waiting","blocked"].includes(run.state))throw new QuestError("GUIDANCE_RUN_UNAVAILABLE","Run must be active and owned by this giver");if(run.runtime!=="native"||typeof run.scope?.worktree!=="string")throw new QuestError("GUIDANCE_HOST_UNSUPPORTED","Only bound native Quest workers support guidance");return run}
   const run=owned(),actual=await this.host.get({sessionID:run.sessionID}),session=actual?.data??actual;if(session?.id!==run.sessionID||typeof session?.location?.directory!=="string"||!samePath(session.location.directory,run.scope!.worktree as string))throw new QuestError("GUIDANCE_BINDING_FAILED","Host worker does not match the owned session and workspace")
+  assertWorkerIdentity(run,session)
   if(!this.options.supported)throw new QuestError("GUIDANCE_HOST_UNSUPPORTED","Installed host guidance delivery has not been verified")
   const id="msg_"+createHash("sha256").update(JSON.stringify([input.questID,input.runID,run.sessionID,delivery,text])).digest("hex").slice(0,26)
   let record:GuidanceRecord;const lock=acquireLock(this.store.runtime,"session-guidance");try{owned();const rows=this.read(),old=rows.find(r=>r.id===id);if(old)return old;record={id,questID:input.questID,runID:input.runID,sessionID:run.sessionID!,delivery,text,state:"unknown",createdAt:Date.now(),updatedAt:Date.now(),note:"Submission outcome not yet confirmed; do not automatically resend"};rows.push(record);this.write(rows)}finally{lock.release()}

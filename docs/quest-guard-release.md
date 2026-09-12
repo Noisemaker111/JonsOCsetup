@@ -1,3 +1,5 @@
+> Historical evidence: scenario scripts named below have been removed. They are not current verification instructions. Use [the actual product](user-verification.md) and the small production-logic core suite.
+
 # Ownership guard follow-up and activation gate
 
 This follows merged PR13 on production `master`; the earlier adapter-lineage PR11 is not the release target. The merged revision did not contain the later cached-patch safety correction. This branch adds that correction plus the user-authorized automatic recovery improvements. Do not activate it before the reviewed follow-up is merged.

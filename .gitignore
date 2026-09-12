@@ -3,7 +3,7 @@ node_modules/
 generations/
 .channels/
 .worktrees/
-.claude/
+/.claude/
 .visual-e2e/
 run/
 tmp/
@@ -26,3 +26,13 @@ cliproxyapi/static/
 setup/recovery/
 setup/live-checkout-status.txt
 channel-release.json
+
+# Windows device names must never become source files.
+/nul
+/NUL
+/con
+/prn
+/aux
+/com[1-9]
+/lpt[1-9]
+.candidate-health-*.json

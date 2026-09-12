@@ -3,7 +3,7 @@ import {join,dirname} from "node:path"
 import {acquireLock} from "../quest/locking"
 import {ContextCheckpoints,decideContext,type ContextForecast,type ContextPolicy,type RecoverableContext} from "./context-manager"
 import {readRequests,aggregateTelemetry,type RequestRecord} from "../usage/telemetry-api"
-type State={revision:number;seen:string[];inputs:{id:string;text:string}[];pending:string[];active:boolean;decision?:ReturnType<typeof decideContext>;forecast?:ContextForecast;checkpointID?:string;choice?:"retain"|"compact";compaction?:{receipt:string;startedAt:number;endedAt?:number;outcome?:"active"|"failed"};error?:string}
+type State={revision:number;seen:string[];inputs:{id:string;text:string}[];pending:string[];active:boolean;decision?:ReturnType<typeof decideContext>;forecast?:Omit<ContextForecast,"currentTokens">;checkpointID?:string;choice?:"retain"|"compact";compaction?:{receipt:string;startedAt:number;endedAt?:number;outcome?:"active"|"failed"};error?:string}
 type Compact=(input:{sessionID:string;checkpointID:string})=>Promise<{receipt:string}>
 /** Native events own revisions and pending-work accounting. Model estimates never overwrite those facts. */
 export class AdaptiveContextRuntime {
@@ -14,7 +14,7 @@ export class AdaptiveContextRuntime {
  private change(sessionID:string,change:(state:State)=>void){const file=this.file(sessionID),lock=acquireLock(dirname(file),"context-runtime-"+sessionID);try{const state=this.state(sessionID);change(state);mkdirSync(dirname(file),{recursive:true});const tmp=file+"."+process.pid+".tmp";writeFileSync(tmp,JSON.stringify(state),{mode:0o600});renameSync(tmp,file);return state}finally{lock.release()}}
  reconcile(sessionID:string){const state=this.state(sessionID),checkpoint=this.checkpoints.read(sessionID).find(c=>c.id===state.checkpointID);if(!checkpoint||!state.compaction?.outcome||checkpoint.hostReceipt!==state.compaction.receipt)return;const current=aggregateTelemetry(this.options.records?.()??readRequests().records,{sessionID}).context.current;const after=current&&current.at>=(state.compaction.endedAt??Infinity)?current.tokens:undefined;if(checkpoint.state==="requested")this.checkpoints.confirm(sessionID,checkpoint.id,{currentRevision:state.revision,hostReceipt:state.compaction.receipt,success:state.compaction.outcome==="active",afterTokens:after});else if(checkpoint.state==="active"&&after!==undefined)this.checkpoints.measureAfter(sessionID,checkpoint.id,after)}
  inspect(sessionID:string){this.reconcile(sessionID);const state=this.state(sessionID);return {revision:state.revision,pendingTools:state.pending.length,pendingWorkers:this.options.pendingWorkers?.(sessionID)??0,active:state.active,checkpoint:this.checkpoints.read(sessionID).at(-1)??null,automatic:this.options.policy()?.automatic??false,adapterAvailable:!!this.options.compact,forecast:state.forecast??null,decision:state.decision??null,error:state.error??null}}
- prepare(sessionID:string,context:Omit<RecoverableContext,"revision">,forecast:ContextForecast,reason:string){
+ prepare(sessionID:string,context:Omit<RecoverableContext,"revision">,forecast:Omit<ContextForecast,"currentTokens">,reason:string){
   this.reconcile(sessionID)
   const state=this.state(sessionID),previous=this.checkpoints.read(sessionID).at(-1)
   if(previous?.state==="requested")throw Error("Compaction outcome is still pending; reconcile it before replacing the checkpoint. New corrections remain retained.")

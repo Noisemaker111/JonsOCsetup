@@ -1,14 +1,56 @@
 # OpenCode2 development and stable releases
 
-This repository's stable branch is `master`. `dev` is the integration branch.
+This repository's stable branch is `main`. `agents` is the integration branch.
+
+`main` was established on 2026-09-11 from a verified `agents` revision. The former stable branch,
+`master`, shares no common ancestor with `agents` -- separate root commits, 462 commits against 134,
+because `agents` was seeded from the live working tree rather than branched from `master`. No merge
+between them could fast-forward, so a stable release was impossible without a force. `master` is
+preserved at the tag `legacy/master-20260911` and is no longer a release target.
 These rules apply to OpenCode2 configuration and extensions, not other projects.
 
 The agent owns the full change: inspect existing work and PRs, use an isolated
 worktree, implement, exercise the intended operation in the installed host,
-save coherent commits, open a ready PR targeting `dev`, merge it after checking
+save coherent commits, open a ready PR targeting `agents`, merge it after checking
 the result, and activate and exercise the dev release. Jon has authorized this
 dev loop; do not ask him to perform a technical review or repeatedly approve it.
 Promotion from dev to stable still requires Jon's explicit instruction.
+
+## App use, removal and memory
+
+This is a pre-user project with no backward-compatibility requirement. Maintain
+one current implementation. Before completing every change, search the whole
+tracked repository for the replaced symbols, entrypoints, configuration keys and
+behavior. Trace callers, registrations, generated output and instruction sources.
+Delete superseded implementations and their exclusive dependencies; update the
+current owner instead of adding a parallel system. Do not retain old schemas,
+aliases, migration-only adapters or silent fallbacks for hypothetical users.
+Report any remaining old path and its concrete live consumer. Preserve actual
+user data, uncertain work and running sessions; their files are not dead source.
+
+Keep only a small core suite that directly exercises consequential production
+invariants. No mirrored implementations, mock-provider suites, incidental snapshots
+or permanent scenario scripts. Follow [user verification](user-verification.md)
+for OpenCode, Codex and Claude. Use the
+actual installed OpenCode2 app for every change, including instructions, config,
+build tooling and cleanup. Build, syntax and type checks may supplement app use.
+Exercise the affected operation twice, inspect actual output and failures, then
+reopen/reload its saved result. Keep captures, host/plugin identities and observed
+results. Temporary interaction scripts may drive the real app, but do not check
+in a second implementation of the feature as a test. For worker changes, verify
+actual completion and delivery back to the giver. Do not mark work done on a
+startup receipt, source inspection or an agent's unsupported success claim.
+
+Read the project-root MEMORY.md at the beginning of work and after context loss.
+For OpenCode hub work, the shared memory is
+`C:/Users/Jk101/Projects/opencode-hub/MEMORY.md`. Update it when the user makes a
+durable decision or real app use establishes a useful lesson. Read before editing,
+merge with existing entries, correct stale facts, and reopen the saved file.
+Keep it concise: decisions, preferences, current architecture and verified lessons.
+Quests own task plans, progress and deliverables. Do not copy transcripts, secrets,
+temporary status, unverified guesses or duplicate Quest logs into memory. Memory
+is context, not authorization, and the user's current instruction always wins.
+Use ordinary file tools; do not add an every-turn memory injection hook.
 
 ## What counts as done
 
@@ -17,12 +59,16 @@ and saved results. Run the affected operation twice, inspect terminal captures
 and errors, and reload the saved result. For delegation, confirm that the worker
 actually started or that its failure woke the originating giver without another
 user message. A delivered prompt, a saved Quest or a passing mock is not that proof.
-Focused deterministic checks supplement this evidence when they cover a concrete
-regression. Do not add suites that merely restate implementation details.
+
 
 Separate source, merge, activation and process-load status in the report. Record
 the installed host identity separately from the plugin release. Never report a
 candidate as active because it was saved or because a test used source imports.
+
+The user has one persistent Quest Giver across all projects in this runtime. Project
+selection changes worker destinations, never the giver conversation. New Quest and
+native New Session return to that giver; missing or uncertain ownership blocks a
+replacement. Original conversation histories remain accessible.
 
 ## History and ownership
 
@@ -40,11 +86,100 @@ the installed OpenCode host or publishes the public plugin mirrors.
 
 ## Stable promotion
 
-When Jon explicitly requests promotion, prepare a dev-to-master PR summarizing
-the included changes and real dev evidence, check its exact revision, merge it,
-and verify the stable release. Do not serve an unmerged branch as stable. Keep
-the preceding stable release available; rollback selects it for new sessions
-without terminating existing work.
+Only when Jon requests a release, freeze a candidate branch at the verified agents
+revision and open its PR against main. Generate patch notes from that exact
+candidate's merged PRs and changes, attach them to the PR, and run release CI.
+Later agents changes belong to a separate batch. Only Jon personally merges
+main: agents never merge it, enable auto-merge, or push to it, including after
+chat approval. After observing his merge, follow separately authorized stable
+activation gates. Keep the previous stable artifact for rollback; changing code
+does not roll back mutable data. Never propose releases during routine work.
+
+## Branch controls and commands
+
+Use the shared helper in [agents-and-main](../skills/agents-and-main/SKILL.md).
+Install it once with that skill's `scripts/install.ps1`; use `sb agents` only in
+a checkout you own. Stable is `main`, so use `sb main`, or `git switch main` followed by
+`git pull --ff-only origin main`. Do not switch another session's checkout.
+
+The agents branch replaces dev. The existing runtime channel is still called dev:
+`oc`, `.channels/dev.json`, and its isolated state are runtime identities, not Git
+branches. Keeping those identities preserves real sessions, Quests and queued work.
+Activation validates the candidate against origin/agents. Stable source and runtime
+are unchanged by this branch migration; the open stable-pointer repair owns the
+remaining stable launcher work.
+
+Eligible contributors have current GitHub write, maintain or admin permission;
+bots additionally need recorded maintainer authorization. The authorized coordinator
+reviews the current head and diff, verifies actual app evidence, waits for the
+required `core` CI check and mergeability, then merges the exact head into agents.
+No privileged CI executes PR code. This coordinator is the integration mechanism;
+there is no unattended merge service. Stable releases are human-only.
+
+Run `bun install --frozen-lockfile` once in the owned package directory, then
+`bun run check:core` and `node --check scripts/runtime-channel.mjs`. The GitHub
+workflow runs the core checks on PRs to agents and main. Before activation,
+prepare the committed candidate with `bun run runtime:channel -- prepare dev
+--ref <revision> --model <exact-route>`, drive the installed app twice, and use
+`activate dev --candidate <root> --evidence <report>` with the real captures and
+return evidence. Build commands do not activate or publish.
+
+The dev host database, Quests, UI state, orchestration and telemetry live under
+`.channels/state/dev`; stable retains its original stores. Broker accounts and
+external providers are shared existing integrations, so use throwaway data and
+record actual provider usage. Plugin code is pinned in immutable generations;
+TUI and server load receipts must match that revision. Record the installed host
+binary separately. Old sessions keep their loaded generation and cannot consume
+new-generation continuation work.
+
+## What plain `oc` runs, and why it is not the gated release
+
+The acceptance gate proves a release before it is promoted. It was also, accidentally,
+the only way a merged fix reached the command Jon types: `oc` opened
+`.channels/dev.json`, and that only moves when a gate pass succeeds -- 26 of 53
+recorded runs. So `/new` could be fixed, merged and verified and still be absent from
+his editor, with nothing on screen saying so. It happened on 2026-09-12.
+
+So plain `oc` runs the latest merged `agents` commit, preparing or reusing a candidate
+for it, and the gated release is one flag away: `oc --gated`. `oc --default gated`
+makes that the default instead and `oc --default branch` puts it back; the setting
+lives in `.channels/oc-default.json` and its absence means the branch, because
+defaulting to the gated release is the state that hid the fix.
+
+Two consequences are deliberate. The first launch after a merge pays one preparation,
+and every launch after it reuses that candidate. And preparation sends one real prompt
+to the configured model, so it can fail for reasons outside the repository -- when that
+happens on a *defaulted* launch the launcher falls back to the gated release and says
+so in red, because a working editor on older code beats an error message. A branch
+asked for by name fails instead, since falling back would be running something other
+than what was asked for.
+
+A gated release also stops being silently stale: when it is behind `origin/agents` the
+banner says by how many commits.
+
+## Running any other branch
+
+`oc <branch>` prepares a dev candidate from that branch and launches it. It does not
+gate and does not activate: `.channels/dev.json` is untouched, so `oc` with no branch
+keeps running the release that was actually accepted, and `activate` keeps its two
+acceptance runs and its origin/agents tree check. Preparation is the only cost -- a
+worktree, one frozen lockfile restore, and one real prompt to the configured model --
+and it is paid once per commit, because a second `oc <branch>` on the same commit
+reuses the release it already prepared. `--fresh` forces a new one, `--model
+<exact-route>` overrides the model the candidate inherits from the activated channel.
+Any tag or commit works where a branch name does.
+
+A bare branch name resolves to `origin/<branch>` when that exists and to the local ref
+otherwise, so a stale local branch cannot be built by accident, and the launch banner
+names the branch, what it resolved to, the commit subject, the model and which commit
+the gated release is still on. A candidate shares dev's isolated
+sessions, Quests and telemetry under `.channels/state/dev`; it is different code, not
+a different world.
+
+A candidate records the ref it was built from, so retirement judges it against that
+ref instead of origin/agents and can reclaim it once the branch moves on. While it is
+still that ref's tip it is kept, because that is the preparation the next
+`oc <branch>` reuses.
 
 ## Channel isolation
 
@@ -55,14 +190,130 @@ model is the default for dev launch. Shared-checkout worker writes are rejected 
 dev because its isolated ledger cannot authorize against stable ownership.
 Use isolated worktrees for dev code work; this preserves stable checkout owners.
 
-Activation requires the current merged dev tree and two real return-flow passes.
-It installs the scoped workflow skill and creates `.channels/start.mjs`. Start
-with `ocd` from your project folder
-or use `ocs`. Install these PATH commands once with
-`node scripts/install-channel-shortcuts.mjs`. Both accept `--cwd <project>`. Switching launch channels does not stop existing
+Activation requires the current merged agents tree and two real return-flow passes.
+It installs the scoped workflow skill and creates `.channels/start.mjs`. Start with `oc`, which launches at the hub root so its AGENTS.md loads; `--here` uses
+the current directory instead and `--cwd <project>` names one. Plain `oc` runs the
+latest merged `agents` code, `oc --gated` the release that passed the acceptance gate,
+`oc --default branch|gated` changes which one plain `oc` means, `oc --stable` is the
+stable channel and `oc <branch>` runs any other branch. Install this
+PATH command once with `node scripts/install-channel-shortcuts.mjs`; it also removes
+the superseded `oca`, `ocm`, `ocd`, `ocs` and `ocb` names, including the `oca`/`ocm`
+PowerShell functions, which would otherwise shadow it. Switching launch channels does not stop existing
 terminals. Each terminal has a separate concrete launch configuration.
 
+A launch and a retirement never interleave: both take `.channels/retirement.lock`,
+which records the process that holds it. A launch reclaims that lock when the owning
+process is gone, or when the hold passes fifteen minutes -- far past any real pass --
+and says on stderr what it took and why, keeping the removed record in
+`.channels/lock-reclaims`. A hold that is live and recent is never taken; retry
+instead. Release-use leases under `.channels/release-users` are cleared by retirement
+once their release root is gone.
+
 The installed shortcuts prepare the selected configuration, then launch the native
-host directly in the existing console. They do not run the PTY supervisor or
-forward terminal input/output. Configuration selection finishes before host launch.
-The managed runtime remains an explicit automation harness, not an interactive shortcut.
+host directly in the existing console. Configuration selection finishes before host launch.
+
+`runtime-channel start` has the same property. It launches attached: the supervisor
+runs in the shell's own node process and the host inherits that console, so the app
+reads the real terminal size, sees every resize, uses the terminal's own `TERM`, and
+paints to the screen directly. The supervisor never touches stdin, and the console
+interrupt belongs to the host. Only `--json` keeps the relayed pty, where output
+becomes transcript events and input arrives as JSON writes; that is the mode
+`scripts/drive-opencode.ts` and the verification scripts drive. Both modes build the
+same launch root, pin the same generation, set the same `OPENCODE_*` environment,
+hold the same release lease and write the same load receipt.
+
+### Hub editing source
+
+The non-Git OpenCode hub keeps its existing Quest ledger identity. The reviewed
+`models/dispatch-policy.json` binds its `config` scope to the clean public
+JonsOCsetup checkout. Dispatch validates physical checkout paths and requires a
+clean source. Dev resolves the loaded immutable release and verifies its source receipt, release identity and Git revision before creating an owned repository worktree and translates
+`config/docs` to `docs`. It never follows the hub's old config junction to choose
+a source. A worker can update the hub Quest only from its verified owned workspace.
+
+Channel state remains under `~/.config/opencode/.channels` after source migration.
+For explicit candidate acceptance, set `OPENCODE_DEV_CANDIDATE` to a prepared dev
+release and invoke `oc`; the native launcher records that release's load receipt.
+This does not select a release for other launches. Clear the variable afterward.
+
+Direct `quest run` workers retain the giver's original project, agent and model as
+a return address. Once their saved run reaches a terminal state, a durable notice
+starts a giver turn with the actual step notes. Accepted or uncertain admissions
+are never resent after reload; changed giver bindings retain the pending notice.
+
+Dev continuation queues and worker-return notices are scoped to the loaded immutable
+generation. An older open dev session cannot claim a newer generation's queued work.
+Inspection retains all queue histories; a new admission refuses another generation's
+active continuation until it is explicitly cancelled. Cancellation preserves already
+launched workers and their evidence. No queue is silently migrated on reload.
+
+## Native worker inspection
+
+OpenCode2 uses the native Quest tool for worker status, results and dispatch.
+Use quest get with inspect.section runs, and project_route_status for route
+diagnostics. The external-harness MCP bridge is not registered inside OpenCode2:
+standalone hosts do not publish the supporting-host registration it requires.
+The obsolete bridge, its generated harness config and CLI adapter were removed. Worker status uses live
+host events and permissions, clears live observations on disconnect, and keeps
+missing or uncertain ownership intact. Historical ledgers are never liveness proof.
+
+Session navigation uses the native `/sessions` picker (keyboard and mouse), including
+its current-host status and project filtering. The old `/running` database scanner
+and duplicate picker are removed. Provider quota comes from the usage/account
+observers; orchestration never stamps another provider capped from event text.
+
+Worker liveness is scoped to the connected host session client. Disconnecting or
+reconciling one client cannot reuse or erase another client's observations. The
+board Active filter requires a confirmed running observation, never a saved
+executing record. Native data events trigger bounded worker inspection; periodic
+reads recover missed events after reconnect. Unknown ownership remains retained.
+
+The obsolete favorite/profile scheduler and capacity.json lane/task registry are removed.
+Quest admission uses dispatch-planner and RouteReservations; native session controls
+own manual selection. No provider substitution occurs during harness agent setup.
+
+Workspace snapshots use a temporary Git index. Already-tracked paths remain included
+even beneath ignored directories; ignored untracked files remain excluded. Snapshot
+staging never changes the coordinator index, and source changes invalidate preparation.
+
+Quest tool, board and goal admissions share quest/dispatch.ts: workflow measurement
+and the persistent giver return are registered before the existing worker launcher
+runs. The Quest tool owns reconciliation and return polling for all three paths;
+goal-specific continuation and worker pause/resume retain their existing owner.
+
+
+## Worktree retirement
+
+Turn-in is the cleanup request. The Quest service reacts to archive writes,
+worker execution endings, repository ref changes and host startup. There is no
+cleanup timer. `quest get` with `inspect.section=cleanup` retries and reports each
+retained reason. A resumed worker cannot edit a retired or archived assignment.
+Reopen the Quest and create a new run to continue work.
+
+Removal requires a guarded worker, confirmed idle host, terminal runs, no pending
+continuation or editor reservation, a clean checkout and commits included in the
+configured integration ref. Recorded workspace artifacts are copied to the Quest
+asset store, checked by digest, and their saved links updated before disposable
+copies are removed. Other untracked/ignored files are preserved. Branches, saved
+Quest records and session history are never deleted. Squash merges without ancestry
+proof stay retained for review.
+
+This repository uses `git config quest.integrationRef refs/remotes/origin/agents`.
+Other repositories use their explicit setting or their selected checkout's upstream;
+the main checkout's HEAD is not an integration target.
+
+After merging and verifying a development task, leave its checkout and run the
+selected release's `worktree:cleanup finish --repo <main checkout> --worktree
+<finished checkout>`. The command asserts that the owner and its child processes
+have finished. It records the exact head and retries immediately. Activation and
+direct session exit retry pending tasks; `worktree:cleanup retry --repo <main
+checkout>` is the manual retry. Keep evidence outside task checkouts before finish.
+Unknown ignored files, nested worktrees, changes and unintegrated commits block
+removal with a saved reason. Never infer completion from file age.
+
+New dev releases record process lifetime leases. Activation and launch exit can
+retire unselected, integrated releases only after every recorded process acknowledges
+exit. The selected release and immediate rollback release remain pinned. Run captures
+are retained outside the release under the channel registry before removal. Old
+releases without lifetime records and crashed/unacknowledged launches remain intact
+for explicit ownership review. Stable releases are never retired by this mechanism.

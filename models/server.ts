@@ -1,49 +1,11 @@
 import { installAdaptiveContext } from "./context-plugin"
-/**
- * The models plugin: routing, quota and the declared subagent roster.
- *
- * All policy lives in model-routing.ts, which touches no plugin host and can be
- * tested and shipped on its own. This file is only the wiring: it attaches the
- * policy to the host's hooks.
- *
- * What it owns:
- *  - rewriting Task spawns away from a capped or forbidden provider
- *  - refusing to change a live worker's pinned model
- *  - injecting the live cap / quota / usage lines into the orchestrator's turn
- *
- * What it must never own: the Claude Code harness intercept, the orchestration
- * ledger, task display labels, tool-output truncation, or the shell guard —
- * those belong to other plugins and were tangled with routing in
- * favorite-router.ts for far too long.
+/** Access policy, pinned worker identity and observed provider failures.
+ * Account-aware dispatch lives in dispatch-planner.ts; this plugin never substitutes models.
  */
 import { installAccessGuard, assertConfiguredModel } from "./access-policy"
 import { define } from "@opencode-ai/plugin/v2/promise"
-import { readFileSync } from "node:fs"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
-import {
-  enforceSessionModelChange,
-  drainFailoverNotices,
-  forceUsageCollectOnCap,
-  quotaLaneNotice,
-  rememberFailoverNotice,
-  systemPart,
-  type UsageCacheLike,
-} from "./model-routing"
-import {
-  USAGE_STALE_MS,
-  kickUsageCollector,
-  quotaSummaryLine,
-  usageAgeMs,
-  usageCache,
-  capacitySnapshot,
-  getAccountUsage,
-  routeAccountCapacity,
-} from "../usage/usage-lib"
-import { detectProviderFailure, failureMessage } from "../usage/usage-reached"
-import { discoverModelsText, isClaudeCodeModel } from "./model-catalog"
+import { enforceSessionModelChange } from "./session-lifecycle"
 
-const CONFIG_FILE = join(dirname(fileURLToPath(import.meta.url)), "..", "opencode.jsonc")
 
 /** Attach a tool hook without letting one bad registration disable the rest. */
 async function safeToolHook(hook: Function, name: string, fn: Function, rethrow = false) {
@@ -59,13 +21,8 @@ async function safeToolHook(hook: Function, name: string, fn: Function, rethrow 
   }
 }
 
-/**
- * Rewrite capped or forbidden Task spawns before they start.
- *
- * The usage cache is re-read on every spawn on purpose: a snapshot captured at
- * setup can authorize a provider that a later probe has already seen capped.
- */
-export async function installSpawnGuard(ctx: { tool?: { hook?: Function } }, _cache?: UsageCacheLike, _keys?: readonly string[]) {
+/** Require the explicit authorized identity resolved by Quest dispatch. */
+export async function installSpawnGuard(ctx: { tool?: { hook?: Function } }) {
   if(typeof ctx.tool?.hook!=="function")throw new Error("Host spawn guard is unavailable")
   await safeToolHook(ctx.tool.hook,"execute.before",(event:any)=>{
     if(!/^(task|subagent)$/i.test(String(event?.tool??event?.name??"")))return
@@ -83,50 +40,17 @@ export async function installSessionModelGuard(ctx: { tool?: { hook?: Function }
   await safeToolHook(hook, "execute.before", (event: unknown) => enforceSessionModelChange(event), true)
 }
 
-/**
- * The one-liners the orchestrator needs on its next turn: a live cap, any
- * failover that just happened, and the current quota/usage summary. Pushed as
- * SystemPart objects — a raw string fails opencode2 schema validation.
- */
-export function quotaLines(): string[] {
-  const usage = usageCache()
-  if (usageAgeMs(usage) >= USAGE_STALE_MS) kickUsageCollector()
-  const notice = quotaLaneNotice(usage)
-  return [
-    ...(notice ? [notice] : []),
-    ...drainFailoverNotices(),
-    quotaSummaryLine(usage),
-  ].filter((line) => typeof line === "string" && line.trim().length > 0)
-}
-
-function failureBlob(event: unknown, output?: unknown): string {
-  try { return JSON.stringify([output, event]).slice(0, 4000) }
-  catch { return String(output ?? event).slice(0, 4000) }
-}
-
-/** Live 429/402/quota errors become a next-turn quota line, not a silent fail. */
-export async function installUsageFailureHook(ctx: { tool?: { hook?: Function } }) {
-  const hook = ctx?.tool?.hook
-  if (typeof hook !== "function") return
-  await safeToolHook(hook, "execute.after", (event: unknown, output?: unknown) => {
-    const failure = detectProviderFailure(failureBlob(event, output))
-    if (!failure) return
-    rememberFailoverNotice(failureMessage(failure))
-    if (failure.kind === "usage" && failure.providerID === "opencode-go") forceUsageCollectOnCap(failure.detail)
-    else kickUsageCollector()
-  })
-}
-
-export async function installQuotaContext(ctx: { session?: { hook?: Function } }) {
-  const hook = ctx?.session?.hook
-  if (typeof hook !== "function") return
-  await hook("context", (event: { system?: Array<{ type: "text"; text: string }> }) => {
-    if (!Array.isArray(event.system)) return
-    // Built here rather than passed through, so it is visible at the call site
-    // that every push is a SystemPart object. A raw string fails opencode2
-    // schema validation, and the smoke gate checks this line specifically.
-    for (const line of quotaLines()) event.system.push(systemPart(line))
-  })
+/** Observe actual model HTTP failures, scoped to the session that made the request. */
+export async function installProviderFailureObservation(ctx:any) {
+ const notices=new Map<string,string>()
+ await ctx.session.hook('http.response',(event:any)=>{
+  const status=event.response.status
+  if(status<400){notices.delete(event.sessionID);return}
+  const target=event.model.providerID+'/'+event.model.id
+  const kind=status===429?'rate limited':status===401?'authentication failed':status===403?'access denied':status===402?'payment or credit requirement':'request failed'
+  notices.set(event.sessionID,'Observed provider request: '+target+' — '+kind+' (HTTP '+status+'). This response alone does not establish subscription exhaustion or authorize a fallback. Inspect the actual error and retry guidance before recovery.')
+ })
+ await ctx.session.hook('context',(event:any)=>{const note=notices.get(event.sessionID);if(note&&Array.isArray(event.system)){event.system.push({type:'text',text:note});notices.delete(event.sessionID)}})
 }
 
 export default define({
@@ -136,9 +60,8 @@ export default define({
     for (const [name, install] of [
       ["spawn-guard", () => installSpawnGuard(ctx)],
       ["session-model-guard", () => installSessionModelGuard(ctx)],
-      ["quota-context", () => installQuotaContext(ctx)],
+      ["provider-failures", () => installProviderFailureObservation(ctx)],
       ["adaptive-context", () => installAdaptiveContext(ctx)],
-      ["usage-failure", () => installUsageFailureHook(ctx)],
     ] as const) {
       try { await install() } catch (error) {
         console.error(`[models] ${name} disabled:`, error)

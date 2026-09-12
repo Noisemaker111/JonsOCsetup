@@ -22,7 +22,9 @@ const store = new QuestStore(cwd)
 const quest = store.create({ id: "01j00000000000000000000998", title: "Native model route probe", objective: "Reply exactly DISPATCH_ROUTE_OK without editing files or calling tools.", kind: "investigation", project: projectIdentity(cwd), stages: [{ id: "probe", title: "Verify the exact native route", detail: "Reply exactly DISPATCH_ROUTE_OK without editing files or calling tools.", status: "pending", needs: [] }] })
 const prompt = `Use existing Quest ${quest.id}. Call quest action=run with id=${quest.id} and run={model:"${requested}"}. Wait for the worker result. Do not create another Quest.`
 const proc = Bun.spawn([resolveHostExecutable(), "run", "--standalone", "--auto", "--agent", "quest-giver", "-m", "cliproxyapi/gpt-5.6-sol", prompt], {
-  cwd, env: { ...process.env, OPENCODE_CONFIG_DIR: configRoot, OPENCODE_QUEST_ROOT: cwd, OPENCODE_ORCHESTRATION_LEDGER: join(cwd, "orchestration.jsonl"), CLAUDE_CODE_BRIDGE_PORT: "0" },
+  // Every real home, or the check writes into one of them: the ledger and log were redirected
+  // and the session database, telemetry and state were not.
+  cwd, env: { ...process.env, OPENCODE_CONFIG_DIR: configRoot, OPENCODE_QUEST_ROOT: cwd, OPENCODE_ORCHESTRATION_LEDGER: join(cwd, "orchestration.jsonl"), OPENCODE_DB: join(cwd, "host.db"), OPENCODE_TELEMETRY_FILE: join(cwd, "requests.jsonl"), XDG_STATE_HOME: join(cwd, "state"), CLAUDE_CODE_BRIDGE_PORT: "0" },
   stdin: "ignore", stdout: "pipe", stderr: "pipe", windowsHide: true,
 })
 const timer = setTimeout(() => proc.kill(), 150000)

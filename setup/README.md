@@ -5,7 +5,7 @@
 - `bun run setup:plan` verifies source hashes and previews installation.
 - `bun run setup:install` applies missing or previously managed files, refusing independent local edits.
 - `node scripts/install-setup.mjs --root <empty-home> --apply` restores into an isolated home without executing installed scripts or plugins.
-- `node scripts/install-channel-shortcuts.mjs` installs `ocd` and `ocs` after the channel runtime has been prepared.
+- `node scripts/install-channel-shortcuts.mjs` installs `oc` after the channel runtime has been prepared, and removes the superseded `oca`/`ocm`/`ocd`/`ocs`/`ocb` names.
 
 Keep source bytes and manifest hashes synchronized in the same PR. `capture-setup.mjs` is an explicit private import tool, not an automatic synchronization job. Review imported material before adding it to this public repository. The live-source capture script produces private recovery snapshots that must never be committed or published here.
 

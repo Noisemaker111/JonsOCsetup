@@ -16,7 +16,7 @@
     "runtime:host": "node scripts/host-status.mjs",
     "runtime:start": "node scripts/opencode-runtime.mjs",
     "runtime:verify": "bun scripts/verify-runtime.ts",
-    "runtime:ship": "bun test && bun scripts/verify-runtime.ts",
+    "runtime:ship": "bun scripts/verify-runtime.ts",
     "runtime:dispatch": "bun scripts/verify-dispatch.ts",
     "runtime:providers": "bun scripts/provider-audit.ts",
     "runtime:accounts": "bun scripts/accounts.ts",
@@ -25,6 +25,10 @@
     "ui:lab:paper": "bun ui-lab/paper.ts",
     "runtime:channel": "node scripts/runtime-channel.mjs",
     "setup:plan": "node scripts/install-setup.mjs",
-    "setup:install": "node scripts/install-setup.mjs --apply"
+    "setup:install": "node scripts/install-setup.mjs --apply",
+    "runtime:drive": "bun scripts/drive-opencode.ts",
+    "check:core": "node scripts/core-suite.mjs",
+    "check:repo": "node scripts/repo-hygiene.mjs",
+    "worktree:cleanup": "node scripts/worktree-cleanup.mjs"
   }
 }

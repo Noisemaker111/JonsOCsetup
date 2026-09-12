@@ -1,17 +1,27 @@
-import { realpathSync, statSync, existsSync, readFileSync } from 'node:fs'
+import { statSync, existsSync, readFileSync } from 'node:fs'
 import { basename, dirname, join, isAbsolute } from 'node:path'
-import { projectIdentity } from '../quest/router-public'
+import { physicalDirectory, projectIdentity } from '../quest/router-public'
 import { RouterError, redact } from './host'
 import {repositoryURL} from './remote'
 
 export type Target = { id: string; root: string; directory: string; name: string; hostID?: string; remote?: string }
 export type Selection = { revision: number; targets: Target[]; pin?: Target; aliases: Record<string, Target>; asked: boolean }
 export const emptySelection = (): Selection => ({ revision: 0, targets: [], aliases: {}, asked: false })
+/**
+ * A target directory is the operating system's own spelling of the path, never the caller's.
+ *
+ * Node's `realpathSync` resolves links but leaves Windows path case exactly as it was typed, and a
+ * selector arrives lowercased often enough (spoken paths, git's own output, a shell that was cd'd
+ * with a small drive letter). The host walks a session's directory up to the home directory by
+ * string equality, so `c:\users\jk101\...` under a `C:\Users\Jk101` home never reaches the stop and
+ * recurses past the drive root: its instruction sources die with a stack overflow and the session
+ * fails with "Instruction initialization blocked by unavailable sources: core/instructions". Only
+ * the native realpath answers with the spelling the host will compare against.
+ */
 export function verifyTarget(directory: string): Target {
   if (!isAbsolute(directory)) throw new RouterError('ABSOLUTE_PATH_REQUIRED', 'Choose an absolute project/worktree directory')
   try {
-    const real = realpathSync(directory)
-    if (!statSync(real).isDirectory()) throw new Error()
+    const real = physicalDirectory(directory)
     return { ...projectIdentity(real), directory: real, name: basename(real) }
   } catch { throw new RouterError('DIRECTORY_UNAVAILABLE', 'Project identity cannot be verified; choose its current absolute directory') }
 }

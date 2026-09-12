@@ -21,18 +21,22 @@ therefore cannot establish the user's current 19-hour weekly reset. Some unknown
 sources contain placeholder reset intervals; the inventory command deliberately
 prints no reset timestamp unless its provenance is provider-observed.
 
-- `models/model-router.ts:pickAvailableModel` scores capability booleans,
-  output-token list prices, capacity states, and hard-coded Sol/Luna bonuses.
-  It excludes harness entries and automatic Astra selection. It does not read
-  benchmark results, task latency, or measured task cost.
-- `models/model-routing.ts:pickModel` is a separate favorite/profile scorer.
-  The routing skill and generated prose contain older defaults. Changing prose
-  alone does not change either scorer or existing worker pins.
+- `models/model-router.ts` no longer selects anything. Its keyword scorers
+  (`pickAvailableModel`, `applyPickedModel`, `pickModel`) ranked on capability
+  booleans, list prices and hard-coded Sol/Luna name bonuses, read no benchmark
+  and no measured cost, and had no callers. They are removed; the file keeps only
+  the favorites catalog and profile presentation `favorite-agents.ts` reads.
+- Live Quest admission uses `models/dispatch-planner.ts` and account-scoped route
+  evidence. Model and reasoning effort are both chosen there: the candidate set is
+  joined live (`models/live-routes.ts`), quality comes from the published
+  per-effort board (`models/benchmarks.md`), the task class decides how much of
+  that accuracy the work may trade (`models/task-demand.ts`), and the routes left
+  are ordered on recorded per-effort consumption (`models/route-cost.ts`).
 - `usage/usage-lib.ts:capacitySnapshot` reduces healthy sources to state/auth.
-  It retains resetAt only for capped windows. `telemetryFromCapacity` maps by
-  providerID, so broker routes do not automatically inherit the correct
-  Claude/Codex account's allowance. A broker provider can contain multiple
-  accounts and vendors: mapping the whole provider to one subscription is wrong.
+  It retains resetAt only for capped windows. Mapping capacity by providerID was
+  wrong for brokers and has gone with the scorer that used it: a broker provider
+  can contain several accounts and vendors, so dispatch resolves the account per
+  route through `usage/account-api.ts:accountsForRoute` instead.
 - `models/benchmarks.md` has useful research notes, including effort and harness
   distinctions, but they are not executable routing evidence. No benchmark
   numbers from those notes were copied into automatic scoring in this change.
@@ -225,6 +229,14 @@ Optional calibration.maxAgeMilliseconds and tokensByRoute feed configured task-t
 The existing request policy accepts primaryRouteID and optional fallback: {when: "admission-unavailable", routeIDs: [...]}. The primary and every alternative must be in allowedRouteIDs. A healthy primary stays selected; an unavailable primary fails visibly without fallback policy. With policy, one admission decision evaluates only those alternatives against the unchanged quality, account, cash and reserve constraints, inside the existing reservation lock. An explicit per-run model bypasses this fallback and remains exact. Provider failures after dispatch do not start another model call. The substitution and original rejection reason persist in the reservation and Quest agent log after completion.
 
 Forty-seven focused planner/reservation/API/boundary tests passed, including fixed paid/subscription/free policy, inventory changes, forbidden substitution, exact model preservation and atomic retry identity. Real terminal rendering of synthetic grouped failure/recovery and substitution records passed in .visual-e2e/redesign-terminal-recovery/manifest.json; the screenshot was inspected. This is presentation acceptance, not a live provider failover benchmark.
+
+### Live candidate derivation (2026-09-10)
+
+`dispatch-policy.json` no longer decides which models exist. At dispatch time `models/live-routes.ts` joins the live models.dev catalog, `models/access-policy.json`, the connected accounts in the usage snapshot, the policy's billing map and the `benchmark-routing` block in `models/benchmarks.md`; every one of those is a veto, so a wider catalog never widens what the user authorized. The file still contributes curated routes (a broker like `cliproxyapi` is not a models.dev provider and can only be curated), billing and thresholds, and a curated route keeps its identity over a derived twin. A route derived this way carries `admission: "benchmark-ranked"` and a `benchmark` prior; `request.minBenchmarkPassAt1` is its quality floor, and a route the user names explicitly is exempt from that floor because naming it is the authorization.
+
+`fallback.routeIDs` is no longer written by hand: the alternatives are every allowed route except the primary, and they are ranked as a pool rather than attempted in list order. Priors never mix with measurement — any candidate carrying local `RouteEvidence` for the task wins the field outright and the benchmark-only candidates are excluded with that reason, so a published pass@1 is only ever compared against another published pass@1. Ties go to an independent measurement over a vendor's own number, then to the AA Intelligence Index. Preflight health still excludes a probed-unusable route, and now matches on provider/model as well as route id so one probe speaks for every candidate that would place the same call.
+
+Observed on 2026-09-10 with the ChatGPT account's weekly window exhausted, the Claude account reporting HTTP 429, and `opencode-go` at 99% rolling: automatic selection fell back from `proxy-sol-xhigh` to `opencode-go/deepseek-v4.1-flash#max`, a model released that day and absent from `allowedRouteIDs`. Marking that model unusable in `route-health.json` moved the selection to `opencode-go/glm-5.3#max` (69.0%, independent), and naming the unusable model explicitly failed closed with no substitute.
 
 ### Existing logged-in setup connected (2026-09-05)
 
