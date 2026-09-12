@@ -90,6 +90,26 @@ every command. `quest-draft.mjs` still files, as an alias for `quest.mjs file`.
 Inside OpenCode a Quest also dispatches workers. From Claude or Codex it is a shared board: the
 same ledger, so whoever picks the work up can see what was asked and what is already underway.
 
+## Say whether you traced it or inferred it
+
+A cause is only **traced** when you have followed it to the line that does it — the function, its
+caller, the symbol grepped in `upstream/` or `config/`. Anything else is **inferred**: a story that
+fits what you observed. Both are useful. They are not interchangeable, and to Jon they read
+identically unless you say which.
+
+So when a claim names a mechanism — X switches, recovers, falls back, drops, retries — it carries a
+`file:line` or it is labelled as inference. Two adjacent lines in a TUI capture are an observation,
+not a mechanism: "usage limit reached" above "switched agent to Build" produced a confident,
+repeated, wrong explanation that survived into a commit message, a PR body, a Quest and MEMORY.md
+before one grep of the literal string "Switched agent" disproved it in thirty seconds.
+
+The tell is that the story felt complete. A complete-feeling explanation is exactly when nothing is
+nagging you to check, which is exactly when you have not.
+
+The damage is propagation, not the mistake. Write a finding **once**, on the Quest, and reference it
+from everywhere else. Then a correction is one edit rather than four, and nobody builds on the
+version you already knew was wrong.
+
 ## Reporting to Jon
 
 Two headings, nothing else: **What happened** and **What to do next**. Bullets, not paragraphs.

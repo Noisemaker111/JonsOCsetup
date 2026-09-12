@@ -14,7 +14,8 @@ Load the `memory` skill before adding a line.
 - Native worker agents must stay selectable by the host TUI; hidden as subagents, the composer falls back to the wrong model.
 - Worktree cleanup belongs to Quest turn-in and release lifecycle events, not a cron or age sweep.
 - `nimbus_quill`, Claude's Fable window, has read `usedPoints: 0` with no reset across all 2,390 observations. No signal, not full headroom.
-- Quota is not usability: `cliproxyapi/claude-fable-5-1#high` had capacity and returned "Claude Code 2.1.220 does not support this model".
+- A model id missing from the host's `~/.cache/opencode/models.json` is not an error: the composer's `valid()` check drops the configured route silently and binds the fallback, and if `access-policy.json` has no route for that fallback our guard throws inside the `http.request` hook, where upstream only logs "Failed to drain Session". The prompt is lost with nothing on screen and no telemetry row. Three caches exist and only that one decides resolution — `~/.local/state/opencode/models-dev.json` feeds dispatch candidates and `models/models-cache.json` carries offline costs. Refresh the host cache from models.dev when a newly released model is configured.
+- Quota is not usability: `cliproxyapi/claude-fable-5-1#high` had capacity and returned "Claude Code 2.1.220 does not support this model". `scripts/route-preflight.ts` records that in `route-health.json`; `unusableRoutes()` reads it with a 6-hour bound, and both dispatch and the activation gate refuse what it names. Refresh the probe before a release pass — stale health is not evidence and stops being consulted.
 
 - Session history lives in `session_message` (29,502 rows, 1,205 sessions), not the older `part`/`message` tables. A tool part is `{type:"tool", name, time:{created, ran, completed}, state:{status, input, content, metadata}}`; `state.time` is undefined. `ran` is present on 34,569 of 39,597 parts, so `completed - ran` is execution and `ran - created` is dispatch; counting `completed - created` as execution charges dispatch to the tool. An assistant turn's own `time.{created, completed}` spans its tool calls, so tool spans must be capped to the turn before summing.
 - An interrupted call's `completed` is stamped when the abort lands, so its span is how long an abandoned call went uncollected, never execution. Two aborted `execute` parts read as 76% of all Code Mode time; one had an uninterrupted twin running the identical program in 45.9s.
@@ -43,7 +44,28 @@ Load the `memory` skill before adding a line.
   the worst were `glob` waiting on an external-directory prompt, not searching — `glob`'s median
   execution is 79ms. Split blocked from running before concluding a tool is slow.
 - `runtime-channel.mjs prepare dev --ref agents` resolves a stale ref and silently builds the wrong
-  commit. Pass `--ref origin/agents` after fetching; activation then checks the tree matches.
+  commit. Pass `--ref origin/agents` after fetching; activation then checks the tree matches — and
+  that check makes a candidate stale the moment anything else merges, so prepare, gate and activate
+  in one pass when the branch is quiet, not alongside other agents' merges.
+- A drive through `key {name,ctrl}` proves nothing about terminal encodings: the embedded terminal
+  answers the host's kitty keyboard query, so keys always arrive modifier-tagged. Byte-level claims
+  need `raw {hex}` — Windows Terminal sends bare `08` for Ctrl+Backspace, `17` for Ctrl+W,
+  `1b 7f` for Alt+Backspace.
+- A harness that starts a host takes its workers with it. `drive-giver` now records every run the
+  board already carried and holds the host open until anything it started reaches completed, failed
+  or cancelled (`--worker-grace`, default 30m). Two VPS workers died before that, one after reading
+  502,165 input tokens of real investigation.
+- The Quest board is an importable API, not a CLI: `openBoard()` from `~/.agents/quest-api.mjs`
+  returns plain data and throws `BoardError` with a `code`. `quest.mjs` is only argv, printing and
+  exit codes. Code Mode composes calls; it should never spawn a process to parse text back.
+- An object cannot carry a field and a method of the same name — `release` as both the release root
+  and release-a-step silently resolved to the function, and a caller reading the field got one.
+- A cause is traced or it is inferred, and the two must never be written the same way. "Usage limit
+  reached" printed above "Switched agent to Build" produced a confident wrong mechanism that reached
+  a commit, a PR, a Quest and this file before one grep of "Switched agent" disproved it. The real
+  path is `app/src/composer/submit.ts sendPrompt()`, which calls `switchAgent` whenever the composer
+  selection differs from the session — `session_v2.agent` follows the dropdown, nothing recovers
+  anything. A claim naming a mechanism carries a file:line or says it is a guess.
 
 ## Maintenance
 
