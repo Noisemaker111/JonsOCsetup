@@ -22,7 +22,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { homedir } from "node:os"
-import { assertConfiguredModel } from "./access-policy"
+import { assertConfiguredModel, assertConfiguredSelection } from "./access-policy"
 import { accountsForRoute } from "../usage/account-api"
 import { slugModel } from "./model-catalog"
 import { benchmarkFor, readBenchmarkTable, type BenchmarkEntry, type BenchmarkTable } from "./benchmark-table"
@@ -130,6 +130,7 @@ export function deriveBenchmarkRoutes(input: { catalog: CatalogModel[]; table: B
     const accountID = accounts[0].id
     if (!policy.billing[accountID]) { note(model.providerID + "/" + model.modelID + ": billing arrangement for " + accountID + " is not configured"); continue }
     for (const { reasoning, benchmark } of benchmarkedEfforts(entry, model)) {
+      try { assertConfiguredSelection({ ...model, reasoning }) } catch(error) { note(String(error)); continue }
       const route: Route = {
         id: "live-" + slugModel(model.providerID) + "-" + slugModel(model.modelID) + "-" + slugModel(reasoning),
         accountID, providerID: model.providerID, modelID: model.modelID,

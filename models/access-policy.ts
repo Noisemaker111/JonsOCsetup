@@ -2,10 +2,45 @@ import {readFileSync} from "node:fs"
 import {join} from "node:path"
 import {homedir} from "node:os"
 import {verifyOAuthProxy} from "./subscription-policy"
-export type AccessPolicy={version:1;routes:{providerID:string;modelPattern:string;verifyOAuthBroker?:boolean;transports:{origin:string;pathPrefix:string}[]}[]}
+export type AccessPolicy={version:1;selectionRestrictions?:{modelPattern:string;forbiddenReasoning:string[];requireExplicitReasoning?:boolean;reason:string}[];routes:{providerID:string;modelPattern:string;verifyOAuthBroker?:boolean;transports:{origin:string;pathPrefix:string}[]}[]}
 export function configuredAccess():AccessPolicy{let policy:AccessPolicy;try{policy=JSON.parse(readFileSync(process.env.OPENCODE_ACCESS_POLICY??join(process.env.OPENCODE_CONFIG_DIR??join(homedir(),".config","opencode"),"models","access-policy.json"),"utf8"))}catch{throw new Error("Access policy is unavailable; configure allowed routes and transports before sending requests")};if(policy.version!==1||!Array.isArray(policy.routes)||!policy.routes.length)throw new Error("Invalid access policy; no requests authorized");return policy}
 export function assertConfiguredModel(model:{providerID:string;id?:string;modelID?:string},policy=configuredAccess()){const id=model.id??model.modelID;if(!model.providerID||!id)throw new Error("Exact model identity is required");const route=policy.routes.find(r=>r.providerID===model.providerID&&new RegExp("^(?:"+r.modelPattern+")$").test(id));if(!route)throw new Error("User access policy does not allow "+model.providerID+"/"+id);return route}
 export function assertConfiguredRequest(model:{providerID:string;id?:string;modelID?:string},requestURL:string,policy=configuredAccess()){const route=assertConfiguredModel(model,policy),url=new URL(requestURL);if(!route.transports.some(t=>url.origin===t.origin&&url.pathname.startsWith(t.pathPrefix)))throw new Error("Request transport is not allowed by user access policy for "+model.providerID);return route}
+
+/** Restrictions are user choices, independent of benchmark scores and provider transport. */
+export type ModelSelection={providerID:string;id?:string;modelID?:string;variant?:string;reasoning?:string}
+const effortAlias=(id:string)=>id.match(/(?:#|-)(none|low|medium|high|xhigh|max)(?:-fast)?$/i)?.[1]?.toLowerCase()
+const restrictionsFor=(id:string,policy:AccessPolicy)=>
+  (policy.selectionRestrictions??[]).filter(rule=>new RegExp("^(?:"+rule.modelPattern+")$","i").test(id))
+export function assertConfiguredSelection(model:ModelSelection,policy=configuredAccess()){
+  const id=model.modelID??model.id??""
+  const route=assertConfiguredModel({providerID:model.providerID,id},policy)
+  const efforts=[model.variant,model.reasoning,effortAlias(id)].filter((x):x is string=>typeof x==="string"&&!!x).map(x=>x.trim().toLowerCase())
+  for(const rule of restrictionsFor(id,policy)){
+    if(efforts.some(e=>rule.forbiddenReasoning.includes(e)))throw new Error(rule.reason+" ("+model.providerID+"/"+id+"#"+efforts.join(",")+")")
+    if(rule.requireExplicitReasoning&&(!efforts.length||efforts.some(e=>["unknown","default","auto"].includes(e))))throw new Error("Explicit permitted reasoning is required for "+model.providerID+"/"+id+"; "+rule.reason)
+  }
+  return route
+}
+/** Inspect the final payload as well as the selected variant. Never consume or rewrite it. */
+export async function assertRequestSelection(model:ModelSelection,request:Request,policy=configuredAccess()){
+  assertConfiguredSelection(model,policy)
+  // Request bodies can carry a different alias/model from the catalog reference.
+  if(!policy.selectionRestrictions?.length||!request.body)return
+  let body:any
+  try{body=await request.clone().json()}catch{
+    if(restrictionsFor(model.id??model.modelID??"",policy).length)throw new Error("Cannot verify reasoning in the outgoing request")
+    return
+  }
+  const id=typeof body?.model==="string"?body.model:model.id??model.modelID
+  const effective=[body?.reasoning_effort,body?.reasoning?.effort].filter((x):x is string=>typeof x==="string"&&!!x)
+  // An allowed UI selection is insufficient if its effort vanished or changed in serialization.
+  for(const candidate of new Set([model.id??model.modelID,id])){
+    if(!candidate||!restrictionsFor(candidate,policy).length)continue
+    if(!effective.length)assertConfiguredSelection({providerID:model.providerID,id:candidate},policy)
+    for(const reasoning of effective)assertConfiguredSelection({providerID:model.providerID,id:candidate,reasoning},policy)
+  }
+}
 
 /** `provider/model#variant` and `provider/model` are the same identity; the effort is not part of it. */
 export const routeIdentity=(route:string)=>String(route??"").split("#")[0]
@@ -114,9 +149,11 @@ export async function installAccessGuard(ctx:{session?:{hook?:Function;synthetic
     const notice=substitutionNotice(requested,actual)
     if(notice)announce(event?.sessionID,notice)
   })
-  await ctx.session.hook("http.request",(event:any)=>{
+  await ctx.session.hook("http.request",async(event:any)=>{
     try{
-      const route=assertConfiguredRequest(event.model,event.request.url)
+      const policy=configuredAccess()
+      const route=assertConfiguredRequest(event.model,event.request.url,policy)
+      await assertRequestSelection(event.model,event.request,policy)
       if(route.verifyOAuthBroker&&new URL(event.request.url).origin!==verifyOAuthProxy().origin)throw new Error("Configured broker origin does not match its verified endpoint")
     }catch(error){
       announce(event?.sessionID,refusalNotice({model:event?.model??{},reason:error instanceof Error?error.message:String(error),requested:requestedAgentRoute(event?.agent)}))

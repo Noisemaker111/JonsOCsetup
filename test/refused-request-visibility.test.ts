@@ -41,14 +41,14 @@ test("a refused request and a substituted model both reach the conversation, not
       model: { providerID: "openrouter", id: "deepseek/deepseek-v4.1-flash" },
       request: new Request("https://openrouter.ai/api/v1/chat/completions"),
     })
-    expect(refused).toThrow("User access policy does not allow openrouter/deepseek/deepseek-v4.1-flash")
+    await expect(refused()).rejects.toThrow("User access policy does not allow openrouter/deepseek/deepseek-v4.1-flash")
     await Bun.sleep(5)
     expect(posted).toHaveLength(2)
     expect(posted[1].text).toContain("Nothing was sent")
 
     // A turn the policy permits says nothing at all: a notice on every request is a notice nobody reads.
     hooks.context({ sessionID: "ses_ok", agent: "quest-giver", model: { providerID: "opencode-go", id: "deepseek-v4.1-flash" } })
-    hooks["http.request"]({
+    await hooks["http.request"]({
       sessionID: "ses_ok", agent: "quest-giver",
       model: { providerID: "opencode-go", id: "deepseek-v4.1-flash" },
       request: new Request("https://opencode.ai/zen/go/v1/chat/completions"),
