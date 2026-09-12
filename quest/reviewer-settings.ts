@@ -20,7 +20,7 @@ export function setReviewerSettings(value:ReviewerSettings,file=reviewerSettings
 export const reviewerSettingsKey=(settings:ReviewerSettings)=>digest(JSON.stringify(settings))
 export async function reviewerCandidates(settings=reviewerSettings()){
  const plan=await dispatchPlanInput({task:'utility',model:settings.model,policyFile:configuredDispatchPolicyFile()})
- const routes=plan.routes.filter(r=>r.harness==='native'&&r.serviceTier==='standard')
+ const routes=plan.routes.filter(r=>r.harness==='native'&&r.serviceTier==='default')
  const request={...plan.request,primaryRouteID:undefined,fallback:undefined,preference:settings.preference==='quota'?'capacity' as const:settings.preference}
  return {...plan,routes,request}
 }

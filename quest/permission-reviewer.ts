@@ -48,7 +48,7 @@ export class PermissionReviewer {
     const reviewID='permission-'+digest(input.giverID+input.requestKey+before.key)
     reserved=await reservePermissionReview(this.store.runtime,reviewID,settings,pin)
     const route=reserved.route
-    if(route.harness!=='native'||route.serviceTier!=='standard')throw Error('Permission reviewer requires the exact supported native model service')
+    if(route.harness!=='native'||route.serviceTier!=='default')throw Error('Permission reviewer requires the exact supported native model service')
     if(pin&&pin.accountID!==route.accountID)throw Error('The pinned reviewer account changed; no substitute selected')
     if(!pin){pin={selector:'route:'+route.id,model:route.providerID+'/'+route.modelID+'#'+route.reasoning,settingsKey,selectionReason:reserved.decision?.summary,accountID:route.accountID,giverID:input.giverID,createdAt:new Date().toISOString()};mkdirSync(directory,{recursive:true});const tmp=file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(pin));renameSync(tmp,file)}
     save({model:pin.model})

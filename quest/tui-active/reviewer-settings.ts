@@ -10,7 +10,7 @@ export async function choosePermissionReviewer(context:any){
   if(!choice)return
   if(choice==='choose'){
    const plan=await reviewerCandidates({...current,model:undefined}),allowed=new Set(plan.request.allowedRouteIDs)
-   const routes=plan.routes.filter(r=>allowed.has(r.id))
+   const routes=plan.routes.filter(r=>allowed.has(r.id)&&r.verified)
    const selected=await dialog.select({title:'Choose permission reviewer',options:routes.map(r=>({value:'route:'+r.id,title:r.providerID+'/'+r.modelID+'#'+r.reasoning,description:(plan.snapshot.accounts.find(a=>a.id===r.accountID)?.provider??'Unknown account')+' · '+(plan.accounts.find(a=>a.id===r.accountID)?.billing??'unknown billing')}))})
    if(!selected)return
    setReviewerSettings({...current,model:selected})
