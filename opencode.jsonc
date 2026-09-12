@@ -320,6 +320,7 @@
         { "action": "read", "resource": "MEMORY.md", "effect": "allow" },
         { "action": "read", "resource": "C:/Users/Jk101/Projects/opencode-hub/AGENTS.md", "effect": "allow" },
         { "action": "read", "resource": "C:/Users/Jk101/Projects/opencode-hub/MEMORY.md", "effect": "allow" },
+        { "action": "external_directory", "resource": "*", "effect": "deny" },
         { "action": "external_directory", "resource": "C:/Users/Jk101/Projects/opencode-hub/*", "effect": "allow" },
         { "action": "grep", "resource": "*", "effect": "deny" },
         { "action": "glob", "resource": "*", "effect": "deny" },
