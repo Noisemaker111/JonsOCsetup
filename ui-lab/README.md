@@ -17,7 +17,7 @@ Then open `ui-lab/out/index.html` in a browser. Per surface you also get
 Only some surfaces, or a different terminal size:
 
 ```bash
-bun run ui:lab sidebar footer
+bun run ui:lab sidebar usage
 bun run ui:lab board --width 160 --height 50
 ```
 
@@ -105,7 +105,7 @@ recolour and retype on the canvas:
 bun run ui:lab:paper
 ```
 
-`bun run ui:lab:paper sidebar footer` pushes a subset. Other flags on `bun ui-lab/paper.ts`:
+`bun run ui:lab:paper sidebar usage` pushes a subset. Other flags on `bun ui-lab/paper.ts`:
 `--info` lists the file, page and artboards with node ids; `--inspect <id>` prints a
 node's layer tree and saves a screenshot; `--delete <id,id>` removes artboards (a
 superseded push); `--list-tools` prints what the running Paper exposes. After every

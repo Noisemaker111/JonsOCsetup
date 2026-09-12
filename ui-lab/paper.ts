@@ -2,7 +2,7 @@
  * Push the UI lab captures into Paper (paper.design) as artboards.
  *
  *   bun ui-lab/paper.ts                 # every surface in ui-lab/out/paper
- *   bun ui-lab/paper.ts sidebar footer  # just these
+ *   bun ui-lab/paper.ts sidebar usage  # just these
  *   bun ui-lab/paper.ts --list-tools    # print what the running Paper exposes
  *   bun ui-lab/paper.ts --file <id>     # target a specific Paper file
  *   bun ui-lab/paper.ts --delete 1-0,1-1  # remove artboards by node id (e.g. a superseded push)
