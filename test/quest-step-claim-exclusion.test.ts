@@ -33,14 +33,23 @@ test("of two harnesses claiming one Quest step at once, exactly one comes away h
 
     // Real processes, started together, contending for the same step. Whether they collide inside
     // the store's revision compare or one simply arrives second, the board may only ever hand the
-    // step to one of them, and everyone else must be told who has it.
+    // step to one of them, and nobody else may come away believing they have it.
     for (let round = 1; round <= 3; round++) {
       const results = await Promise.all(["claude", "codex", "opencode", "fable"].map((agent) => claimer(id, step, agent)))
       const winners = results.filter((result) => result.code === 0)
-      const refused = results.filter((result) => result.code === 3)
-      expect({ round, winners: winners.length, refused: refused.length }).toEqual({ round, winners: 1, refused: 3 })
+      const losers = results.filter((result) => result.code !== 0)
+      expect({ round, winners: winners.length, losers: losers.length }).toEqual({ round, winners: 1, losers: 3 })
       const holder = winners[0].out.match(/@(\S+)/)![1]
-      for (const loss of refused) expect(loss.out).toBe(`held ${step} @${holder} 0m`)
+      // Two ways to lose, both safe. Being told the holder by name is the good one. Being told the
+      // Quest is being written too fast to decide is the other: it happens when four processes
+      // collide hard enough that a claimer exhausts its revision retries before anyone visibly
+      // holds the step, and a runner slow enough makes it ordinary rather than rare. What matters is
+      // that neither loser walks away thinking it owns the step -- one of them would then go and do
+      // the work. Asserting only the by-name form made a contended board look like a broken one.
+      for (const loss of losers) {
+        if (loss.code === 3) expect(loss.out).toBe(`held ${step} @${holder} 0m`)
+        else expect({ code: loss.code, out: loss.out }).toEqual({ code: 1, out: `Quest ${id} is being written too fast to claim ${step}; retry.` })
+      }
 
       // And the ledger agrees: one holder, not four sessions all calling themselves executing.
       const who = JSON.parse(quest("who", "--json").stdout)
