@@ -61,7 +61,12 @@ export const modelIdentity=(model:{providerID?:string;id?:string;modelID?:string
 export function requestedAgentRoute(agent?:string,source=process.env.OPENCODE_CONFIG_CONTENT):string|undefined{
   if(!agent||typeof source!=="string"||!source)return
   try{
-    const model=(JSON.parse(source)?.agents??{})[agent]?.model
+    const config=JSON.parse(source)
+    // Only the visible launch agent was selected by opencode-runtime. A worker's generic
+    // config is a template: Quest dispatch binds its own exact provider/model/effort.
+    // Comparing it to that template invents a substitution on automatic cross-provider work.
+    if(config.default_agent!==agent)return
+    const model=(config.agents??{})[agent]?.model
     return typeof model==="string"&&model.includes("/")?model:undefined
   }catch{return undefined}
 }
@@ -80,8 +85,7 @@ export function substitutionNotice(requested:string|undefined,actual:string):str
   const asked=requested?routeIdentity(requested):undefined
   if(!asked||!actual||asked===actual)return
   return "This session is bound to "+actual+", not the "+asked+" the launch asked for."
-    +" This host's model catalog has no "+asked+", so the host chose a different model and said nothing."
-    +" Refresh the model catalog, or pick a route this host knows."
+    +" Check the selected route and model catalog before continuing; a different binding alone does not establish why it changed."
 }
 
 /** Only a different provider is reported: the host draws a session's title and summary models from
