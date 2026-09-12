@@ -110,3 +110,33 @@ export async function prepareDevRelease({repository, registry = registryRoot, co
   atomic(join(root, 'channel-release.json'), release)
   return {root, release}
 }
+
+/**
+ * Which code plain `oc` runs.
+ *
+ * It used to be the release that passed the acceptance gate, and that made the gate the delivery
+ * path: a fix could be merged, reviewed and verified and still not be in the command Jon types,
+ * because roughly half of gate runs fail. `/new` was fixed, merged, and he typed `oc`, typed `/new`,
+ * and got the old behaviour. So the default is the branch, and the gated release is the thing you
+ * ask for. The gate keeps its job -- proving a release before it is promoted -- and loses the job it
+ * was never meant to have.
+ */
+export const DEFAULT_BRANCH = 'agents'
+const sourceFile = registry => join(registry, 'oc-default.json')
+export function readDefaultSource(registry = registryRoot) {
+  try {return JSON.parse(readFileSync(sourceFile(registry), 'utf8')).source === 'gated' ? 'gated' : 'branch'} catch {return 'branch'}
+}
+export function writeDefaultSource(source, registry = registryRoot) {
+  if (!['branch', 'gated'].includes(source)) throw Error(`Choose branch or gated, not ${source}`)
+  atomic(sourceFile(registry), {source, updatedAt: new Date().toISOString()})
+  return source
+}
+
+/** How many commits the code being run is behind the branch, or undefined when that cannot be told. */
+export function commitsBehind(repository, commit, ref = 'refs/remotes/origin/' + DEFAULT_BRANCH) {
+  if (!commit) return undefined
+  try {
+    const count = git(repository, ['rev-list', '--count', commit + '..' + ref])
+    return Number.isInteger(Number(count)) ? Number(count) : undefined
+  } catch {return undefined}
+}
