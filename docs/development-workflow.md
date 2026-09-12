@@ -132,7 +132,32 @@ TUI and server load receipts must match that revision. Record the installed host
 binary separately. Old sessions keep their loaded generation and cannot consume
 new-generation continuation work.
 
-## Running a branch without activating it
+## What plain `oc` runs, and why it is not the gated release
+
+The acceptance gate proves a release before it is promoted. It was also, accidentally,
+the only way a merged fix reached the command Jon types: `oc` opened
+`.channels/dev.json`, and that only moves when a gate pass succeeds -- 26 of 53
+recorded runs. So `/new` could be fixed, merged and verified and still be absent from
+his editor, with nothing on screen saying so. It happened on 2026-09-12.
+
+So plain `oc` runs the latest merged `agents` commit, preparing or reusing a candidate
+for it, and the gated release is one flag away: `oc --gated`. `oc --default gated`
+makes that the default instead and `oc --default branch` puts it back; the setting
+lives in `.channels/oc-default.json` and its absence means the branch, because
+defaulting to the gated release is the state that hid the fix.
+
+Two consequences are deliberate. The first launch after a merge pays one preparation,
+and every launch after it reuses that candidate. And preparation sends one real prompt
+to the configured model, so it can fail for reasons outside the repository -- when that
+happens on a *defaulted* launch the launcher falls back to the gated release and says
+so in red, because a working editor on older code beats an error message. A branch
+asked for by name fails instead, since falling back would be running something other
+than what was asked for.
+
+A gated release also stops being silently stale: when it is behind `origin/agents` the
+banner says by how many commits.
+
+## Running any other branch
 
 `oc <branch>` prepares a dev candidate from that branch and launches it. It does not
 gate and does not activate: `.channels/dev.json` is untouched, so `oc` with no branch
@@ -167,8 +192,10 @@ Use isolated worktrees for dev code work; this preserves stable checkout owners.
 
 Activation requires the current merged agents tree and two real return-flow passes.
 It installs the scoped workflow skill and creates `.channels/start.mjs`. Start with `oc`, which launches at the hub root so its AGENTS.md loads; `--here` uses
-the current directory instead and `--cwd <project>` names one. `oc --stable` is the
-stable channel and `oc <branch>` runs a branch without activating it. Install this
+the current directory instead and `--cwd <project>` names one. Plain `oc` runs the
+latest merged `agents` code, `oc --gated` the release that passed the acceptance gate,
+`oc --default branch|gated` changes which one plain `oc` means, `oc --stable` is the
+stable channel and `oc <branch>` runs any other branch. Install this
 PATH command once with `node scripts/install-channel-shortcuts.mjs`; it also removes
 the superseded `oca`, `ocm`, `ocd`, `ocs` and `ocb` names, including the `oca`/`ocm`
 PowerShell functions, which would otherwise shadow it. Switching launch channels does not stop existing

@@ -15,7 +15,7 @@ const launcher=join(home,'.config','opencode','.channels','start.mjs')
 if(!existsSync(launcher))throw Error('Prepare and activate the dev channel first')
 const installed=join(home,'.config','opencode','.channels','direct')
 mkdirSync(installed,{recursive:true})
-for(const name of ['prepare-direct-channel.mjs','start-direct-channel.ps1','try-ref.mjs','channel-prepare.mjs'])copyFileSync(fileURLToPath(new URL(name,import.meta.url)),join(installed,name))
+for(const name of ['prepare-direct-channel.mjs','start-direct-channel.ps1','try-ref.mjs','channel-prepare.mjs','oc-source.mjs'])copyFileSync(fileURLToPath(new URL(name,import.meta.url)),join(installed,name))
 const direct=join(installed,'start-direct-channel.ps1')
 const marker='rem Managed OpenCode channel shortcut'
 const command={path:join(bin,'oc.cmd'),body:['@echo off',marker,`powershell.exe -NoProfile -File "${direct}" %*`,'exit /b %errorlevel%',''].join('\r\n')}
@@ -52,4 +52,4 @@ if(existsSync(profile)){
   .replace(/^# OpenCode launchers\. ocm is stable \(main\), oca is the agents integration release\.\r?\n(^#.*\r?\n)*/m,'# OpenCode itself is opened with `oc` (installed by install-channel-shortcuts.mjs), not from here.\n')
  if(after!==before){copyFileSync(profile,profile+'.before-channel-shortcuts-'+Date.now()+'.bak');writeFileSync(profile,after)}
 }
-console.log(JSON.stringify({installed:'oc',usage:['oc','oc <branch>','oc --stable','oc --here','oc <branch> --fresh|--model <route>'],superseded,removedFromProfile,note:'Open terminals keep the old profile functions until you start a new shell.'},null,2))
+console.log(JSON.stringify({installed:'oc',usage:['oc (latest merged agents)','oc <branch>','oc --gated','oc --default branch|gated','oc --stable','oc --here','oc <branch> --fresh|--model <route>'],superseded,removedFromProfile,note:'Open terminals keep the old profile functions until you start a new shell.'},null,2))

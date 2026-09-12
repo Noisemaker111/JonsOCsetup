@@ -4,6 +4,7 @@ import {join} from 'node:path'
 import {homedir} from 'node:os'
 import {pathToFileURL} from 'node:url'
 import {createRequire} from 'node:module'
+import {commitsBehind} from './channel-prepare.mjs'
 const channel=process.argv[2]
 if(!['dev','stable'].includes(channel))throw Error('Choose dev or stable')
 const repository=join(homedir(),'.config','opencode'),registry=join(repository,'.channels')
@@ -44,7 +45,7 @@ if(channel==='dev'){
 const {readUserGiver}=await import(pathToFileURL(join(dev.root,'quest/giver-registry.mjs')))
 const giver=readUserGiver(join(env.OPENCODE_QUEST_ROOT??homedir(),'.opencode','.quest-runtime'))
 if(giver&&giver.state!=='bound')throw Error('Your giver creation is uncertain; inspect it before opening another conversation')
-const banner={candidate:candidate??undefined,ref:dev.ref,resolvedRef:dev.resolved,subject:dev.subject,commit:dev.commit,model:channel==='dev'?dev.model:undefined,preparedAt:dev.preparedAt,activatedCommit:selectedDev?.commit,activatedRoot:selectedDev?.root}
+const banner={candidate:candidate??undefined,ref:dev.ref,resolvedRef:dev.resolved,subject:dev.subject,commit:dev.commit,behind:commitsBehind(repository,dev.commit),model:channel==='dev'?dev.model:undefined,preparedAt:dev.preparedAt,activatedCommit:selectedDev?.commit,activatedRoot:selectedDev?.root}
 const plan={channel,releaseLease,retirementScript:join(dev.root,'scripts/release-retirement.mjs'),host:inspectHostExecutable(),generation,sourceCommit:pointer.evidence.sourceCommit,banner,env,...(giver?.sessionID?{giverSessionID:giver.sessionID}:{})}
 writeFileSync(join(control,'launch.json'),JSON.stringify(plan,null,2))
 console.log(JSON.stringify(plan))
