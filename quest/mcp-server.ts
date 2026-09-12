@@ -40,7 +40,7 @@ export function questMCP(options:{store?:QuestStore}={}){
       let output:any
       switch(input.action){
        case 'list':{const result=api.list(input.query);output={...result,items:result.items.map(row=>toolSummary(store.read(row.id)!)),detail:'Use get for a compact record and inspect.section for full evidence'};break}
-       case 'get':api.get(input.id);output=toolDetail(store.read(input.id)!);break
+       case 'get':api.get(input.id);output=toolDetail(store.read(input.id)!,readContinuations(store.runtime).filter(row=>row.questID===input.id));break
        case 'create':{const saved=api.create(input.create);output={id:saved.id,title:input.create.title,steps:saved.steps};break}
        case 'update':api.update(input.id,input.update);output={ok:true};break
        case 'inspect':{

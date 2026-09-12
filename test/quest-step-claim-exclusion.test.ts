@@ -38,7 +38,7 @@ test("of two harnesses claiming one Quest step at once, exactly one comes away h
       const results = await Promise.all(["claude", "codex", "opencode", "fable"].map((agent) => claimer(id, step, agent)))
       const winners = results.filter((result) => result.code === 0)
       const losers = results.filter((result) => result.code !== 0)
-      expect({ round, winners: winners.length, losers: losers.length }).toEqual({ round, winners: 1, losers: 3 })
+      expect({ round, winners: winners.length, losers: losers.length }, JSON.stringify(results)).toEqual({ round, winners: 1, losers: 3 })
       const holder = winners[0].out.match(/@(\S+)/)![1]
       // Two ways to lose, both safe. Being told the holder by name is the good one. Being told the
       // Quest is being written too fast to decide is the other: it happens when four processes
@@ -55,7 +55,8 @@ test("of two harnesses claiming one Quest step at once, exactly one comes away h
       const who = JSON.parse(quest("who", "--json").stdout)
       expect(who.map((row: any) => [row.agent, row.step])).toEqual([[holder, step]])
 
-      quest("release", id, step, "--as", holder, `round ${round} over`)
+      const released = quest("release", id, step, "--as", holder, `round ${round} over`)
+      expect(released.status, released.stderr || released.stdout).toBe(0)
     }
 
     // The exclusion is the store's optimistic revision compare, and it is compared inside the

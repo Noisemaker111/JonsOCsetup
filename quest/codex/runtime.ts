@@ -9,7 +9,7 @@ import {questRoot} from "../root"
 import {questsAPI,QuestError} from "../api"
 import {projectIdentity} from "../project"
 import {acquireLock} from "../locking"
-import {sameDirectory,checkoutIndependent,recoverWorkspace,validateRecoveryBinding,recoveryReadInput,recoveryCommand,recoveryPatch,type RecoveryBinding,type RecoveryOptions} from "./recovery-workspace"
+import {sameDirectory,hasCheckout,checkoutIndependent,recoverWorkspace,validateRecoveryBinding,recoveryReadInput,recoveryCommand,recoveryPatch,type RecoveryBinding,type RecoveryOptions} from "./recovery-workspace"
 
 export type HookInput={session_id:string;cwd:string;hook_event_name:string;tool_name?:string;tool_use_id?:string;tool_input?:any;tool_response?:any;transcript_path?:string;source?:string}
 type Session={diagnostics?:Record<string,string>;recovery?:RecoveryBinding;directory:string;sessionID:string;questID?:string;pending:string[];calls?:Record<string,{tool:string;outer?:string;running?:boolean;fingerprint?:string;updatedInput?:any;recoveryTicket?:string}>;reconciled?:string[];baseline?:string;clean?:boolean;snapshotUnavailable?:string;ended?:boolean;detached?:boolean;transcript?:string;events:any[]}
@@ -132,6 +132,7 @@ export function codexHook(input:HookInput,store=new QuestStore(questRoot()),reco
     // Audit commands have an implicit cwd and must retain the task binding.
     return {}
    }
+  if(!state.recovery&&!hasCheckout(input.cwd))return {}
   const fingerprint=key(JSON.stringify({tool:input.tool_name,input:input.tool_input}))
   const prior=input.tool_use_id&&state.calls?.[input.tool_use_id]
   if(prior?.updatedInput&&prior.fingerprint!==fingerprint)throw Error('Retried tool identity has different input; refusing to replay')
@@ -190,6 +191,7 @@ export function codexHook(input:HookInput,store=new QuestStore(questRoot()),reco
    save(file,state);return {}
   }
   if(checkoutIndependent(input.tool_name??'',input.tool_input))return {}
+  if(!state.recovery&&!hasCheckout(input.cwd))return {}
 
   // A running command has not finished. Keep its reservation if the host never sends completion.
   const response=resultObject(input.tool_response)

@@ -166,6 +166,16 @@ const CHECKOUT_FREE_CONTROLS=new Set([
  // Each child session still passes its own shell/patch calls through this hook.
  ...['spawn_agent','send_message','followup_task','interrupt_agent'].flatMap(name=>[name,'collaboration.'+name,'collaboration'+name]),
 ])
+/** A home or project container is not a checkout reservation for every tool on the machine. */
+export function hasCheckout(directory:string):boolean {
+ const actual=realpathSync(directory)
+ if(Object.keys(checkoutAliases()).some(alias=>existsSync(alias)&&sameDirectory(alias,actual)))return true
+ const result=spawnSync('git',['-C',actual,'rev-parse','--is-inside-work-tree'],{encoding:'utf8',windowsHide:true,timeout:15000})
+ if(result.error)throw result.error
+ if(result.status===0)return result.stdout.trim()==='true'
+ if(/not a git repository/i.test(result.stderr))return false
+ throw Error('Cannot establish checkout scope: '+result.stderr.trim())
+}
 export function checkoutIndependent(tool:string,input:any):boolean{
  if(CHECKOUT_FREE_CONTROLS.has(tool)||WEB_TOOLS.has(tool)||['Read','Glob','Grep','view_image'].includes(tool))return true
  if(tool!=='Bash'||typeof input?.command!=='string')return false

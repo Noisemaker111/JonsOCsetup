@@ -27,3 +27,16 @@ export function latestSessionAttempts(sessions: QuestSession[]): QuestSession[] 
   }
   return [...latest.values()]
 }
+
+/** Only an evidenced terminal owner can release a working step; silence cannot. */
+export function terminalStepUpdates(q: import('./types').Quest) {
+  return q.stages.flatMap(step => {
+    if (step.status !== 'working') return []
+    const runs = q.sessions.filter(run => run.deliverables.includes(step.id))
+    const latest = runs.at(-1)
+    if (!latest || !['completed', 'failed', 'cancelled'].includes(latest.state)
+      || runs.some(run => ['planned', 'executing', 'waiting', 'blocked'].includes(run.state))) return []
+    return [{ stageID: step.id, status: 'pending' as const,
+      evidence: `Worker ${latest.state} without saving this step as done. ${latest.result ?? latest.evidence.at(-1) ?? 'Inspect the retained run result before retrying.'}` }]
+  })
+}

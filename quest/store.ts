@@ -135,4 +135,17 @@ export class QuestStore {
     return undefined
   }
 }
-function writeAtomic(path: string, content: string) { const tmp = `${path}.${process.pid}.${Date.now()}.tmp`; writeFileSync(tmp, content, "utf8"); renameSync(tmp, path) }
+function writeAtomic(path: string, content: string) {
+  const tmp = `${path}.${process.pid}.${Date.now()}.tmp`
+  writeFileSync(tmp, content, "utf8")
+  // Windows readers can briefly deny replacement while the journal already contains
+  // this mutation. Retry the same replacement under the Quest lock, not the claim.
+  const deadline = Date.now() + 1000
+  for (;;) {
+    try { renameSync(tmp, path); return }
+    catch (error) {
+      if (process.platform !== "win32" || !["EPERM", "EACCES", "EBUSY"].includes((error as NodeJS.ErrnoException).code ?? "") || Date.now() >= deadline) throw error
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10)
+    }
+  }
+}
