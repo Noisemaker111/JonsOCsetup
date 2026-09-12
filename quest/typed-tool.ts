@@ -3,7 +3,6 @@ import {bindUserGiver,userGiverID,giverContext,adoptQuestGiver,verifyGiverBindin
 import { reconcileWorkers, inspectWorker } from "./worker-inspection"
 import {configureLearning,collectWorkflowOutcomes} from "./outcome-tracking"
 import {workspaceSettings,setWorkspaceMode} from "./workspace-settings"
-import { prepareWorkspaceLater } from "./workspace-pool"
 import { QuestContinuation } from './continuation'
 import { readAllQuests } from './index'
 import {QUEST_TOOL_INPUT} from "./tool-schema.mjs"
@@ -36,13 +35,12 @@ export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFi
  installQuestCleanup(store,host)
  const timer=setInterval(()=>void tick(),5000);timer.unref()
  const workspaces=new QuestWorkspaces(store.runtime)
- const enrich=(view:any)=>({...view,workspaceSettings:workspaceSettings(options.settingsFile),workspacePreparation:workspaces.preparationStatus(view.project.id),continuation:continuation.status(view.id),changes:questChanges(store.read(view.id)!,workspaces)})
  const seen=new Map<string,SeenRequest>()
  const remember=(key:string,fingerprint:string,waited=false)=>{seen.delete(key);seen.set(key,{fingerprint,waited});if(seen.size>SEEN_LIMIT)seen.delete(seen.keys().next().value as string)}
- return {name:"quest",options:{pinned:true},output:{type:"object",additionalProperties:true},description:"One persistent user Quest Giver across projects: list, get, create, update, run, wait. Select a project with project_select before creating cross-project work; get/update/run use the Quest’s recorded project without opening another giver. Steps drive progress. For independent dependency-ready steps use run.continue with maxConcurrent (positive integer, isolated worktrees; no fixed subscription account cap when authorized by dispatch policy); stepModels pins exact per-step routes and taskTags labels learning. Run manages worker workspace, route selection and dispatch internally. Set run.readOnly=true for bounded source research, including non-Git hubs; it permits inspection and assigned-step notes, without shell commands or file writes. Set run.task to what the step is - coding, review, planning or utility - so route and reasoning effort are chosen for that work; it never names a model, and omitting it keeps the default coding demand. Use update.workspaceMode (worktree/shared) for the global future-run setting; run.files reserves relative paths in shared mode. Use update for actual step results, artifacts and reward. For live progress use get with inspect.section runs: host observations are separate from saved run states. Never poll a running worker with repeated get: use action=wait (wait.runID, wait.timeoutSeconds, default 120, max 600), which blocks until the Quest actually changes and returns the same view plus live worker observations. Better still, end the turn — a run reaching completed, failed or cancelled wakes this session automatically with an \"Automatic Quest worker update\". A get that would return exactly what this session already has for a Quest with an active run is turned into that wait, and repeating it after the wait is refused. Failures throw with a recovery reason; inspect an uncertain run before retrying.",input:QUEST_TOOL_INPUT,execute:async(input:any,context:any)=>{
+ return {name:"quest",options:{pinned:true},output:{type:"object",additionalProperties:true},description:"One persistent user Quest Giver across projects: list, get, create, update, run, wait. Select a project with project_select before creating cross-project work; get/update/run use the Quest’s recorded project without opening another giver. Steps drive progress. For independent dependency-ready steps use run.continue with maxConcurrent (positive integer, isolated worktrees; no fixed subscription account cap when authorized by dispatch policy); stepModels pins exact per-step routes and taskTags labels learning. Run manages worker workspace, route selection and dispatch internally. Set run.readOnly=true for bounded source research, including non-Git hubs; it permits inspection and assigned-step notes, without shell commands or file writes. Set run.task to what the step is - coding, review, planning or utility - so route and reasoning effort are chosen for that work; it never names a model, and omitting it keeps the default coding demand. Use update.workspaceMode (worktree/shared) for the global future-run setting; run.files reserves relative paths in shared mode. Use update for actual step results, artifacts and reward. Use list to discover Quests, then one get per relevant Quest: it includes description, steps, readiness, latest outcomes and continuation. Do not fan out description/steps/runs/continuation reads. For missing historical detail use inspect; data is already typed, offset counts whole entries, and nextOffset is the next page. Only inspect runs when fresh host observations are needed. Never poll a running worker with repeated get: use action=wait (wait.runID, wait.timeoutSeconds, default 120, max 600), which blocks until the Quest actually changes and returns the same view plus live worker observations. Better still, end the turn — a run reaching completed, failed or cancelled wakes this session automatically with an \"Automatic Quest worker update\". A get that would return exactly what this session already has for a Quest with an active run is turned into that wait, and repeating it after the wait is refused. Failures throw with a recovery reason; inspect an uncertain run before retrying.",input:QUEST_TOOL_INPUT,execute:async(input:any,context:any)=>{
   const waitRequest=input.action==='wait'?(input.wait??{}):undefined
   if(waitRequest){if(!input.id)throw new QuestError('INVALID_INPUT','wait needs the Quest id to block on');input={...input,action:'get'}}
-  if(["get","run"].includes(input.action))await reconcileWorkers(store,host)
+  if(input.action==='run'||waitRequest||input.inspect?.section==='runs')await reconcileWorkers(store,host)
   const requestID=context?.id??context?.callID
   if(!context?.sessionID||!requestID)throw new QuestError("HOST_CONTEXT_REQUIRED","Host must supply a session and tool call identity")
   const session=await host.get({sessionID:context.sessionID}),directory=(session?.data??session)?.location?.directory
@@ -63,7 +61,6 @@ export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFi
    configureLearning(store,trusted,input.id,input.run?.taskTags,input.run?.maxConcurrent??1)
   }
   if(input.action==="update"&&input.update?.workspaceMode!==undefined){if(Object.keys(input.update).length!==1)throw new QuestError("INVALID_INPUT","Change workspaceMode separately from Quest content updates");if(input.id)questsAPI(store,trusted,start).get(input.id);const result=setWorkspaceMode(input.update.workspaceMode,options.settingsFile);if(!input.id)return {output:{workspaceSettings:result},content:JSON.stringify({workspaceSettings:result})};input={...input,update:{...input.update}};delete input.update.workspaceMode}
-  if(!options.startRun&&!isWorker&&input.action!=="run"&&workspaceSettings(options.settingsFile).workspaceMode==="worktree")prepareWorkspaceLater(store.runtime,trusted.directory,options.policyFile??configuredDispatchPolicyFile())
   if(input.action==='run'&&input.run?.continue===true){const result=await continuation.run(input.id,{readOnly:input.run.readOnly,task:input.run.task,model:input.run.model,stepIDs:input.run.stepIDs,files:input.run.files,maxConcurrent:input.run.maxConcurrent,stepModels:input.run.stepModels},trusted);return {output:result,content:JSON.stringify(result)}}
   if(input.action==='update'&&input.update?.cancelContinuation===true){continuation.cancel(input.id,trusted);input={...input,update:{...input.update}};delete input.update.cancelContinuation}
   const api=questsAPI(store,trusted,start)
@@ -103,13 +100,18 @@ export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFi
      remember(key,observedState(after,runID),blocking&&!outcome.changed)
     }
    }
-   if(['get','update'].includes(input.action)&&['changes','continuation'].includes(input.inspect?.section))result=enrich(result)
-   if(input.action==='list')result={diagnostics:result.diagnostics.slice(0,10),items:result.items.map((item:any)=>toolSummary(store.read(item.id)!)),nextOffset:result.nextOffset,detail:'Use get with inspect.section for bounded full evidence'}
+   if(input.action==='list')result={diagnostics:result.diagnostics.slice(0,10),items:result.items.map((item:any)=>toolSummary(store.read(item.id)!)),nextOffset:result.nextOffset,detail:'Use one get per relevant Quest for its description, steps, readiness, latest outcomes and continuation. Inspect only missing historical evidence.'}
    if(['get','update'].includes(input.action)){
     const q=store.read(input.id)!
     if(input.inspect?.section==='cleanup')await cleanupQuests(store,host,input.id)
-    if(input.inspect){const section=input.inspect.section;const values:any={cleanup:cleanupStatus(store,q),description:q.description,reward:q.reward,steps:q.stages,runs:await Promise.all(q.sessions.map(async run=>({...run,observation:await inspectWorker(host,run)}))),artifacts:q.evidence,changes:result.changes,continuation:result.continuation};if(!(section in values))throw new QuestError('INVALID_INPUT','Unknown inspect section');result={id:q.id,project:q.project,...toolSection(values[section],section,input.inspect.offset,input.inspect.limit)}}
-    else result={...toolDetail(q),cleanup:cleanupStatus(store,q)}
+    if(input.inspect){
+     const section=input.inspect.section
+     const values:Record<string,()=>unknown>={cleanup:()=>cleanupStatus(store,q),description:()=>q.description,reward:()=>q.reward,steps:()=>q.stages,runs:()=>q.sessions,artifacts:()=>q.evidence,changes:()=>questChanges(q,workspaces),continuation:()=>continuation.status(q.id)}
+     if(!values[section])throw new QuestError('INVALID_INPUT','Unknown inspect section')
+     const page=toolSection(values[section](),section,input.inspect.offset,input.inspect.limit)
+     if(section==='runs'&&Array.isArray(page.data))page.data=await Promise.all(page.data.map(async(run:any)=>({...run,observation:['planned','executing','waiting','blocked'].includes(run.state)?await inspectWorker(host,run):undefined})))
+     result={id:q.id,project:q.project,...page}
+    }else result=toolDetail(q,continuation.status(q.id))
    }
    if(waited)result={...result,waited}
    collectWorkflowOutcomes(store)

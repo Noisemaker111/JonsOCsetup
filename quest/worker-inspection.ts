@@ -1,5 +1,6 @@
 import {hostExecution,hostPermissions} from "./host-observation"
 import { observeWorker, observationFailure, boundedInspection } from './worker-observation.mjs'
+import { terminalStepUpdates } from './session-lineage'
 import { QuestTracker } from './tracker'
 import { readAllQuests } from './index'
 import type { QuestStore } from './store'
@@ -21,7 +22,9 @@ export async function inspectWorker(host:any, run:QuestSession):Promise<any> {
 /** Poll persisted outcomes to recover missed events without turning silence into completion. */
 async function reconcile(store:QuestStore,host:any) {
  const tracker=new QuestTracker(store,host),observations:Record<string,any>={}
- for(const entry of readAllQuests(store.projectRoot,{includeArchived:true}))for(const run of entry.quest?.sessions??[]){
+ for(const entry of readAllQuests(store.projectRoot,{includeArchived:true})){
+  if(entry.quest&&entry.quest.state!=='Archived')for(const update of terminalStepUpdates(entry.quest))store.apply(entry.quest.id,'stage-state',update,'quest:terminal-step-reconcile')
+  for(const run of entry.quest?.sessions??[]){
   if(!['planned','executing','waiting','blocked'].includes(run.state))continue
   // A planned run that already reported a dispatch outcome and never bound a worker session has
   // no identity to observe, so it can never leave 'planned'. Left there it holds its step
@@ -33,6 +36,7 @@ async function reconcile(store:QuestStore,host:any) {
   }
   const observation=await inspectWorker(host,run);observations[run.runID??run.callID]=observation
   if(observation.outcome&&observation.completedAt&&Date.parse(observation.completedAt)>=Date.parse(run.updatedAt))tracker.onHostEvent({type:'session.execution.'+observation.outcome,data:{sessionID:run.openCodeSessionId??run.sessionID,observedAt:observation.completedAt}})
+ }
  }
  return observations
 }

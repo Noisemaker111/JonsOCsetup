@@ -2,7 +2,7 @@ import { bounded, redact } from "./privacy"
 import { normalizeState } from "./state-machine"
 import type { Quest, QuestEvent, QuestSession, SessionState } from "./types"
 import { dependentStageIDs } from "./stages"
-import { QUOTA_FAILOVER_PATTERN } from "./session-lineage"
+import { QUOTA_FAILOVER_PATTERN, terminalStepUpdates } from "./session-lineage"
 
 const terminalRank: Record<string, number> = { planned: 0, waiting: 1, executing: 2, blocked: 3, completed: 4, cancelled: 5, stale: 6, missing: 7, failed: 8 }
 const REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh", "max"])
@@ -85,6 +85,10 @@ export function reduceQuest(input: Quest, event: QuestEvent): Quest {
         if (typeof p.agentRole === "string" && p.agentRole && !s.agentRole) s.agentRole = redact(p.agentRole, 100)
         if (typeof p.task === "string" && p.task && !s.task) s.task = redact(p.task, 500)
         if (p.evidence) s.evidence = bounded([...s.evidence, redact(p.evidence)]); if (p.heartbeatAt) s.lastHeartbeatAt = redact(p.heartbeatAt); if (p.leaseExpiresAt) s.leaseExpiresAt = redact(p.leaseExpiresAt); if (p.commandSummary) s.commandSummary = redact(p.commandSummary); if (p.result) s.result = redact(p.result); if (p.openCodeSessionId) { s.openCodeSessionId = redact(p.openCodeSessionId); s.sessionID = s.openCodeSessionId }; if (p.runtimeSessionId) s.runtimeSessionId = redact(p.runtimeSessionId); if (p.runID) s.runID = redact(p.runID); if (p.dependency) s.dependency = structuredClone(p.dependency); s.updatedAt = event.at }
+      for (const update of terminalStepUpdates(q)) {
+        const step = q.stages.find(step => step.id === update.stageID)!
+        step.status = update.status; step.note = update.evidence
+      }
       break
     }
     case "session-removed": {

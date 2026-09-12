@@ -26,3 +26,8 @@ verification and integration as separate steps. The runtime preserves tool resul
 and captures patches only for checkouts it observed initially clean. A recorded
 command is evidence to inspect, not an automatic assertion that tests passed.
 Merge, publish, installation and deployment retain the user's approval boundaries.
+
+Automatic checkout protection applies to Git checkouts and the configured OpenCode hub,
+not a home directory or a container of unrelated projects. Read-only tools remain usable.
+Unknown existing reservations are retained as evidence; they do not turn a non-checkout
+session into a machine-wide tool lock. Native host filesystem permissions still apply.
