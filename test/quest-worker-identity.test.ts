@@ -123,3 +123,20 @@ test('permission review trusts original user instructions and exact structured d
  expect(parsePermissionReview('{"requestKey":"key","decision":"once","reason":"The user assigned this read"}','key')).toEqual({decision:'once',reason:'The user assigned this read'})
  for(const value of [{requestKey:'other',decision:'once',reason:'yes'},{requestKey:'key',decision:'always',reason:'yes'},{requestKey:'key',decision:'once',reason:''}])expect(()=>parsePermissionReview(JSON.stringify(value),'key')).toThrow()
 })
+
+import {reviewerSettings,setReviewerSettings,reviewerSettingsKey} from '../quest/reviewer-settings'
+test('reviewer choice is user-owned and a changed preference invalidates the session pin',()=>{
+ const root=mkdtempSync(join(tmpdir(),'quest-reviewer-')),file=join(root,'settings.json')
+ try{
+  expect(reviewerSettings(file).model).toBeUndefined()
+  const first=setReviewerSettings({version:1,model:'route:user-choice',preference:'cash'},file)
+  expect(reviewerSettings(file)).toEqual(first)
+  const next=setReviewerSettings({version:1,preference:'latency'},file)
+  expect(reviewerSettings(file)).toEqual(next)
+  expect(reviewerSettingsKey(next)).not.toBe(reviewerSettingsKey(first))
+ }finally{
+  const target=realpathSync(root),allowed=resolve(tmpdir())
+  if(!target.toLowerCase().startsWith((allowed+'\\quest-reviewer-').toLowerCase()))throw Error('Unexpected test cleanup target')
+  rmSync(target,{recursive:true,force:true})
+ }
+})

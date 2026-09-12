@@ -1,3 +1,4 @@
+import {choosePermissionReviewer} from './reviewer-settings'
 import {reviewWorkerPermissions} from './worker-permissions'
 import {inspectWorker} from "../worker-inspection"
 import { ensureUserGiver, userGiverID } from "../user-giver"
@@ -132,6 +133,7 @@ function Commands(props: { context: any }) {
   props.context.keymap.layer(() => ({
     mode: "global",
     commands: [
+      { id: "quests.reviewer", title: "Choose permission reviewer", group: "Quests", palette: true, slash: { name: "quest-reviewer" }, run: () => choosePermissionReviewer(props.context) },
       { id: "quests.approvals", title: "Review worker permissions", group: "Quests", palette: true, slash: { name: "quest-approvals" }, run: () => reviewWorkerPermissions(props.context) },
       { id: "quests.workspace-mode", title: "Quest workspace mode (global)", group: "System", palette: true, slash: { name: "quest-workspace" }, run: () => chooseWorkspaceMode(props.context).catch(error=>props.context.ui.dialog.alert({title:"Quest workspace mode",message:String(error)})) },
       { id: "quests.open", title: "Open Quest board", group: "System", palette: true, suggested: true, slash: { name: "quests", aliases: ["quest", "board"] }, run: () => openBoard(props.context) },

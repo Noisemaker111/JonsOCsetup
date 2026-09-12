@@ -4,7 +4,7 @@ import {acquireLock} from './locking'
 import {digest,redact} from './privacy'
 import {WorkerPermissions} from './worker-permissions'
 import {hostPermissionDomain,hostReviewText} from './host-observation'
-import {configuredDispatchPolicyFile,dispatchReservationFile,reserveDispatch} from '../models/dispatch-planner'
+import {reviewerSettings,reviewerSettingsKey,reservePermissionReview} from './reviewer-settings'
 import type {QuestStore} from './store'
 
 export type PermissionReview={state:'reviewing'|'decided'|'escalated'|'unknown';authorizationKey:string;reason:string;model?:string;reply?:'once'|'reject';notification?:'sending'|'accepted'|'unknown'}
@@ -28,7 +28,7 @@ export class PermissionReviewer {
    const snapshot=async()=>{
     const view=await service.inspect(input.giverID,input.questID,input.runID)
     const instructions=permissionUserInstructions(unwrap(await this.host.context({sessionID:input.giverID})))
-    const authority={instructions,assignment:{title:view.title,description:view.description,steps:view.steps,workspace:view.workspace}}
+    const authority={instructions,reviewer:reviewerSettings(),assignment:{title:view.title,description:view.description,steps:view.steps,workspace:view.workspace}}
     return {view,authority,key:digest(JSON.stringify(authority))}
    }
    const before=await snapshot(),request=before.view.requests.find((r:any)=>r.requestID===input.requestID&&r.requestKey===input.requestKey)
@@ -37,19 +37,20 @@ export class PermissionReviewer {
    let record:PermissionReview={state:'reviewing',authorizationKey:before.key,reason:'Reviewing the exact pending action'}
    const save=(change:Partial<PermissionReview>)=>{record={...record,...change};input.save(record);return record}
    save({})
-   let reserved:Awaited<ReturnType<typeof reserveDispatch>>|undefined
+   let reserved:Awaited<ReturnType<typeof reservePermissionReview>>|undefined
    let replyAttempted=false
    try{
     if(!before.authority.instructions.length)throw Error('Original user authorization is unavailable; the assignment alone cannot authorize access')
     const directory=join(this.store.runtime,'permission-reviewers'),file=join(directory,input.giverID+'.json')
     let pin=existsSync(file)?JSON.parse(readFileSync(file,'utf8')):undefined
-    const selector=pin?.model??JSON.parse(readFileSync(join(import.meta.dir,'permission-reviewer.json'),'utf8')).model
+    const settings=before.authority.reviewer,settingsKey=reviewerSettingsKey(settings)
+    if(pin?.settingsKey!==settingsKey)pin=undefined
     const reviewID='permission-'+digest(input.giverID+input.requestKey+before.key)
-    reserved=await reserveDispatch({runID:reviewID,model:selector,task:'utility',policyFile:configuredDispatchPolicyFile(),reservationFile:dispatchReservationFile(this.store.runtime)})
+    reserved=await reservePermissionReview(this.store.runtime,reviewID,settings,pin)
     const route=reserved.route
     if(route.harness!=='native'||route.serviceTier!=='standard')throw Error('Permission reviewer requires the exact supported native model service')
     if(pin&&pin.accountID!==route.accountID)throw Error('The pinned reviewer account changed; no substitute selected')
-    if(!pin){pin={model:selector,accountID:route.accountID,giverID:input.giverID,createdAt:new Date().toISOString()};mkdirSync(directory,{recursive:true});const tmp=file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(pin));renameSync(tmp,file)}
+    if(!pin){pin={selector:'route:'+route.id,model:route.providerID+'/'+route.modelID+'#'+route.reasoning,settingsKey,selectionReason:reserved.decision?.summary,accountID:route.accountID,giverID:input.giverID,createdAt:new Date().toISOString()};mkdirSync(directory,{recursive:true});const tmp=file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(pin));renameSync(tmp,file)}
     save({model:pin.model})
     const prompt=policy+'\nUSER INSTRUCTIONS:\n'+JSON.stringify(before.authority.instructions)+'\nASSIGNMENT:\n'+JSON.stringify(before.authority.assignment)+'\nWORKER REQUEST:\n'+JSON.stringify(request)
     const response=unwrap(await hostReviewText(this.host,{model:{providerID:route.providerID,id:route.modelID,...(route.reasoning!=='unknown'?{variant:route.reasoning}:{})},prompt}))
