@@ -12,7 +12,15 @@ export async function installWorkerCapabilities(ctx:any,store:QuestStore){
  const run=(id:string)=>readAllQuests(store.projectRoot,{includeArchived:true}).flatMap(r=>r.quest?.sessions??[]).find(r=>(r.sessionID??r.openCodeSessionId)===id)
  const save=(id:string,value:any)=>{const row=run(id),giver=userGiverID(store)===id;if(!row?.runID&&!giver)return;const dir=join(store.runtime,giver?'giver-capabilities':'worker-capabilities'),file=join(dir,(row?.runID??id)+'.json');mkdirSync(dir,{recursive:true});const prior=existsSync(file)?JSON.parse(readFileSync(file,'utf8')):{};const temporary=file+'.'+process.pid+'.tmp';writeFileSync(temporary,JSON.stringify({...prior,...value,sessionID:id,observedAt:new Date().toISOString()}));renameSync(temporary,file)}
  await ctx.session.hook('context',(event:any)=>{
-  const assignment=run(event.sessionID);if(!assignment){if(event.agent==='quest-giver')save(event.sessionID,{modelTools:Object.keys(event.tools??{})});return}
+  const assignment=run(event.sessionID);if(!assignment){
+   if(event.agent==='quest-giver'){
+    // New dispatch belongs to the typed Quest API; the legacy transport cannot accept it.
+    delete event.tools?.subagent
+    if(event.tools?.execute)event.tools.execute.description='Manage Quests and select projects with this native tool. Call execute with '+JSON.stringify({code:'return await search({query:"project_select",limit:1})'})+'. Then use the exact discovered signatures inside another execute call. tools.quest is also callable inside execute using its catalog signature.\n'+(event.tools.execute.description??'')
+    save(event.sessionID,{modelTools:Object.keys(event.tools??{})})
+   }
+   return
+  }
   assertWorkerIdentity(assignment,event)
   if((assignment.scope as any)?.readOnly===true)for(const name of Object.keys(event.tools??{}))if(!researchTools.has(name))delete event.tools[name]
   if(event.tools?.execute){

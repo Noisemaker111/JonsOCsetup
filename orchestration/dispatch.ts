@@ -49,7 +49,7 @@ const VARIANT_HINT = /^(none|low|medium|high|xhigh|max)(-fast)?$/i
 
 /**
  * Lane default when the dispatch carries no explicit `variant` hint. Mirrors
- * opencode.jsonc's base `settings.reasoningEffort` per model — that config is
+ * opencode.jsonc's base `settings.providerOptions.reasoningEffort` per model — that config is
  * the actual API-bound setting; this is a labeling mirror of it for lineage,
  * not a second source of truth the runtime reads from.
  */
