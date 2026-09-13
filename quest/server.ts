@@ -288,13 +288,17 @@ export function questTool(api = createQuestAgentAPI(questRoot())) {
   }
 }
 
-export async function installQuestTools(ctx: { tool?: { transform?: Function }; session?: any;permission?:any }, api = createQuestAgentAPI(questRoot())) {
+export async function installQuestTools(ctx: { tool?: { transform?: Function }; session?: any;permission?:any;location?:{directory:string} }, api = createQuestAgentAPI(questRoot())) {
   const transform = ctx?.tool?.transform
   if (typeof transform !== "function") return
-  await transform((draft: { add: (tool: unknown) => void }) => {
-    draft.add(ctx.session ? typedQuestTool(api.store, ctx.session) : questTool(api))
-    if(ctx.session){draft.add(nativeWorkspaceTool(api.store,ctx.session));draft.add(guidanceTool(api.store,ctx.session));draft.add(outcomeTool(api.store,ctx.session));draft.add(workSupplyTool(api.store,ctx.session))}
-  })
+  let dispose: (()=>void)|undefined
+  // A transform is replayed whenever the catalog changes. Runtime state and timers
+  // belong to plugin setup, not to each replay of the description registration.
+  const tools:unknown[]=[ctx.session?typedQuestTool(api.store,ctx.session,{directory:ctx.location?.directory,onDispose:fn=>{dispose=fn}}):questTool(api)]
+  if(ctx.session)tools.push(nativeWorkspaceTool(api.store,ctx.session),guidanceTool(api.store,ctx.session),outcomeTool(api.store,ctx.session),workSupplyTool(api.store,ctx.session))
+  try{await transform((draft: { add: (tool: unknown) => void }) => {for(const tool of tools)draft.add(tool)})}
+  catch(error){dispose?.();throw error}
+  return ()=>dispose?.()
 }
 
 export default define({
@@ -302,6 +306,7 @@ export default define({
   async setup(ctx) {
     const quests = new QuestTracker(new QuestStore(questRoot()), ctx.session)
     const api = createQuestAgentAPI(questRoot(), ctx.session)
+    let disposeTools: (()=>void)|undefined
     for (const [name, install] of [
       // Dispatch canonicalisation and the spawn ledger register their
       // execute.before hooks first: binding reads the worker identity they set.
@@ -314,7 +319,7 @@ export default define({
       ["completion-evidence", () => installQuestCompletionEvidence(quests, api)],
       ["worker-capabilities", () => installWorkerCapabilities(ctx,api.store)],
       ["user-giver", () => installUserGiverContext(api.store,ctx.session)],
-      ["tools", () => installQuestTools(ctx, api)],
+      ["tools", async () => {disposeTools=await installQuestTools(ctx, api)}],
       ["shared-workspace-guard", () => installSharedWorkspaceGuard(ctx,api.store)],
       ["worker-instruction-reads", () => installWorkerInstructionReads(ctx,api.store)],
       ["shell-guidance", async () => (await import('./shell-guidance')).installShellGuidance(ctx)],
@@ -323,5 +328,6 @@ export default define({
         console.error(`[quests] ${name} disabled:`, error)
       }
     }
+    return ()=>disposeTools?.()
   },
 })

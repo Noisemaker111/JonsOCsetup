@@ -1,4 +1,5 @@
 import { consumeQuestStarts } from './start-request'
+import { readUserGiver } from './giver-registry.mjs'
 import {cleanupQuests,cleanupStatus,installQuestCleanup} from "./cleanup"
 import {bindUserGiver,userGiverID,giverContext,adoptQuestGiver,verifyGiverBinding} from './user-giver'
 import { reconcileWorkers, inspectWorker } from "./worker-inspection"
@@ -28,7 +29,7 @@ import {activeRuns,awaitQuestChange,observedState,pollDecision,runSummary,unchan
  */
 const SEEN_LIMIT=500
 const rememberKey=(sessionID:string,questID:string,inspect:any,runID?:string)=>sessionID+'|'+questID+'|'+(runID??'')+'|'+(inspect?.section?`${inspect.section}:${inspect.offset??0}:${inspect.limit??8000}`:'detail')
-export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFile?:string;settingsFile?:string;startRun?:StartRun}={}) {
+export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFile?:string;settingsFile?:string;startRun?:StartRun;directory?:string;onDispose?:(dispose:()=>void)=>void}={}) {
  const {start,returns}=questDispatch(store,host,options)
  const continuation=new QuestContinuation(store,start,{verifyContext:async(context)=>{const result=await host.get({sessionID:context.sessionID});verifyGiverBinding(store,context,result?.data??result)}})
  const poll=(name:string,run:()=>Promise<unknown>)=>{
@@ -48,7 +49,14 @@ export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFi
   poll('return delivery',()=>returns.tick()),
  ]
  installQuestCleanup(store,host)
- const timer=setInterval(()=>{for(const poll of polls)void poll()},5000);timer.unref()
+ const directory=options.directory?physicalDirectory(options.directory):undefined
+ const timer=setInterval(()=>{
+  // Worker locations also load this plugin. Only the registered giver's location
+  // coordinates the board; workers retain their tools and local host observations.
+  if(directory&&readUserGiver(store.runtime)?.directory!==directory)return
+  for(const poll of polls)void poll()
+ },5000);timer.unref()
+ options.onDispose?.(()=>clearInterval(timer))
  const workspaces=new QuestWorkspaces(store.runtime)
  const seen=new Map<string,SeenRequest>()
  const remember=(key:string,fingerprint:string,waited=false)=>{seen.delete(key);seen.set(key,{fingerprint,waited});if(seen.size>SEEN_LIMIT)seen.delete(seen.keys().next().value as string)}
