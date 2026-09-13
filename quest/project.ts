@@ -1,5 +1,5 @@
 import { realpathSync, statSync } from "node:fs"
-import { isAbsolute, join, resolve } from "node:path"
+import { dirname, isAbsolute, join, resolve } from "node:path"
 import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
 
@@ -52,6 +52,17 @@ export function verifySourceBinding(context:{project:ProjectIdentity;directory?:
  */
 const GIT_IDENTITY_MAX_AGE_MS = 5_000
 const identityCache = new Map<string, { at: number; stamp: string; root: string }>()
+/** Inspect physical ancestors before invoking Git, including nested directories and linked worktrees. */
+export function gitMetadataDirectory(directory: string): string | undefined {
+  for (let ancestor = directory;; ancestor = dirname(ancestor)) {
+    try { statSync(join(ancestor, ".git")); return ancestor }
+    catch (error) { if (!["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error }
+    // Bare repositories also need Git to establish their identity.
+    try { if (statSync(join(ancestor, "HEAD")).isFile() && statSync(join(ancestor, "objects")).isDirectory()) return ancestor }
+    catch (error) { if (!["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error }
+    if (dirname(ancestor) === ancestor) return undefined
+  }
+}
 const gitStamp = (root: string) => {
   try { const info = statSync(join(root, ".git")); return info.mtimeMs + ":" + info.size + ":" + (info.isDirectory() ? "d" : "f") } catch { return "absent" }
 }
@@ -64,7 +75,9 @@ export function projectIdentity(directory: string): ProjectIdentity {
   const queried = physicalDirectory(directory)
   let root = queried
   if (!statSync(root).isDirectory()) throw new Error("Project directory is unavailable")
-  const stamp = gitStamp(queried), now = Date.now()
+  const metadata = gitMetadataDirectory(queried)
+  if (!metadata && !process.env.GIT_DIR && !process.env.GIT_WORK_TREE) return { id: identityHash(queried), root: queried }
+  const stamp = (metadata ?? queried) + ":" + gitStamp(metadata ?? queried), now = Date.now()
   const cached = identityCache.get(queried)
   if (cached && cached.stamp === stamp && now - cached.at < GIT_IDENTITY_MAX_AGE_MS) return { id: identityHash(cached.root), root: cached.root }
   const git = identityGit(root,["rev-parse", "--is-inside-work-tree"])

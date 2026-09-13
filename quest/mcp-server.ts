@@ -1,6 +1,4 @@
 import {readContinuations} from './runtime-queues'
-import {existsSync,readFileSync} from 'node:fs'
-import {join} from 'node:path'
 import {questChanges} from './change-view'
 import {QuestWorkspaces} from './workspaces'
 import {createInterface} from 'node:readline'
@@ -11,9 +9,9 @@ import {projectIdentity} from './project'
 import {coordination} from './coordination'
 import {QUEST_TOOL_INPUT} from './tool-schema.mjs'
 import {validateToolSchema} from './codex/validate-schema.mjs'
-import {consumeTicket} from './codex/runtime'
+import {sessionContext} from './codex/runtime'
 import {toolSummary,toolDetail,toolSection} from './tool-projection'
-const instructions='Quest stores shared titles, descriptions, plans, status and deliverables. Use quest list/get/create/update; hooks handle checkout ownership and host context. Work in this session and keep decisions here. Record actual checks and attach deliverables. Implementation, verification and integration are separate steps. Use inspect for full records and ownership diagnostics. Do not use OpenCode dispatch.'
+const instructions='Use directly named operations: quest.create with title, description and steps. Quest stores shared titles, descriptions, plans, status and deliverables. Use quest list/get/create/update; hooks handle checkout ownership and host context. Work in this session and keep decisions here. Record actual checks and attach deliverables. Implementation, verification and integration are separate steps. Use inspect for full records and ownership diagnostics. Do not use OpenCode dispatch.'
 export function questMCP(options:{store?:QuestStore}={}){
  const store=options.store??new QuestStore(questRoot())
  const schema:any=structuredClone(QUEST_TOOL_INPUT)
@@ -22,6 +20,15 @@ export function questMCP(options:{store?:QuestStore}={}){
 
  for(const k of ['preference','workspaceMode','cancelContinuation'])delete schema.properties.update.properties[k]
 
+ const object=(properties:any,required:string[]=[])=>({type:'object',properties,required,additionalProperties:false})
+ const operations:Record<string,any>={
+  list:schema.properties.query,
+  get:object({id:schema.properties.id},['id']),
+  create:schema.properties.create,
+  update:object({id:schema.properties.id,...schema.properties.update.properties},['id']),
+  inspect:object({id:schema.properties.id,...schema.properties.inspect.properties}),
+ }
+ const descriptions:Record<string,string>={list:'List shared Quests.',get:'Read a Quest and its saved progress.',create:'Create a Quest with a title, description and plan.',update:'Update a Quest and record progress or deliverables.',inspect:'Read full Quest evidence or checkout ownership diagnostics.'}
  return async(message:any)=>{
   if(message.id===undefined)return
   let result:any
@@ -29,13 +36,16 @@ export function questMCP(options:{store?:QuestStore}={}){
    switch(message.method){
     case 'initialize':result={protocolVersion:'2024-11-05',capabilities:{tools:{}},serverInfo:{name:'quest',version:'1.0.0'},instructions};break
     case 'ping':result={};break
-    case 'tools/list':result={tools:[{name:'quest',description:'Create, read and update shared Quests, plans and deliverables. Inspect retrieves full diagnostic records.',inputSchema:schema}]};break
+    case 'tools/list':result={tools:Object.entries(operations).map(([name,inputSchema])=>({name,description:descriptions[name],inputSchema}))};break
     case 'tools/call':{
      try{
-      if(message.params?.name!=='quest')throw new QuestError('UNKNOWN_TOOL','Use quest')
-      const {_questTicket,...input}=message.params.arguments??{}
-      validateToolSchema(input,schema)
-      const context=consumeTicket(store,_questTicket)
+      const action=message.params?.name
+      if(!Object.hasOwn(operations,action))throw new QuestError('UNKNOWN_TOOL','Use list, get, create, update or inspect')
+      const args=message.params.arguments??{}
+      validateToolSchema(args,operations[action])
+      const {id,...fields}=args
+      const input:any=action==='create'?{action,create:args}:action==='list'?{action,query:args}:action==='update'?{action,id,update:fields}:action==='inspect'?{action,id,...(fields.section?{inspect:fields}:{})}:{action,id}
+      const context=sessionContext(store,message.params._meta)
       const api=questsAPI(store,{project:projectIdentity(context.directory),sessionID:'codex:'+context.sessionID,requestID:String(message.id)},async()=>{throw new QuestError('UNSUPPORTED_HOST','Work in the current Codex session')})
       let output:any
       switch(input.action){
