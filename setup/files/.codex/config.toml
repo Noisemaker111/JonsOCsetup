@@ -2,14 +2,20 @@ model = "gpt-6-astra"
 model_reasoning_effort = "high"
 
 # Context replayed per call is ~90% of this machine's token spend: the 2026-09-12 OpenCode session
-# sawtoothed between 50k and 245k tokens across 799 calls for a 151k median. Compacting at 140k keeps
-# the same shape with a ~35% smaller average. Raise it if summaries start losing detail you then have
-# to re-read, which would cost more turns than it saves.
+# sawtoothed from 28k to 244k eleven times across 1,310 calls, averaging 143k. Compacting at 140k
+# keeps the same shape with a ~40% smaller average, roughly 78M fewer input tokens on a session that
+# size. Shorter cycles mean more re-reads, so pair it with a session ledger the thread appends its
+# conclusions to and reads once after each compaction, rather than re-deriving them.
 model_auto_compact_token_limit = 140000
 
-# A guardrail against the 40k-character whole-directory dumps, not a substitute for searching first:
-# only the largest ~2% of that session's calls exceeded this.
-tool_output_token_limit = 6000
+# A hard ceiling on tool output, not a default, and the per-call max_output_tokens cannot exceed it:
+# with it unset the 09-12 session returned outputs up to 83,740 tokens; with it at 6000 the 21:59
+# session capped every web result at ~6,100. 6000 was too low. In that session 209 calls (17.6%)
+# truncated, and in 80% of those the same file was read again within three calls -- each saved output
+# token bought a ~333k-token retry. Simulated against the real calls, a 12000 ceiling avoids ~152 of
+# those retries (~51M tokens) for ~17M in extra replay. Pick the per-call budget deliberately:
+# 800-1200 for probes, 8000 for a file you are about to change, and narrow the command above that.
+tool_output_token_limit = 12000
 
 
 
