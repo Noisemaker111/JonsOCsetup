@@ -4,6 +4,7 @@ import {homedir} from 'node:os'
 import {dirname, isAbsolute, join, relative, resolve} from 'node:path'
 import {spawnSync} from 'node:child_process'
 import type {QuestStore} from '../store'
+import {gitMetadataDirectory} from '../project'
 
 export type RecoveryBinding = {origin:string; repository:string; directory:string; branch:string; head:string; sessionID:string; preparation?:{state:'ready'|'blocked'; source:'clean-checkout'|'explicit-commit'|'tracked-snapshot'; tree?:string; applied?:boolean; applicationStarted?:boolean; dirty:boolean; environment:string; reason?:string}}
 // An explicit immutable source is caller authorization, never inferred from a
@@ -27,7 +28,7 @@ const contained=(root:string,path:string)=>{const rel=relative(root,path);return
 export function sameDirectory(a:string,b:string){return key(realpathSync(a))===key(realpathSync(b))}
 // This personal configuration has an explicitly documented non-Git hub. Never
 // guess a repository by scanning children: the hub also contains upstream repos.
-export function checkoutAliases(){return {[join(homedir(),'Projects','opencode-hub')]:join(homedir(),'.config','opencode')}}
+export function checkoutAliases(){return {[join(homedir(),'Projects','opencode-hub')]:join(homedir(),'Projects','opencode-hub','source')}}
 // Same temporary-index/two-pass mechanism as QuestWorkspaces.applySnapshot,
 // narrowed to tracked regular files. hash-object avoids repository clean filters;
 // no source index mutation, lifecycle command, or arbitrary untracked-file copy.
@@ -170,6 +171,7 @@ const CHECKOUT_FREE_CONTROLS=new Set([
 export function hasCheckout(directory:string):boolean {
  const actual=realpathSync(directory)
  if(Object.keys(checkoutAliases()).some(alias=>existsSync(alias)&&sameDirectory(alias,actual)))return true
+ if(!gitMetadataDirectory(actual)&&!process.env.GIT_DIR&&!process.env.GIT_WORK_TREE)return false
  const result=spawnSync('git',['-C',actual,'rev-parse','--is-inside-work-tree'],{encoding:'utf8',windowsHide:true,timeout:15000})
  if(result.error)throw result.error
  if(result.status===0)return result.stdout.trim()==='true'
@@ -177,6 +179,12 @@ export function hasCheckout(directory:string):boolean {
  throw Error('Cannot establish checkout scope: '+result.stderr.trim())
 }
 export function checkoutIndependent(tool:string,input:any):boolean{
+ // These servers operate on their own documentation index or browser session;
+ // they do not execute code or write files in the selected checkout.
+ if(/^mcp__docs__(?:search_docs|list_libraries|find_version|fetch_url|list_jobs|get_job_info|scrape_docs|refresh_version|cancel_job|remove_docs)$/.test(tool))return true
+ if(tool==='mcp__cua_repl__js_reset')return true
+ // CUA's JavaScript surface is programmable; only its literal inventory call is intrinsically checkout independent.
+ if(tool==='mcp__cua_repl__js'&&typeof input?.code==='string'&&/^\s*await cua\.getState\(\);?\s*$/.test(input.code))return true
  if(CHECKOUT_FREE_CONTROLS.has(tool)||WEB_TOOLS.has(tool)||['Read','Glob','Grep','view_image'].includes(tool))return true
  if(tool!=='Bash'||typeof input?.command!=='string')return false
  // Deliberately tiny literal-only PowerShell read grammar. No expressions,
