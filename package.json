@@ -1,6 +1,10 @@
 {
+  "name": "jons-quest",
+  "private": true,
+  "bin": { "quest": "quest/cli.mjs" },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.14",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@opencode-ai/plugin": "1.18.23",
     "@opentui/core": "^0.5.8",
     "@opentui/keymap": "^0.5.8",

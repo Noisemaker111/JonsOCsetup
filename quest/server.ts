@@ -25,7 +25,8 @@ import {installSharedWorkspaceGuard} from "./shared-guard"
  *    re-injection when the giver sat idle and never received it. Jk's model is
  *    "the Quest giver and the sessions on Quests"; there is no third actor.
  */
-import { typedQuestTool } from "./typed-tool"
+import { createQuestService } from "./service"
+import { serveQuestAPI } from "./api-server"
 import { questRoot } from "./root"
 import { define } from "@opencode-ai/plugin/v2/promise"
 import { QuestStore } from "./store"
@@ -288,17 +289,21 @@ export function questTool(api = createQuestAgentAPI(questRoot())) {
   }
 }
 
-export async function installQuestTools(ctx: { tool?: { transform?: Function }; session?: any;permission?:any;location?:{directory:string} }, api = createQuestAgentAPI(questRoot())) {
+export async function installQuestTools(ctx: { tool?: { transform?: Function }; mcp?: {transform:Function}; session?: any;permission?:any;location?:{directory:string} }, api = createQuestAgentAPI(questRoot())) {
   const transform = ctx?.tool?.transform
   if (typeof transform !== "function") return
   let dispose: (()=>void)|undefined
   // A transform is replayed whenever the catalog changes. Runtime state and timers
   // belong to plugin setup, not to each replay of the description registration.
-  const tools:unknown[]=[ctx.session?typedQuestTool(api.store,ctx.session,{directory:ctx.location?.directory,onDispose:fn=>{dispose=fn}}):questTool(api)]
-  if(ctx.session)tools.push(nativeWorkspaceTool(api.store,ctx.session),guidanceTool(api.store,ctx.session),outcomeTool(api.store,ctx.session),workSupplyTool(api.store,ctx.session))
-  try{await transform((draft: { add: (tool: unknown) => void }) => {for(const tool of tools)draft.add(tool)})}
-  catch(error){dispose?.();throw error}
-  return ()=>dispose?.()
+  if(!ctx.session||!ctx.location||!ctx.mcp)throw Error('Quest API requires the installed OpenCode session and MCP plugin interfaces')
+  const service=createQuestService(api.store,ctx.session,{directory:ctx.location.directory,onDispose:fn=>{dispose=fn}})
+  const endpoint=await serveQuestAPI(api.store,service,ctx.location.directory)
+  const tools=[nativeWorkspaceTool(api.store,ctx.session),guidanceTool(api.store,ctx.session),outcomeTool(api.store,ctx.session),workSupplyTool(api.store,ctx.session)]
+  try{
+    await ctx.mcp.transform((draft:any)=>draft.set('quests',{type:'remote',url:endpoint.url+'/mcp/session',headers:{authorization:'Bearer '+endpoint.token},oauth:false,codemode:true}))
+    await transform((draft: { add: (tool: unknown) => void }) => {for(const tool of tools)draft.add(tool)})
+  }catch(error){endpoint.dispose();dispose?.();throw error}
+  return ()=>{endpoint.dispose();dispose?.()}
 }
 
 export default define({

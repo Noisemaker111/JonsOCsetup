@@ -1,4 +1,6 @@
-import { consumeQuestStarts } from './start-request'
+import { consumeQuestStarts, requestQuestStart, requestQuestReview } from './start-request'
+import { questOperations, coordinatorInput } from './operations.mjs'
+import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv-provider.js'
 import { readUserGiver } from './giver-registry.mjs'
 import {cleanupQuests,cleanupStatus,installQuestCleanup} from "./cleanup"
 import {bindUserGiver,userGiverID,giverContext,adoptQuestGiver,verifyGiverBinding} from './user-giver'
@@ -7,7 +9,6 @@ import {configureLearning,collectWorkflowOutcomes} from "./outcome-tracking"
 import {workspaceSettings,setWorkspaceMode} from "./workspace-settings"
 import { QuestContinuation } from './continuation'
 import { readAllQuests } from './index'
-import {QUEST_TOOL_INPUT} from "./tool-schema.mjs"
 import { configuredDispatchPolicyFile } from "../models/dispatch-planner"
 import { join } from "node:path"
 import { questsAPI,QuestError,type StartRun } from "./api"
@@ -29,7 +30,7 @@ import {activeRuns,awaitQuestChange,observedState,pollDecision,runSummary,unchan
  */
 const SEEN_LIMIT=500
 const rememberKey=(sessionID:string,questID:string,inspect:any,runID?:string)=>sessionID+'|'+questID+'|'+(runID??'')+'|'+(inspect?.section?`${inspect.section}:${inspect.offset??0}:${inspect.limit??8000}`:'detail')
-export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFile?:string;settingsFile?:string;startRun?:StartRun;directory?:string;onDispose?:(dispose:()=>void)=>void}={}) {
+export function createQuestService(store:QuestStore,host:QuestHost,options:{policyFile?:string;settingsFile?:string;startRun?:StartRun;directory?:string;onDispose?:(dispose:()=>void)=>void}={}) {
  const {start,returns}=questDispatch(store,host,options)
  const continuation=new QuestContinuation(store,start,{verifyContext:async(context)=>{const result=await host.get({sessionID:context.sessionID});verifyGiverBinding(store,context,result?.data??result)}})
  const poll=(name:string,run:()=>Promise<unknown>)=>{
@@ -60,7 +61,15 @@ export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFi
  const workspaces=new QuestWorkspaces(store.runtime)
  const seen=new Map<string,SeenRequest>()
  const remember=(key:string,fingerprint:string,waited=false)=>{seen.delete(key);seen.set(key,{fingerprint,waited});if(seen.size>SEEN_LIMIT)seen.delete(seen.keys().next().value as string)}
- return {name:"quest",options:{pinned:true},output:{type:"object",additionalProperties:true},description:"One persistent user Quest Giver across projects: list, get, create, update, run, wait. Select a project with project_select before creating cross-project work; get/update/run use the Quest’s recorded project without opening another giver. Steps drive progress. For independent dependency-ready steps use run.continue with maxConcurrent (positive integer, isolated worktrees; no fixed subscription account cap when authorized by dispatch policy); stepModels pins exact per-step routes and taskTags labels learning. Run manages worker workspace, route selection and dispatch internally. Set run.readOnly=true for bounded source research, including non-Git hubs; it permits inspection and assigned-step notes, without shell commands or file writes. Set run.task to what the step is - coding, review, planning or utility - so route and reasoning effort are chosen for that work; it never names a model, and omitting it keeps the default coding demand. Use update.workspaceMode (worktree/shared) for the global future-run setting; run.files reserves relative paths in shared mode. Use create.workflow or update.workflow to save task, optional exact model, desired concurrency and delivery (project, quest-pr, step-pr, none). Omit model for automatic selection. Use update for actual step results, artifacts and reward. Use list to discover Quests, then one get per relevant Quest: it includes description, steps, readiness, latest outcomes and continuation. Do not fan out description/steps/runs/continuation reads. For missing historical detail use inspect; data is already typed, offset counts whole entries, and nextOffset is the next page. Only inspect runs when fresh host observations are needed. Never poll a running worker with repeated get: use action=wait (wait.runID, wait.timeoutSeconds, default 120, max 600), which blocks until the Quest actually changes and returns the same view plus live worker observations. Better still, end the turn — a run reaching completed, failed or cancelled wakes this session automatically with an \"Automatic Quest worker update\". A get that would return exactly what this session already has for a Quest with an active run is turned into that wait, and repeating it after the wait is refused. Failures throw with a recovery reason; inspect an uncertain run before retrying.",input:QUEST_TOOL_INPUT,execute:async(input:any,context:any)=>{
+ const validator=new AjvJsonSchemaValidator()
+ const validators=new Map(Object.entries(questOperations).map(([name,op])=>[name,validator.getValidator(op.input)]))
+ return {call:async(method:string,args:unknown,context:any)=>{
+  const validate=validators.get(method)
+  if(!validate)throw new QuestError('INVALID_OPERATION','Unknown Quest operation: '+method)
+  const checked=validate(args)
+  if(!checked.valid)throw new QuestError('INVALID_INPUT',checked.errorMessage)
+  let input:any=coordinatorInput(method,checked.data)
+
   const waitRequest=input.action==='wait'?(input.wait??{}):undefined
   if(waitRequest){if(!input.id)throw new QuestError('INVALID_INPUT','wait needs the Quest id to block on');input={...input,action:'get'}}
   if(input.action==='run'||waitRequest||input.inspect?.section==='runs')await reconcileWorkers(store,host)
@@ -69,22 +78,23 @@ export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFi
   const session=await host.get({sessionID:context.sessionID}),directory=(session?.data??session)?.location?.directory
    const memberships=readAllQuests(store.projectRoot,{includeArchived:true}).flatMap(row=>row.quest?row.quest.sessions.filter(s=>s.openCodeSessionId===context.sessionID||s.sessionID===context.sessionID).map(s=>({questID:row.quest!.id,stepIDs:['planned','executing','waiting'].includes(s.state)?s.deliverables.filter(id=>row.quest!.sessions.findLast(other=>other.deliverables.includes(id))===s):[]})):[])
    const isWorker=memberships.length>0
-   if(isWorker&&(input.action==='run'||input.action==='create'||input.update?.cancelContinuation===true||input.update?.workspaceMode!==undefined))throw new QuestError('WORKER_DELEGATION_DENIED','Workers update assigned work; only givers create Quests or dispatch workers')
+   if(isWorker&&(input.action==='run'||input.action==='start'||input.action==='create'||input.update?.cancelContinuation===true||input.update?.workspaceMode!==undefined))throw new QuestError('WORKER_DELEGATION_DENIED','Workers update assigned work; only givers create Quests or dispatch workers')
    if(isWorker&&input.action==='update'){
     const allowed=new Set(memberships.filter(m=>m.questID===input.id).flatMap(m=>m.stepIDs))
     if(!allowed.size||Object.keys(input.update??{}).some(k=>k!=='steps')||input.update?.steps?.some((s:any)=>!allowed.has(s.id)||Object.keys(s).some(k=>!['id','state','note'].includes(k))||typeof s.note==='string'&&s.note.length>8000))throw new QuestError('WORKER_ASSIGNMENT_DENIED','No Quest changes were saved. Workers may report only current assigned step states using update:{steps:[{id:<assigned step>,state:<state>,note:<evidence>}]}. Remove artifacts, reward, detail and all other keys; put artifact paths in note. Retry the corrected update, then get the Quest to verify it. The giver attaches global artifacts/reward and changes definitions.')
    }
   if(!isWorker&&(session?.data??session)?.agent==='quest-giver'&&!userGiverID(store))await bindUserGiver(store,host,context.sessionID)
-  if(!isWorker&&userGiverID(store)&&userGiverID(store)!==context.sessionID&&['create','update','run'].includes(input.action))throw new QuestError('SINGLE_GIVER_REQUIRED','Continue in your one Quest Giver: '+userGiverID(store))
+  if(!isWorker&&userGiverID(store)&&userGiverID(store)!==context.sessionID&&['create','update','run','start'].includes(input.action))throw new QuestError('SINGLE_GIVER_REQUIRED','Continue in your one Quest Giver: '+userGiverID(store))
   const trusted=isWorker?{project:workerLedgerProject(store,context.sessionID,directory,input.id)??projectIdentity(directory),directory:physicalDirectory(directory),sessionID:context.sessionID,requestID}:giverContext(store,{...(session?.data??session),id:context.sessionID},requestID,input.id,input.action==='create')
   if(!isWorker&&trusted.giverDirectory&&input.id)adoptQuestGiver(store,input.id)
+  if(input.action==='start'){questsAPI(store,trusted,start).get(input.id);return requestQuestStart(store,input.id)}
   if(input.action==='run'){
    if((input.run?.maxConcurrent!==undefined||input.run?.stepModels!==undefined)&&input.run?.continue!==true)throw new QuestError('INVALID_INPUT','Parallel options require run.continue')
    if((input.run?.maxConcurrent??1)>1&&workspaceSettings(options.settingsFile).workspaceMode!=='worktree')throw new QuestError('WORKSPACE_MODE_REQUIRED','Parallel continuation requires isolated worktrees')
    configureLearning(store,trusted,input.id,input.run?.taskTags,input.run?.maxConcurrent??1)
   }
   if(input.action==="update"&&input.update?.workspaceMode!==undefined){if(Object.keys(input.update).length!==1)throw new QuestError("INVALID_INPUT","Change workspaceMode separately from Quest content updates");if(input.id)questsAPI(store,trusted,start).get(input.id);const result=setWorkspaceMode(input.update.workspaceMode,options.settingsFile);if(!input.id)return {output:{workspaceSettings:result},content:JSON.stringify({workspaceSettings:result})};input={...input,update:{...input.update}};delete input.update.workspaceMode}
-  if(input.action==='run'&&input.run?.continue===true){const result=await continuation.run(input.id,{readOnly:input.run.readOnly,task:input.run.task,model:input.run.model,stepIDs:input.run.stepIDs,files:input.run.files,maxConcurrent:input.run.maxConcurrent,stepModels:input.run.stepModels},trusted);return {output:result,content:JSON.stringify(result)}}
+  if(input.action==='run'&&input.run?.continue===true){const result=await continuation.run(input.id,{readOnly:input.run.readOnly,task:input.run.task,model:input.run.model,stepIDs:input.run.stepIDs,files:input.run.files,maxConcurrent:input.run.maxConcurrent,stepModels:input.run.stepModels},trusted);return result}
   if(input.action==='update'&&input.update?.cancelContinuation===true){continuation.cancel(input.id,trusted);input={...input,update:{...input.update}};delete input.update.cancelContinuation}
   const api=questsAPI(store,trusted,start)
   let result:any
@@ -138,7 +148,7 @@ export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFi
    }
    if(waited)result={...result,waited}
    collectWorkflowOutcomes(store)
-   const content=JSON.stringify(result)
-  return {output:JSON.parse(content),content}
+   if(input.action==='update'&&!isWorker)requestQuestReview(store,input.id)
+   return JSON.parse(JSON.stringify(result))
  }}
 }
