@@ -50,11 +50,11 @@ export function withRouteEconomics(routes: Route[], catalog: LiveCatalog, policy
       perMillion: {input:cost.input, cacheRead:cost.cache_read, cacheWrite:cost.cache_write, output:cost.output, reasoning:cost.output},
     } : undefined)
     const observed=taskRuns.filter(r=>r.route.accountID===route.accountID&&r.route.providerID===route.providerID&&r.route.modelID===route.modelID&&r.route.reasoning===route.reasoning&&r.route.harness===route.harness&&r.route.serviceTier===route.serviceTier)
-    const judged=observed.filter(r=>r.judgment!==null)
+    const judged=observed.filter(r=>r.judgment!==null&&r.judgment.judgedAt<=now)
     if (judged.length>=minimum && task && ["coding","utility","planning","review"].includes(task)) {
       const durations=judged.map(r=>(r.observation!.completedAt??r.observation!.observedAt)-r.startedAt).sort((a,b)=>a-b)
       const accepted=judged.filter(r=>r.judgment!.accepted).length
-      const cash=judged.map(r=>requestMetrics(requests.filter(p=>p.sessionID===r.sessionID&&p.startedAt>=r.startedAt-1000)).cost.find(c=>c.currency===(price?.currency??"USD"))?.actualCharge??null)
+      const cash=judged.map(r=>requestMetrics(requests.filter(p=>p.sessionID===r.sessionID&&p.startedAt>=r.startedAt-1000&&p.startedAt<=(r.observation!.completedAt??r.observation!.observedAt))).cost.find(c=>c.currency===(price?.currency??"USD"))?.actualCharge??null)
       if (durations.every(ms=>ms>0)) route={...route,evidence:[...route.evidence,{task:task as "coding"|"utility"|"planning"|"review",source:"verified task outcomes",measuredAt:new Date(Math.max(...judged.map(r=>r.judgment!.judgedAt))).toISOString(),trials:judged.length,passed:accepted,totalMilliseconds:durations.reduce((n,v)=>n+v,0),totalCash:cash.every(v=>v!==null)?cash.reduce<number>((n,v)=>n+v!,0):null,currency:price?.currency??"USD",p95Milliseconds:durations[Math.ceil(durations.length*.95)-1]}]}
     }
     if (!price || !fresh(price.date) || price.provider !== route.providerID || price.model !== route.modelID) return route
