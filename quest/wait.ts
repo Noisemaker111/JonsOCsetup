@@ -76,35 +76,6 @@ export function waitSteering(quest: Quest, runID: string | undefined, waitedMs: 
   )
 }
 
-export function unchangedRefusal(quest: Quest, runID: string | undefined): string {
-  const running = activeRuns(quest, runID)
-  return (
-    "Nothing changed since this session's last identical get, and that get already waited for a change. Active runs: " +
-    JSON.stringify(running.map(runSummary)) +
-    `. ${RETURN_PATH} Stop here and end the turn, or call quest action=wait (wait.runID, wait.timeoutSeconds) to block until the run settles. ` +
-    "Repeating get is refused because it can only return what you already have."
-  )
-}
-
-/** What this session already received for exactly this request. */
-export type SeenRequest = { fingerprint: string; waited: boolean }
-export type PollDecision = "answer" | "wait" | "refuse"
-
-/**
- * Answer, wait, or refuse.
- *
- * The ladder has to terminate, because the caller is a model writing its own loop: the first
- * repeat blocks, and a repeat after that block already ran its course is refused so the loop ends
- * instead of spinning. Nothing is ever withheld that the caller has not already been given, and
- * with no active run there is nothing to wait for, so the answer is always the answer.
- */
-export function pollDecision(input: { fingerprint: string; seen?: SeenRequest; activeRuns: number; explicitWait: boolean }): PollDecision {
-  if (!input.activeRuns) return "answer"
-  if (input.explicitWait) return "wait"
-  if (input.seen?.fingerprint !== input.fingerprint) return "answer"
-  return input.seen.waited ? "refuse" : "wait"
-}
-
 /** Held, not unref'd: an unref'd timer is not guaranteed to fire, and this one is what ends the wait. */
 const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
 

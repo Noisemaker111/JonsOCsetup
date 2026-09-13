@@ -21,18 +21,9 @@ import { QuestWorkspaces } from "./workspaces"
 import { questChanges } from "./change-view"
 import type { QuestHost } from "./runtime"
 import {toolSummary,toolDetail,toolSection,toolStatus,toolPlan} from './tool-projection'
-import {activeRuns,awaitQuestChange,observedState,pollDecision,runSummary,unchangedRefusal,waitSteering,DEFAULT_WAIT_SECONDS,MAX_WAIT_SECONDS,type SeenRequest} from './wait'
-/**
- * One session's memory of what a given request already told it.
- *
- * Keyed by the exact projection as well as the Quest, so paging through inspect offsets is never
- * mistaken for a repeat. Bounded because a server process outlives many sessions; evicting the
- * oldest entry costs at most one extra get.
- */
-const SEEN_LIMIT=500
+import {activeRuns,awaitQuestChange,observedState,runSummary,waitSteering,DEFAULT_WAIT_SECONDS,MAX_WAIT_SECONDS} from './wait'
 const validator=new AjvJsonSchemaValidator()
 const validators=new Map(Object.entries(questOperations).map(([name,op])=>[name,validator.getValidator(op.input)]))
-const rememberKey=(sessionID:string,questID:string,inspect:any,runID?:string)=>sessionID+'|'+questID+'|'+(runID??'')+'|'+(inspect?.section?`${inspect.section}:${inspect.offset??0}:${inspect.limit??8000}`:'detail')
 export function createQuestService(store:QuestStore,host:QuestHost,options:{policyFile?:string;settingsFile?:string;startRun?:StartRun;directory?:string;onDispose?:(dispose:()=>void)=>void}={}) {
  const {start,returns}=questDispatch(store,host,options)
  const continuation=new QuestContinuation(store,start,{verifyContext:async(context)=>{const result=await host.get({sessionID:context.sessionID});verifyGiverBinding(store,context,result?.data??result)}})
@@ -63,8 +54,6 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
  },5000);timer.unref()
  options.onDispose?.(()=>{clearInterval(timer);disposeCleanup?.()})
  const workspaces=new QuestWorkspaces(store.runtime)
- const seen=new Map<string,SeenRequest>()
- const remember=(key:string,fingerprint:string,waited=false)=>{seen.delete(key);seen.set(key,{fingerprint,waited});if(seen.size>SEEN_LIMIT)seen.delete(seen.keys().next().value as string)}
  return {call:async(method:string,args:unknown,context:any)=>{
   const validate=validators.get(method)
   if(!validate)throw new QuestError('INVALID_OPERATION','Unknown Quest operation: '+method)
@@ -102,24 +91,14 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
   if(input.query)delete input.query.view
   let result:any
    switch(input.action){case "list":result=api.list({...(trusted.giverDirectory?{allProjects:true}:{}),...input.query});break;case "get":result=api.get(input.id);break;case "create":result=api.create(input.create);if(trusted.giverDirectory){const q=store.read(result.id)!;store.apply(q.id,'patched',{extensions:{...q.extensions,giverSourceDirectory:trusted.directory}},'quest:user-giver-source')}break;case "update":result=api.update(input.id,input.update);await cleanupQuests(store,host,input.id);break;case "run":result=await api.run(input.id,input.run?{readOnly:input.run.readOnly,task:input.run.task,model:input.run.model,stepIDs:input.run.stepIDs,files:input.run.files}:undefined);break;default:throw new QuestError("INVALID_OPERATION","Use list, get, create, update, run or wait")}
-   /**
-    * Waiting, where the giver used to poll.
-    *
-    * A get that can only return what this session already holds is not answered again: while a run
-    * is still active it becomes a bounded block on the saved state changing, and a repeat after
-    * that block has already run out is refused with the return path named. Workers are exempt --
-    * their own get verifies an update they just saved, so it always has something new to read.
-    */
+   // Reads are snapshots. Only the explicit wait operation blocks on worker progress.
    let waited:any
-   if(input.action==='get'&&input.id&&(waitRequest||!isWorker)&&!['status','plan','inspect'].includes(method)){
+   if(waitRequest&&input.id){
     const runID=waitRequest?.runID
-    const key=rememberKey(context.sessionID,input.id,input.inspect,runID)
     const before=store.read(input.id)
     if(before){
      const fingerprint=observedState(before,runID)
-     const decision=pollDecision({fingerprint,seen:seen.get(key),activeRuns:activeRuns(before,runID).length,explicitWait:!!waitRequest})
-     if(decision==='refuse')throw new QuestError('QUEST_UNCHANGED',unchangedRefusal(before,runID))
-     const blocking=decision==='wait'
+     const blocking=activeRuns(before,runID).length>0
      let outcome={changed:false,quest:before as any,milliseconds:0}
      if(blocking){
       const seconds=Math.min(Math.max(Math.round(waitRequest?.timeoutSeconds??DEFAULT_WAIT_SECONDS),1),MAX_WAIT_SECONDS)
@@ -133,7 +112,6 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
      if(blocking||waitRequest)waited={milliseconds:outcome.milliseconds,changed:outcome.changed,
       runs:await Promise.all(activeRuns(after,runID).slice(0,5).map(async run=>({...runSummary(run),observation:await inspectWorker(host,run)}))),
       ...(blocking?outcome.changed?{}:{steering:waitSteering(after,runID,outcome.milliseconds)}:{settled:true,steering:'No active run to wait for; this is the settled saved state.'})}
-     remember(key,observedState(after,runID),blocking&&!outcome.changed)
     }
    }
    if(input.action==='list')result={diagnostics:result.diagnostics.slice(0,10),items:result.items.map((item:any)=>listView==='plan'?toolPlan(store.read(item.id)!,continuation.status(item.id)):toolSummary(store.read(item.id)!)),total:result.total,nextOffset:result.nextOffset}
