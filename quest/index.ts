@@ -36,7 +36,7 @@ export function listArchivedQuestFiles(projectRoot: string): string[] {
  * Parsed Quest records, keyed by file and invalidated by what the file says about itself.
  *
  * Reading the whole ledger is not a listing operation here: `shared-guard` wraps every tool with
- * it, `typed-tool` repeats it per call, and `user-giver` runs it again inside `eligible`, so one
+ * it, `service` repeats it per call, and `user-giver` runs it again inside `eligible`, so one
  * Quest Giver turn parses the ledger dozens of times. Measured on this installation's 102 records
  * that is 24 ms a time -- 6.8 ms reading and 16.1 ms parsing -- for files that did not change.
  *

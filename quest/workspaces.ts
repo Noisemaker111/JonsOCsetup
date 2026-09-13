@@ -125,7 +125,7 @@ export class QuestWorkspaces {
         if(retained.status!==0)throw new Error("Integrate isolated dependency commits before running shared")
       }
       const join=coordination(input.store,{directory:source,sessionID:"quest-run:"+input.runID,host:"opencode"})({action:"join",title:"Quest "+input.questID,questID:input.questID,scopes:input.files??["."],activity:"Shared worker assignment"})
-      if(!join.acquired)throw new Error("Shared workspace file conflict; inspect quest_workspace reservations before retrying: "+JSON.stringify((join as any).conflicts.map((x:any)=>({title:x.title,scopes:x.scopes}))))
+      if(!join.acquired)throw new Error("Shared workspace file conflict; runtime could not acquire the assigned scope: "+JSON.stringify((join as any).conflicts.map((x:any)=>({title:x.title,scopes:x.scopes}))))
       try {
         const fileScopes=join.participants.find(x=>x.id===join.participantID)!.scopes
         const base=git(source,["rev-parse","HEAD"]).trim(),branch=git(source,["symbolic-ref","--short","HEAD"]).trim()

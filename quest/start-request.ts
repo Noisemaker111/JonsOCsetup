@@ -115,8 +115,8 @@ export async function consumeQuestStarts(store: QuestStore, host: QuestHost, con
       if (!row.authorization || row.authorization.definition !== definition(quest)) throw new QuestError('QUEST_CHANGED', 'Quest definition changed after Start; review its saved settings and start again')
       row.authorization.giverID = giver.sessionID
       save(store, row)
-      const { task, model, maxConcurrent } = questWorkflow(quest)
-      const result = await continuation.run(row.quest, { task, model, maxConcurrent }, context)
+      const { readOnly, task, model, maxConcurrent } = questWorkflow(quest)
+      const result = await continuation.run(row.quest, { readOnly, task, model, maxConcurrent }, context)
       row.result = { continuationID: result.continuation?.id, state: result.continuation?.state, runID: result.continuation?.runID }
       row.state = 'started'
     } catch (error) {

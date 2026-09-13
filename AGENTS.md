@@ -59,8 +59,8 @@ conflict.
 
 No default model — choose on task, usage, speed and correctness; an explicit choice is final;
 report an unavailable route instead of substituting, and apply a ban to reviewers, fallbacks and
-resumes too. No patched fork of OpenCode: changes go upstream as contributions, never into a private
-run-fork, and never into the T3 upstream fork.
+resumes too. Never contribute upstream. Keep implementation in Jon's repositories and use the
+installed OpenCode host's supported extension APIs. Do not create or install a patched OpenCode fork.
 
 Read C:/Users/Jk101/.agents/user-verification.md before implementation. Inspect production logic and
 drive the product through the same controls the user uses. Keep only concise core invariant tests;

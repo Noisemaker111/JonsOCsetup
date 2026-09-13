@@ -3,12 +3,12 @@
 This implementation builds on the portfolio pacing change. Existing one-worker continuations keep their behavior. New independent work can use the existing Quest operation:
 
 ```js
-await tools.quest({ action: 'run', id: quest.id, run: {
+await tools.quests.run({ id: quest.id,
   continue: true,
   maxConcurrent: 4,
   task: 'coding',
   taskTags: { diagnose: ['debugging'], implement: ['implementation'], integrate: ['integration'] }
-}})
+})
 ```
 
 Choose dependency edges when creating the Quest: independent steps may overlap; an integration step should depend on every result it needs. `stepModels` optionally maps particular step IDs to exact configured routes. These options authorize a ceiling, not a promise to launch that many workers. Shared-checkout mode rejects parallel continuations. The persisted intent is checked again at admission even if a later request changes global workspace settings.

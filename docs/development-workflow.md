@@ -268,11 +268,11 @@ launched workers and their evidence. No queue is silently migrated on reload.
 
 ## Native worker inspection
 
-OpenCode2 uses the native Quest tool for worker status, results and dispatch.
-Use quest get with inspect.section runs, and project_route_status for route
-diagnostics. The external-harness MCP bridge is not registered inside OpenCode2:
-standalone hosts do not publish the supporting-host registration it requires.
-The obsolete bridge, its generated harness config and CLI adapter were removed. Worker status uses live
+OpenCode2 discovers concrete operations in the `quests` MCP namespace through Code Mode.
+Use `quests.get` with inspect.section runs, and project_route_status for route
+diagnostics. The generated `quest` CLI and `quest mcp` stdio adapter call the same
+plugin-owned service. The existing Codex ticket adapter remains separate host groundwork;
+it is not registered inside OpenCode2. Worker status uses live
 host events and permissions, clears live observations on disconnect, and keeps
 missing or uncertain ownership intact. Historical ledgers are never liveness proof.
 

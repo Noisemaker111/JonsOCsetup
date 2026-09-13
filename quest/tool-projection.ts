@@ -5,15 +5,25 @@ import type { Quest, QuestSession } from './types'
 const active = (run: QuestSession) => ['planned', 'executing', 'waiting', 'blocked'].includes(run.state)
 const outcome = (run: QuestSession) => ({
   runID: run.runID ?? run.callID, sessionID: run.openCodeSessionId ?? run.sessionID,
-  state: run.state, model: run.model, steps: run.deliverables, permissions: run.permissionDecisions,
+  state: run.state, model: run.model, reasoning: run.reasoningEffort, steps: run.deliverables, permissions: run.permissionDecisions,
   result: run.result ?? run.evidence.at(-1), updatedAt: run.updatedAt,
 })
 
 export function toolSummary(q: Quest) {
-  return { ...compactQuestSummary(q), project: q.project,
+  return { ...compactQuestSummary(q), title: q.title, revision: q.revision, project: q.project,
     progress: { done: q.stages.filter(s => s.status === 'done').length, total: q.stages.length },
-    lastOutcome: q.sessions.length ? outcome(q.sessions.at(-1)!) : undefined,
   }
+}
+
+export function toolStatus(q: Quest) {
+  return { ...toolSummary(q), steps: q.stages.map(step => ({ id: step.id, state: step.status })),
+    runs: q.sessions.filter(active).map(run => ({ runID: run.runID ?? run.callID, sessionID: run.openCodeSessionId ?? run.sessionID, state: run.state, model: run.model, reasoning: run.reasoningEffort })) }
+}
+
+export function toolPlan(q: Quest, continuations: any[] = []) {
+  const detail = toolDetail(q, continuations)
+  return { ...toolSummary(q), description: detail.description, workflow: detail.workflow,
+    steps: detail.steps.map(({ note, runs, lastOutcome, ...step }) => step), continuation: detail.continuation }
 }
 
 /** One current record for decisions; historical attempts stay in inspect. */
@@ -43,7 +53,7 @@ export function toolDetail(q: Quest, continuations: any[] = []) {
 
 /** Page records, never fragments of serialized JSON. A single record stays intact. */
 export function toolSection(value: unknown, section: string, offset = 0, limit = 8000) {
-  if (!Number.isInteger(offset) || offset < 0 || !Number.isInteger(limit) || limit < 1 || limit > 12000) throw new Error('Invalid detail pagination')
+  if (!Number.isInteger(offset) || offset < 0 || !Number.isInteger(limit) || limit < 1) throw new Error('Invalid detail pagination')
   if (!Array.isArray(value)) {
     if (offset) throw new Error('This section is one value; omit offset')
     return { section, data: value ?? null, nextOffset: null }

@@ -16,7 +16,7 @@ export async function installWorkerCapabilities(ctx:any,store:QuestStore){
    if(event.agent==='quest-giver'){
     // New dispatch belongs to the typed Quest API; the legacy transport cannot accept it.
     delete event.tools?.subagent
-    if(event.tools?.execute)event.tools.execute.description='Manage Quests and select projects with this native tool. Call execute with '+JSON.stringify({code:'return await search({query:"project_select",limit:1})'})+'. Then use the exact discovered signatures inside another execute call. tools.quest is also callable inside execute using its catalog signature.\n'+(event.tools.execute.description??'')
+    if(event.tools?.execute)event.tools.execute.description='Manage Quests and select projects with this native tool. Call execute with '+JSON.stringify({code:'return await search({query:"project_select",limit:1})'})+'. Then use the exact discovered signatures inside another execute call. Discover the quests MCP namespace for its API methods.\n'+(event.tools.execute.description??'')
     save(event.sessionID,{modelTools:Object.keys(event.tools??{})})
    }
    return
@@ -24,11 +24,11 @@ export async function installWorkerCapabilities(ctx:any,store:QuestStore){
   assertWorkerIdentity(assignment,event)
   if((assignment.scope as any)?.readOnly===true)for(const name of Object.keys(event.tools??{}))if(!researchTools.has(name))delete event.tools[name]
   if(event.tools?.execute){
-   const example=JSON.stringify({code:'return await tools.quest({action:"get",id:"<assigned Quest ID>"})'})
-   event.tools.execute.description='Save and verify assigned Quest results with this callable native tool. Call execute with '+example+'. To save, call tools.quest({action:"update",id,update:{steps:[{id:stepID,state:"done",note:actualFinding}]}}) inside code, then get to verify. tools.quest is called inside execute, not as a separate top-level tool.\n'+(event.tools.execute.description??'')
+   const example=JSON.stringify({code:'return await tools.quests.get({id:"<assigned Quest ID>"})'})
+   event.tools.execute.description='Save and verify assigned Quest results with this callable native tool. Call execute with '+example+'. To save, call tools.quests.update({id,steps:[{id:stepID,state:"done",note:actualFinding}]}) inside code, then get to verify. tools.quests methods are called inside execute, not as a separate top-level tool.\n'+(event.tools.execute.description??'')
   }
   const tools=Object.keys(event.tools??{});save(event.sessionID,{modelTools:tools})
-  if(!tools.includes('execute')&&!tools.includes('quest'))throw new QuestError('WORKER_TOOLS_UNAVAILABLE','Worker cannot save assigned Quest results: the host exposed neither Code Mode execute nor quest. Parent must repair tool readiness before another dispatch.')
+  if(!tools.includes('execute'))throw new QuestError('WORKER_TOOLS_UNAVAILABLE','Worker cannot save assigned Quest results: the host exposed neither Code Mode execute nor quest. Parent must repair tool readiness before another dispatch.')
  })
  await ctx.session.hook('http.request',async(event:any)=>{
   const assignment=run(event.sessionID);if(!assignment&&userGiverID(store)!==event.sessionID)return

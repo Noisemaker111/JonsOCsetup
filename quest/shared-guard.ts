@@ -7,7 +7,7 @@ import {QuestError} from './api'
 import type {QuestStore} from './store'
 const guardedHosts=new WeakSet<object>()
 export const researchGuardReady=(host:object)=>guardedHosts.has(host)
-export const researchTools=new Set(['read','glob','grep','skill','webfetch','websearch','quest','usage_status','execute','tool_search'])
+export const researchTools=new Set(['read','glob','grep','skill','webfetch','websearch','quests_get','quests_update','quests_wait','quests_status','quests_plan','quests_inspect','quests_report','usage_status','execute','tool_search'])
 /** A resumed session must not write under an assignment whose ownership was released. */
 export function assertSharedAssignment(store:QuestStore,sessionID:string) {
  const run=readAllQuests(store.projectRoot,{includeArchived:true}).flatMap(x=>x.quest?.sessions??[]).find(s=>s.openCodeSessionId===sessionID||s.sessionID===sessionID)

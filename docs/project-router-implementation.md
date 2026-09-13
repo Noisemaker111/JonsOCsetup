@@ -28,7 +28,7 @@ or additional worker launch was performed.** Parent owns integration and final g
 - `quest/continuation.ts`, `quest/goal-lifecycle.ts`, `quest/tracker.ts`:
   explicit giver/worker intents, bounded live same-session continuation, proof checks,
   restart pause, scoped pause/cancel and deferred terminal ownership.
-- `quest/typed-tool.ts`, `quest/tool-schema.mjs`, `quest/tool-projection.ts`:
+- `quest/service.ts`, `quest/operations.mjs`, `quest/tool-projection.ts`:
   current/latest assignment enforcement and compact defaults with paginated evidence.
 - `quest/project.ts`, `quest/runtime.ts`: bounded Git identity reads and actual
   configured-command passing proofs.

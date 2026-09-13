@@ -6,12 +6,15 @@ import type { QuestStore } from './store'
 import { QuestWorkspaces } from './workspaces'
 
 /** A reviewed dispatch-policy binding, never a path supplied by a worker or ledger. */
-export function editingSource(context:{project:ProjectIdentity;directory:string},policyFile:string,files?:string[]) {
+export function editingSource(context:{project:ProjectIdentity;directory:string},policyFile:string,files?:string[],options:{readOnly?:boolean}={}) {
   verifySourceBinding(context,context.directory)
   try{return {...sourceCheckout(context.directory,context.project),files}}catch(error){if(!(error instanceof Error)||error.message!=='Cannot establish selected Git checkout')throw error}
   const policy=JSON.parse(readFileSync(policyFile,'utf8'))
   const binding=policy.sourceByProject?.[context.project.id]
-  if(!binding)return {...sourceCheckout(context.directory,context.project),files}
+  if(!binding){
+    if(options.readOnly)return {project:context.project,source:physicalDirectory(context.directory),files}
+    return {...sourceCheckout(context.directory,context.project),files}
+  }
   if(!isAbsolute(binding.directory)||!isAbsolute(binding.root)||physicalDirectory(binding.projectRoot)!==physicalDirectory(context.project.root))throw Error('Invalid configured source binding')
   let directory=binding.directory,expectedRoot=binding.root,devRelease=false
   if(binding.loadedDevRelease===true&&process.env.OPENCODE_RELEASE_CHANNEL==='dev'){
@@ -34,8 +37,10 @@ export function editingSource(context:{project:ProjectIdentity;directory:string}
   const pinned=devRelease?physicalDirectory(selected.source):selected.project.root
   const expected=devRelease?directory:resolve(expectedRoot)
   if(!same(physicalDirectory(directory),resolve(directory))||!same(pinned,expected))throw Error('Configured source checkout identity changed')
-  const status=spawnSync('git',['-C',selected.source,'status','--porcelain','--untracked-files=all'],{encoding:'utf8',windowsHide:true,timeout:15000})
-  if(status.status!==0||status.stdout.trim())throw Error('Configured source checkout must be clean; existing work was preserved')
+  if(!options.readOnly){
+    const status=spawnSync('git',['-C',selected.source,'status','--porcelain','--untracked-files=all'],{encoding:'utf8',windowsHide:true,timeout:15000})
+    if(status.status!==0||status.stdout.trim())throw Error('Configured source checkout must be clean; existing work was preserved')
+  }
   const prefix=binding.scopePrefix
   if(typeof prefix!=='string'||!prefix||prefix.includes('..')||prefix.includes(String.fromCharCode(92))||prefix.startsWith('/'))throw Error('Invalid configured source scope prefix')
   const translated=(files??[prefix]).map(file=>{
