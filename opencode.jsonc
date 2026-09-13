@@ -13,7 +13,7 @@
     "claude_code": false
   },
   "providers": {
-    "opencode": { "models": { "muse-spark-1.3-contributor-free": { "settings": { "reasoningEffort": "medium" } } } },
+    "opencode": { "models": { "muse-spark-1.3-contributor-free": { "settings": { "providerOptions": { "reasoningEffort": "medium" } } } } },
     "openai": {
       "name": "OpenAI",
       "models": {
@@ -22,20 +22,20 @@
         },
         "gpt-5.6-luna-fast": {
           "name": "GPT-5.6 Luna Fast",
-          "settings": { "reasoningEffort": "max" }
+          "settings": { "providerOptions": { "reasoningEffort": "max" } }
         },
          "gpt-5.6-luna": {
           "name": "GPT-5.6 Luna",
           "variants": [
-            { "id": "max", "settings": { "reasoningEffort": "max" } }
+            { "id": "max", "settings": { "providerOptions": { "reasoningEffort": "max" } } }
           ]
         },
         "gpt-6-astra": {
           "name": "GPT-6 Astra",
-          "settings": { "reasoningEffort": "high" },
+          "settings": { "providerOptions": { "reasoningEffort": "high" } },
           "variants": [
-            { "id": "medium", "settings": { "reasoningEffort": "medium" } },
-            { "id": "high", "settings": { "reasoningEffort": "high" } }
+            { "id": "medium", "settings": { "providerOptions": { "reasoningEffort": "medium" } } },
+            { "id": "high", "settings": { "providerOptions": { "reasoningEffort": "high" } } }
           ]
         }
       }
@@ -54,23 +54,23 @@
         "gpt-5.6-sol": {
           "name": "GPT-5.6 Sol (CLIProxy)",
           "limit": { "context": 400000, "output": 128000 },
-          "settings": { "reasoningEffort": "xhigh" },
+          "settings": { "providerOptions": { "reasoningEffort": "xhigh" } },
           "variants": [
-            { "id": "xhigh", "settings": { "reasoningEffort": "xhigh" } },
-            { "id": "max", "settings": { "reasoningEffort": "max" } }
+            { "id": "xhigh", "settings": { "providerOptions": { "reasoningEffort": "xhigh" } } },
+            { "id": "max", "settings": { "providerOptions": { "reasoningEffort": "max" } } }
           ]
         },
-        "gpt-5.6-luna": { "name": "GPT-5.6 Luna (CLIProxy)", "limit": { "context": 400000, "output": 128000 }, "variants": [{ "id": "medium", "settings": { "reasoningEffort": "medium" } }] },
+        "gpt-5.6-luna": { "name": "GPT-5.6 Luna (CLIProxy)", "limit": { "context": 400000, "output": 128000 }, "variants": [{ "id": "medium", "settings": { "providerOptions": { "reasoningEffort": "medium" } } }] },
         "gpt-5.6-terra": { "name": "GPT-5.6 Terra (CLIProxy)", "limit": { "context": 400000, "output": 128000 } },
-        "gpt-6-astra": { "name": "GPT-6 Astra (CLIProxy)", "settings": { "reasoningEffort": "high" }, "limit": { "context": 400000, "output": 128000 } },
+        "gpt-6-astra": { "name": "GPT-6 Astra (CLIProxy)", "settings": { "providerOptions": { "reasoningEffort": "high" } }, "limit": { "context": 400000, "output": 128000 } },
         "claude-fable-5-1": {
           "name": "Claude Fable 5.1 (CLIProxy)",
           "limit": { "context": 1000000, "output": 128000 },
-          "settings": { "reasoningEffort": "high" },
+          "settings": { "providerOptions": { "reasoningEffort": "high" } },
           "variants": [
-            { "id": "high", "settings": { "reasoningEffort": "high" } },
-            { "id": "xhigh", "settings": { "reasoningEffort": "xhigh" } },
-            { "id": "max", "settings": { "reasoningEffort": "max" } }
+            { "id": "high", "settings": { "providerOptions": { "reasoningEffort": "high" } } },
+            { "id": "xhigh", "settings": { "providerOptions": { "reasoningEffort": "xhigh" } } },
+            { "id": "max", "settings": { "providerOptions": { "reasoningEffort": "max" } } }
           ]
         },
         "claude-sonnet-5": { "name": "Claude Sonnet 5 (CLIProxy)", "limit": { "context": 200000, "output": 64000 } },

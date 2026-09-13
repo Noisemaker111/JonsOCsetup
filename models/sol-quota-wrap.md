@@ -57,7 +57,7 @@ Stay in this repo. If a hook has to live in `models/server.ts` so a standalone `
 
 ## Constraints
 
-- OpenCode 2 variants **must** stay JSON arrays (`[{"id":"xhigh","settings":{"reasoningEffort":"xhigh"}}]`). Object-shaped variants make 18965 skip the whole `cliproxyapi` provider. `opencode.jsonc` already has array variants for Fable and for Sol xhigh/max; do not regress that.
+- OpenCode 2 variants **must** stay JSON arrays (`[{"id":"xhigh","settings":{"providerOptions":{"reasoningEffort":"xhigh"}}}]`). Object-shaped variants make 18965 skip the whole `cliproxyapi` provider. `opencode.jsonc` already has array variants for Fable and for Sol xhigh/max; do not regress that.
 - Do not git push. Allbot will pick up the diff.
 - Do not commit `usage/usage-cache.json`.
 - Do not contribute upstream. Do not use Cursor CloudAgent.
