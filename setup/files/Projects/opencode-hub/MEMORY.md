@@ -24,10 +24,14 @@ the rest lives". Correct a stale line in place, delete a wrong one. User instruc
 - Routine worker permission reviews go to a lower-cost capable reviewer from his own routes, chosen via
   `/quest-reviewer` and kept for the giver session. Escalate only new decisions to the giver
   conversation. Manual approval stays as a fallback.
+- Quest Giver, the Quest system and its extensions are the product; OpenCode2 is the platform they
+  run on. A product API must stay callable from Claude, Codex or anywhere, so the platform belongs in
+  an injected adapter and never in the API surface. A verb takes the Quest id alone: the Quest already
+  carries the project, the work and the repo's own conventions, so an argument that restates one of
+  those is a design smell.
 - Merging a green PR into `agents` is the agent's call, not his. He raises promotion himself, so never
   say "release" to him and never bring up the stable or main branch.
 
-- Quest Giver, Quests and their extensions are the product; OpenCode2 is the platform. Product calls take the saved Quest id and derive the work, project and choices from its record. Keep host transport behind the adapter.
 
 ## The world outside this repository
 
@@ -73,3 +77,12 @@ the `quests` MCP namespace. Agents use those interfaces; implementation files ar
 internal. The giver stays in the hub and the runtime resolves its reviewed source
 mapping for workers. Models remain user-selectable settings; omitted selections use
 task-based routing.
+
+- Benchmark the selected orchestrator and workers as one setup. OpenEval should select a native agent instead of hardcoding build and let OpenCode own delegation; keep Quest-specific integration private. Jon wants benchmark inspection integrated into the native eval page with its existing theme and UI components, not a separate HTML report or injected banner. Jon expects reported measurements to be available in the viewer he opens; distinguish native-host harness trials and external artifact checks from completed OpenEval runner-and-judge benchmarks.
+- Jon expects orchestration comparisons to hold model and reasoning constant across every role and report repeated trials; mixed-model/effort setup experiments answer a separate question. Match capability to the task using measured model-and-effort combinations, not a universal effort-label ranking.
+- Jon does not want upstream contributions. Keep implementation in his repositories and use supported host extension APIs. For OpenEval, do not contact or modify the upstream repository again (including remote checks, comments, issues or PR updates); Jon is handling the premature submission.
+
+- Jon expects workspace coordination to cover every checkout-dependent tool, including persistent tools; checkout-independent operations must remain usable. Public Quest operations should be directly named (for example, quests.create with its fields), without quest.quest action dispatch or a repeated create wrapper.
+- Jon wants Quest review to be optional. With review off, create and start should be one operation; workers save completion and deliverables, and the giver returns a concise handoff without reviewing, redundant reads or bookkeeping turns. Reduce unnecessary activities rather than imposing a fixed activity count.
+- Jon wants compact benchmark comparisons on one page: numbers in aligned rows with separator lines, no boxes or metric tabs. Put each colored delta to the right of its value, always relative to benchmark 1, and identify that reference once. Stack metric sections; keep graphs/trends separate and coverage/ranges on demand. Verify screenshot readability and clicks with pointer movement.
+- Jon wants new-session handoffs to be only `Resume Quest <id>`. Save the workspace, current progress, remaining work, constraints and evidence references in the Quest before handing off; the receiving session resolves them from the ID. Do not make Jon carry paths or a second set of instructions. If saving fails, disclose that the Quest is not current instead of claiming the ID alone is ready.

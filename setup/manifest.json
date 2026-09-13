@@ -12,7 +12,7 @@
     },
     {
       "target": "Projects/opencode-hub/MEMORY.md",
-      "sha256": "30355439c9e0f7b179959d241be9e26ab0b70c1b7c426c9199db10e677332fd4"
+      "sha256": "7d8d45c7405e9faf46e6932afdfcc1364b0232eff08269783c9f78664093eaca"
     },
     {
       "target": ".agents/matt-pocock.md",
@@ -37,7 +37,7 @@
     },
     {
       "target": ".codex/config.toml",
-      "sha256": "2fc88e5733fec216290a30f3c5d29e5398f4094364aad5149c491a42a4ad3254"
+      "sha256": "f9a380bb6963a177a08d0fa96541a3bcfc7e5056b4230172eb268d79c27371f2"
     },
     {
       "target": ".claude/CLAUDE.md",
@@ -791,8 +791,9 @@
       "publisher": "personal",
       "plugin": "opencode-quests",
       "installedVersions": [
-        "0.0.0+codex.guard.20260909000500",
-        "0.0.0+codex.guard.20260909024000"
+        "0.0.0",
+        "0.0.0+codex.guard.20260909024000",
+        "local"
       ],
       "ownership": "local-source"
     },
