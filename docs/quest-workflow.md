@@ -1,5 +1,11 @@
 # Start a saved Quest
 
+Subscription quota telemetry can fail independently of model access. The user-editable
+`models/dispatch-policy.json` setting `request.missingSubscriptionUsage` chooses
+`attempt` or `wait`. An attempt keeps capacity unknown and lets the provider enforce
+its limits; known exhaustion, authentication, route access and spending checks still
+apply. This policy never turns an unknown balance into an available-quota estimate.
+
 Open the Quest board in `oc` and choose **Start Quest**. The start uses the work,
 project and workflow already saved on that Quest. It does not ask for a model or
 send a planning prompt to the giver. Pending steps continue through the existing

@@ -30,7 +30,7 @@ test('the callable board persists workflow choices and one admission across reop
   expect(questStartAuthorization(store,quest.id,'other-run','giver')).toBeUndefined()
   expect(questStartAuthorization(store,quest.id,'owned-run','other-giver')).toBeUndefined()
   board.configure(quest.id,{task:'review',model:'user-provider/user-model#high',delivery:'quest-pr'})
-  expect(questStartAuthorization(store,quest.id,'owned-run','giver')).toBeUndefined()
+  expect(questStartAuthorization(store,quest.id,'owned-run','giver')?.action).toBe('Start saved Quest')
   const saved=new QuestStore(ledgerRoot).read(quest.id)!
   expect(questWorkflow(saved)).toEqual({task:'review',model:'user-provider/user-model#high',delivery:'quest-pr'})
   expect(deliveryInstructions(saved)).toContain('one pull request')
@@ -39,6 +39,8 @@ test('the callable board persists workflow choices and one admission across reop
   board.progress(quest.id,'1','Started without a claim')
   board.release(quest.id,'1')
   expect((await openBoard(options)).read(quest.id).steps[0].status).toBe('pending')
+  store.apply(quest.id,'patched',{description:'Different work requires a new Start'})
+  expect(questStartAuthorization(store,quest.id,'owned-run','giver')).toBeUndefined()
  }finally{rmSync(ledgerRoot,{recursive:true,force:true})}
 })
 

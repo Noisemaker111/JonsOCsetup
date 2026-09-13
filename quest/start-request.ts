@@ -19,7 +19,9 @@ type Request = {
   result?: unknown; error?: string
 }
 const active = (state: string) => ['planned', 'executing', 'waiting', 'blocked'].includes(state)
-const definition = (quest: Quest) => createHash('sha256').update(JSON.stringify([quest.project, quest.description ?? quest.objective, quest.stages.map(step => [step.id, step.title, step.detail, step.needs]), questWorkflow(quest)])).digest('hex')
+// Route/concurrency preferences may change for later workers without withdrawing authority for work already started.
+// Publishing still needs its own authority; a delivery preference never grants it.
+const definition = (quest: Quest) => createHash('sha256').update(JSON.stringify([quest.project, quest.description ?? quest.objective, quest.stages.map(step => [step.id, step.title, step.detail, step.needs])])).digest('hex')
 const directory = (store: QuestStore) => join(store.runtime, 'start-requests')
 const path = (store: QuestStore, id: string) => join(directory(store), id + '.json')
 function save(store: QuestStore, row: Request) {

@@ -19,6 +19,7 @@
       "openai-astra-medium"
     ],
     "subscriptionConcurrency": "unlimited",
+    "missingSubscriptionUsage": "attempt",
     "minBenchmarkPassAt1": 0.5,
     "byTask": {
       "planning": {
