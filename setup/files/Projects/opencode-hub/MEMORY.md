@@ -16,6 +16,9 @@ There is no `memory` skill; this file's own Maintenance section at the bottom is
 
 ## Lessons
 
+- Tool instructions must match the configured harness and its actual catalog; do not infer Bash/Python or Code Mode availability from a model tier. In OpenCode2, the giver uses native execute for typed Quest/project calls. An explicit entry example and removal of its unusable legacy subagent tool recovered the failing Sol conversation and produced a real worker-written CLI with saved results.
+- Native provider reasoning settings belong under settings.providerOptions.reasoningEffort on the inspected host. Flat settings.reasoningEffort was silently omitted even while the UI displayed xhigh; corrected requests carried xhigh. A session label alone is not wire-level effort evidence.
+
 - Worker permission APIs in the installed OpenCode2 host are location-scoped even though session get/context route across locations. Inspect and reply from the owning worker location. Permission reviews use a native reviewer session with session.generate: the stateless plugin generate.text path omitted the session headers required by the configured provider; the native session path completed the actual review and worker return.
 
 - Native worker agents must stay selectable by the host TUI; hidden as subagents, the composer falls back to the wrong model.

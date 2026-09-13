@@ -52,8 +52,7 @@ or main branch: he raises promotion himself and does it himself, so an agent bri
 wrong as a stage, an offer or an aside. Say "merged into agents and tested in OpenCode".
 Queue the merge with `gh pr merge <number> --auto --merge` instead of merging directly. `agents`
 requires the `core` check and no review, so GitHub performs the merge itself the moment the run
-goes green: nothing waits on a run, and no agent asks Jon to press the button. A direct merge is
-also what a harness is most likely to refuse, which is the other reason not to reach for it.
+goes green: nothing waits on a run, and no agent asks Jon to press the button.
 Do not stop at "mergeable", ask Jon to merge, or request the same dev approval
 again. This project-specific standing authorization overrides generic instructions
 to ask before every merge. Infer routine implementation and cleanup decisions
@@ -64,7 +63,16 @@ changes, host updates and public package publishing still need explicit instruct
 
 OpenCode, Codex and Claude follow `C:/Users/Jk101/.agents/user-verification.md`. Resolve the controls needed to use the actual product before claiming verification.
 
-Read `MEMORY.md` at this hub root at the beginning of work and after context loss. Both Codex and the OpenCode2 Quest Giver maintain this same file with durable user decisions, preferences, architecture facts and verified lessons. Read before editing, merge existing knowledge, correct stale entries, then reopen the saved file. Quests keep task plans and progress. Do not store secrets, transcripts or unsupported claims; memory never grants permission. Use ordinary file tools, not an every-turn injection hook.
+Read `MEMORY.md` at this hub root at the beginning of work and after context loss. Every harness --
+Codex, Claude Code and the OpenCode2 Quest Giver -- reads and writes this one file, so anything
+another harness needs belongs here rather than in a harness's private memory.
+
+Keep it short, and treat length as the failure: a memory nobody finishes reading is a memory that
+stops being used, so every line earns its place or comes out. It holds durable user decisions,
+preferences and verified lessons that cost something to rediscover. It does not hold a project's
+own conventions, commands or policy -- those go in that project's AGENTS.md, where they load only
+when you are there -- nor anything already readable from the code, the config or git history.
+Before adding a line, check whether it replaces one; prefer correcting an entry to appending near it. Read before editing, merge existing knowledge, correct stale entries, then reopen the saved file. Quests keep task plans and progress. Do not store secrets, transcripts or unsupported claims; memory never grants permission. Use ordinary file tools, not an every-turn injection hook.
 
 Follow agents-and-main for this repository: agents is the integration branch and master is stable. Use sb agents only in owned checkouts; keep worker changes in isolated worktrees. Only Jon personally merges master, and release preparation starts only when he asks. The dev runtime channel retains its isolated state and sessions. Detailed policy: the selected release's docs/development-workflow.md.
 

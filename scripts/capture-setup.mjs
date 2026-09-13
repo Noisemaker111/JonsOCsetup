@@ -20,7 +20,9 @@ function file(target){
  if(bytes.length>2*1024*1024)throw Error('Review oversized setup file: '+target)
  if(/(?:sk-(?:proj-)?[A-Za-z0-9_-]{30,}|gh[pousr]_[A-Za-z0-9]{25,}|-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----)/.test(bytes.toString()))throw Error('Credential-shaped content requires review: '+target)
  if(!bytes.equals(readFileSync(from)))throw Error('Setup input changed during capture: '+target)
- const canonical=realpathSync(from).replaceAll('\\','/'),repo=join(home,'.config/opencode').replaceAll('\\','/')+'/'
+ // The checkout this capture writes into, not a fixed path: an installed file that is a link
+ // into this tree already IS the tracked file, and reading it as a separate copy made twins.
+ const canonical=realpathSync(from).replaceAll('\\','/'),repo=realpathSync(root).replaceAll('\\','/')+'/'
  const existing=canonical.startsWith(repo)?canonical.slice(repo.length):null
  const prior=previous.get(target.replaceAll('\\','/'))
  const usable=path=>path&&!path.startsWith('setup/files/')&&tracked.has(path)&&existsSync(join(root,path))&&hash(readFileSync(join(root,path)))===hash(bytes)
@@ -30,7 +32,7 @@ function file(target){
  else{source='setup/files/'+target.replaceAll('\\','/');mkdirSync(dirname(join(root,source)),{recursive:true});writeFileSync(join(root,source),bytes)}
  entries.push({source,target:target.replaceAll('\\','/'),sha256:hash(bytes),importedFrom:target.replaceAll('\\','/')})
 }
-function tree(target){if(!existsSync(join(home,target)))return;for(const e of readdirSync(join(home,target),{withFileTypes:true})){if(['node_modules','.git','__pycache__'].includes(e.name))continue;const path=join(target,e.name);if(e.isDirectory())tree(path);else if(e.isSymbolicLink()){omitted.push({path,reason:'nested link requires explicit mapping'})}else file(path)}}
+function tree(target){if(!existsSync(join(home,target)))return;for(const e of readdirSync(join(home,target),{withFileTypes:true})){if(['node_modules','.git','__pycache__'].includes(e.name))continue;const path=join(target,e.name);if(e.isDirectory())tree(path);else if(e.isSymbolicLink()){if(existsSync(join(home,path))&&statSync(join(home,path)).isDirectory())omitted.push({path,reason:'directory link requires explicit mapping'});else file(path)}else file(path)}}
 // .agents/quest.mjs and its filing alias are the shared Quest board's entry point for every
 // harness; untracked they would exist only on this machine, which is how quest-draft.mjs lived.
 // Every harness that reads instructions on this machine is listed here, because a file that is only
