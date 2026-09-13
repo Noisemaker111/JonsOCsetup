@@ -1,3 +1,5 @@
+import {recordWorkflowSupport} from '../usage/telemetry-api'
+import {collectWorkflowOutcomes,workflowFile} from './outcome-tracking'
 import {existsSync,mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs'
 import {join} from 'node:path'
 import {acquireLock} from './locking'
@@ -72,7 +74,12 @@ export class PermissionReviewer {
     if(pin.pendingModelChange){delete pin.pendingModelChange;savePin()}
     save({model:pin.model})
     const prompt=policy+'\nUSER INSTRUCTIONS:\n'+JSON.stringify(before.authority.instructions)+'\nASSIGNMENT:\n'+JSON.stringify(before.authority.assignment)+'\nWORKER REQUEST:\n'+JSON.stringify(request)
-    const response=unwrap(await this.host.generate({sessionID:pin.reviewerSessionID,prompt}))
+    const scope={id:reviewID,role:'permission-review' as const,sessionID:pin.reviewerSessionID,startedAt:Date.now()}
+    let tracked=false
+    try{collectWorkflowOutcomes(this.store);recordWorkflowSupport(workflowFile(),input.runID,scope);tracked=true}catch(error){console.error('[quests] reviewer task attribution unavailable',error)}
+    let response:any
+    try{response=unwrap(await this.host.generate({sessionID:pin.reviewerSessionID,prompt}))}
+    finally{if(tracked)try{recordWorkflowSupport(workflowFile(),input.runID,{...scope,completedAt:Date.now()})}catch(error){console.error('[quests] reviewer task attribution did not close',error)}}
     await verifySession()
     reserved.ledger.settle(reviewID,{state:'settled',completedAt:new Date().toISOString()});reserved=undefined
     const decision=parsePermissionReview(response.text,input.requestKey)
