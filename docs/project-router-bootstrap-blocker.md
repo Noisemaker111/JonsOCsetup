@@ -1,3 +1,5 @@
+> Historical record: this is a dated investigation or implementation receipt, not current operating instructions. Its pending work, model choices, commands, and verification counts describe that run. Use the [current documentation](README.md).
+
 # Front-door Quest bootstrap and blocked scout
 
 The requested project-router, repository onboarding and Quest-scoped goal implementation is NOT complete. No source implementation or promotion was performed.

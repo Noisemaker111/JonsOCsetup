@@ -5,7 +5,7 @@ owned here; Quest identity, assignment, verification, continuation and admission
 remain behind declared Quest-owned facades. `plugin-set.json` and `plugin.json`
 register this package. Default-deny agents also need explicit router tool grants in
 the owning configuration; plugin registration alone does not make tools available.
-Verify discovery from the actual hub/destination giver after coordinated promotion.
+Verify discovery from the same persistent giver after loading the changed plugin.
 
 ## Hub workflow
 
@@ -97,6 +97,4 @@ installed root-array response; recent sessions/messages use bounded cursor pages
 User messages may contain `text`, while assistant messages contain `content` parts.
 Host IDs remain separate from canonical Quest project identity and chosen worktree.
 
-See `docs/project-router-implementation.md` for actual check receipts and pending
-acceptance. Source is not proof that an existing session loaded this plugin.
-Parent promotion and a fresh verified session are separate rollout steps.
+Use the [development workflow](../docs/development-workflow.md) for current integration and installed-host verification. The dated [implementation receipt](../docs/project-router-implementation.md) records earlier evidence, not current pending work. Source is not proof that an existing session loaded this plugin.

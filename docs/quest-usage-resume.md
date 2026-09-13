@@ -1,4 +1,4 @@
-> Historical evidence: scenario scripts named below have been removed. They are not current verification instructions. Use [the actual product](user-verification.md) and the small production-logic core suite.
+> Historical record: this is a dated investigation or implementation receipt, not current operating instructions. Its pending work, model choices, commands, and verification counts describe that run. Use the [current documentation](README.md).
 
 # Quest repair and real usage UI continuation
 

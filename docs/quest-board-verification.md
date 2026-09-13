@@ -1,3 +1,5 @@
+> Historical record: this is a dated investigation or implementation receipt, not current operating instructions. Its pending work, model choices, commands, and verification counts describe that run. Use the [current documentation](README.md).
+
 > Historical verification record. Its bridge and scenario-test commands have since been removed; current native inspection and verification are documented in development-workflow.md.
 
 # Quest board and worker reliability verification

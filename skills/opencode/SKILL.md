@@ -132,19 +132,11 @@ in `opencode.jsonc`. Omit it and the host invents a default — which is what
 made a 500k Grok model compact at 200k. Do not add a `limit` to a provider the
 catalog already knows (e.g. `openai`).
 
-## Promotion
+## Integration and runtime selection
 
-Use README.md for the current managed launch/restart and deployment commands.
-Local candidate promotion uses:
+Follow [the development workflow](../../docs/development-workflow.md) for candidate preparation, installed-app acceptance, agents integration, and activation. `oc` selects the configured branch or gated version; it does not require replacing the vendor CLI.
 
-```powershell
-bun scripts/plugin-deploy.ts --no-publish --no-prune
-```
-
-Promotion changes the runtime generation and needs to be within the task's
-scope. Omitting --no-publish can push public mirrors; only do that with explicit
-publish authorization. Never restart or terminate unrelated running sessions.
-Immutable generations are build output; edit source in this checkout.
+`scripts/plugin-deploy.ts` is the low-level local generation builder used by maintenance tooling. Its activation is scoped to the supplied root. It does not publish mirrors; omitting an obsolete `--no-publish` flag does not turn it into a publishing command. Do not use a low-level pointer change as evidence that the managed channel or a running terminal adopted the change.
 
 ## Acceptance
 

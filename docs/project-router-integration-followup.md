@@ -1,3 +1,5 @@
+> Historical record: this is a dated investigation or implementation receipt, not current operating instructions. Its pending work, model choices, commands, and verification counts describe that run. Use the [current documentation](README.md).
+
 # Project-router bounded integration follow-up
 
 ## Scope and capability receipt — 2026-09-08

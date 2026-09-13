@@ -4,7 +4,7 @@
   "entries": [
     {
       "target": "Projects/opencode-hub/AGENTS.md",
-      "sha256": "b5aa7912a4d4f92e059c8e159f5db6b2a255efa2d41d75ba7da7c5896be156f2"
+      "sha256": "056cddb307c1a68cbe2fde69a8aac193cfdc5ffe005f5d7d7fbb28ad20db01c5"
     },
     {
       "target": "Projects/opencode-hub/CLAUDE.md",
@@ -45,7 +45,7 @@
     },
     {
       "target": ".codex/AGENTS.md",
-      "sha256": "d4d0a35563709a123f75aa356bdfffe3f6e7322d611030f6ccbf58cee43a3e66"
+      "sha256": "8ed4d9808f4c3cec77f36b394e7fd877782ba946c5364d0ff2ec1dc7571974eb"
     },
     {
       "target": ".codex/config.toml",
@@ -82,26 +82,6 @@
     {
       "target": ".codex/rules/default.rules",
       "sha256": "3455aef0455a525519617708bdddc315364d0681d08ff13cdca8bfae1978968a"
-    },
-    {
-      "target": ".agents/skills/agents-and-main/agents/openai.yaml",
-      "sha256": "801c2c2c1a018ca9fa46a1d49c90a5151d1d38e6dbd01356f64a39f1e4775a03"
-    },
-    {
-      "target": ".agents/skills/agents-and-main/references/project-policy.md",
-      "sha256": "5dcf6282f60ebd147d47d13b8f20a3405296f64e0a874e91c7da00a6243806a0"
-    },
-    {
-      "target": ".agents/skills/agents-and-main/scripts/install.ps1",
-      "sha256": "516e1c1ada037fc4b5a0aceb3baf2b30695b96350ed76f3072ee72afb3e4e583"
-    },
-    {
-      "target": ".agents/skills/agents-and-main/scripts/sb.ps1",
-      "sha256": "68d2532259c69024ae89d3ae330633fae80dbd81c341a8df39564289a227139b"
-    },
-    {
-      "target": ".agents/skills/agents-and-main/SKILL.md",
-      "sha256": "cbce6a890869a691d901bbb69be85c341035b9c0c60ac71f0fe8f26de9e74a61"
     },
     {
       "source": "skills/github/SKILL.md",

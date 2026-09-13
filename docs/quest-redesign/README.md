@@ -1,10 +1,12 @@
+> Historical design and verification record. Use the [current documentation](../README.md) for current operation; these screenshots and commands describe the earlier board.
+
 # Quest log redesign
 
 The board now keeps task titles readable, puts state and the next useful action near the title, and uses Overview, Changes, and Activity to avoid burying results under diagnostics. Below 100 columns, it opens as a list; Enter or a click opens detail, and Escape returns to the list before returning to chat.
 
 [Wide concept](concept-wide.png) · [Narrow concept](concept-narrow.png) · [Exact image-generation prompts](prompts.md)
 
-[Before](before.png) · [Implemented wide view](after-wide.png) · [Implemented narrow list](after-list.png) · [Implemented review](after-review.png)
+[Before](before.png) · [Implemented wide view](after-wide.png) · [Implemented narrow list](after-list.png)
 
 Concepts were generated with the built-in imagegen tool. The implementation uses real terminal components, with denser spacing and a flat list sorted by attention, review readiness, and progress. Status always comes from saved Quest state; sample mockup labels and verification claims are not copied into the product.
 
