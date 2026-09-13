@@ -98,6 +98,12 @@ test('worker setup reads cover only real instruction files in explicitly assigne
   expect(instructionReadPath(join(project,'source.ts'),worker,[project])).toBeUndefined()
   expect(instructionReadPath(project,worker,[project])).toBeUndefined()
   expect(instructionReadPath(join(project,'MEMORY.md'),worker,[project])).toBeUndefined()
+  const installed=join(other,'user-verification.md'),source=join(project,'user-verification.md')
+  writeFileSync(installed,'trusted instructions');writeFileSync(source,'trusted instructions')
+  expect(instructionReadPath(installed,worker,[worker],undefined,[{installed,source}])).toBe(installed)
+  writeFileSync(installed,'different private content')
+  expect(instructionReadPath(installed,worker,[worker],undefined,[{installed,source}])).toBeUndefined()
+  expect(instructionReadPath(other,worker,[worker],undefined,[{installed,source}])).toBeUndefined()
  }finally{
   const target=realpathSync(root),allowed=resolve(tmpdir())
   if(!target.toLowerCase().startsWith((allowed+'\\quest-instruction-').toLowerCase()))throw Error('Unexpected test cleanup target')

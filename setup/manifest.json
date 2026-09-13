@@ -45,7 +45,7 @@
     },
     {
       "target": ".codex/AGENTS.md",
-      "sha256": "8ed4d9808f4c3cec77f36b394e7fd877782ba946c5364d0ff2ec1dc7571974eb"
+      "sha256": "e6ba13d74859e5cadc00769cd600d15c4cfa7e69457a7f754639a9af9f8caec2"
     },
     {
       "target": ".codex/config.toml",

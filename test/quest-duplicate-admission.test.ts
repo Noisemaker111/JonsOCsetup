@@ -43,5 +43,11 @@ test('a dispatch that never bound a worker is settled, so the retry is another r
   expect(store.read(quest.id)!.sessions.at(-1)!.state).toBe('failed')
   expect((await questsAPI(store,context('call-4'),started).run(quest.id)).sessionID).toBe('ses_worker')
   expect(readAllQuests(root).length).toBe(1)
+  // A recovered Markdown snapshot can lag its journal (including the created event).
+  // It must not poison reconciliation, and thereby every later native dispatch.
+  const recovered=store.create({id:'00000000000000000000000001',title:'Recovered terminal worker',objective:'Retain the failed attempt',stages:[{id:'check',title:'Check',status:'working',needs:[]}],sessions:[{callID:'old',runID:'old',state:'failed',deliverables:['check'],evidence:['Confirmed failed'],result:'Confirmed failed',attempt:1,updatedAt:new Date().toISOString()} as any]})
+  expect(readAllQuests(root).find(row=>row.quest?.id===recovered.id)!.quest!.revision).toBeLessThan(store.read(recovered.id)!.revision)
+  await reconcileWorkers(store,{get:async()=>undefined})
+  expect(store.read(recovered.id)!.stages[0].status).toBe('pending')
  }finally{rmSync(root,{recursive:true,force:true})}
 })
