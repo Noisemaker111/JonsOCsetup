@@ -1,3 +1,4 @@
+import { withRouteEconomics, type EconomyPolicy } from "./route-economics"
 import {measuredOutcomeRoutes,type MeasuredOutcomes} from "./measured-outcomes"
 import {join,dirname,isAbsolute} from "node:path"
 import { calibratedRoutes,type DispatchForecasts } from "./calibrated-dispatch"
@@ -5,7 +6,6 @@ import { readCalibrations,accountRegime,updateBurnControls,readQuotaObservations
 import { assertConfiguredModel, assertConfiguredSelection } from "./access-policy"
 import { accountsForRoute, relevantAccountWindows } from "../usage/account-api"
 import { liveDispatchRoutes } from "./live-routes"
-import { recordedRouteCosts, withRecordedCosts } from "./route-cost"
 import { applyTaskDemand, classifyDispatch, describeDemand, validateTaskDemands, type DispatchFacts, type TaskDemands } from "./task-demand"
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
@@ -17,7 +17,7 @@ import type { PlannerInput,Route,RoutingRequest } from "./route-planner"
 export const configuredDispatchPolicyFile=()=>process.env.OPENCODE_DISPATCH_POLICY??join(import.meta.dir,"dispatch-policy.json")
 /** Explicit fixture/host pin keeps isolated Quest storage on shared atomic account admission. */
 export function dispatchReservationFile(runtimeRoot:string){const pin=process.env.OPENCODE_ROUTE_RESERVATIONS;if(pin&&!isAbsolute(pin))throw new Error('OPENCODE_ROUTE_RESERVATIONS must be absolute');return pin??join(runtimeRoot,'route-reservations.json')}
-export type DispatchPolicy = { version:1; outcomesFile?:string; calibration?:DispatchForecasts; request:Omit<RoutingRequest,"now"|"explicitRouteID">&{byTask?:TaskDemands}; routes:Route[]; billing:Record<string,PlannerInput["accounts"][number]["billing"]>; bootstrapByProject:Record<string,string[]>; commandsByProject?:Record<string,Record<string,import("../quest/command-runtime").CommandSpec>> }
+export type DispatchPolicy = { version:1; economy?:EconomyPolicy; outcomesFile?:string; calibration?:DispatchForecasts; request:Omit<RoutingRequest,"now"|"explicitRouteID">&{byTask?:TaskDemands}; routes:Route[]; billing:Record<string,PlannerInput["accounts"][number]["billing"]>; bootstrapByProject:Record<string,string[]>; commandsByProject?:Record<string,Record<string,import("../quest/command-runtime").CommandSpec>> }
 export type SelectorResult={code:string;route?:Route;candidates:{selector:string;model:string;accountID:string;serviceTier:string}[]}
 /** Shared model-facing exact selector. `route:<id>` includes account and service identity.
  *  A selector the user typed is itself the authorization: it resolves against every registered
@@ -113,15 +113,9 @@ export async function dispatchPlanInput(input:{model?:string;policyFile:string;n
  const unbilled=accounts.filter(a=>!a.billing).map(a=>a.id)
  if(unbilled.length)throw new Error("Dispatch policy must identify billing for connected accounts: "+unbilled.join(", "))
  const observedRoutes=policy.outcomesFile?measuredOutcomeRoutes(policy.routes,JSON.parse(readFileSync(isAbsolute(policy.outcomesFile)?policy.outcomesFile:join(dirname(input.policyFile),policy.outcomesFile),"utf8")) as MeasuredOutcomes).routes:policy.routes
- // Recorded per-effort consumption from the host's own request records. It orders the routes that
- // already cleared the quality demand; it never admits or excludes one, so an unreadable database
- // is not a dispatch failure.
- const recorded=recordedRouteCosts({now})
- const routes=withRecordedCosts(calibratedRoutes(observedRoutes,readCalibrations().calibrations,Object.fromEntries(snapshot.accounts.map(a=>[a.id,accountRegime(a)])),policy.calibration,now),recorded.costs)
+ const routes=withRouteEconomics(calibratedRoutes(observedRoutes,readCalibrations().calibrations,Object.fromEntries(snapshot.accounts.map(a=>[a.id,accountRegime(a)])),policy.calibration,now),live.catalog,policy.economy,now,classification.task)
  const request={...policy.request,now:new Date(now).toISOString(),explicitRouteID}
- const diagnostics=[...live.diagnostics,describeDemand(classification,request),
-  recorded.source==="unavailable"?"recorded route cost unavailable ("+recorded.error+"); efforts rank on the published board alone"
-  :"recorded route cost for "+Object.keys(recorded.costs).length+" route identities ("+recorded.source+")"]
+ const diagnostics=[...live.diagnostics,describeDemand(classification,request),"Comparable prices for "+routes.filter(r=>r.economics).length+" routes; estimates are not actual account charges"]
  return {policy,request,routes,accounts,snapshot,live,classification,diagnostics,explicitRouteID}
 }
 

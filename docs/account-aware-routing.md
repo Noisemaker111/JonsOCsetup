@@ -6,6 +6,56 @@ Current source integrates the existing planner with Quest run, shared and matchi
 
 The 19-hour example and inventory below are historical synthetic/offline observations. They do not describe current user balances. See the implementation checkpoints below for verified source behavior and remaining host acceptance.
 
+## Economical automatic selection
+
+`models/dispatch-policy.json` owns automatic selection; exact user model choices still
+win. `request.preference: "economy"` admits routes against the task's own quality
+requirements, then compares the same `economy.comparisonTokens` workload across
+eligible routes. Routine helpers use a quality floor; coding and planning retain
+their configured tolerance from the best eligible score. Local outcomes and
+published priors remain separate evidence scales. A prior-qualified route is not
+excluded just because another route has local history.
+
+`economy.accountPrices` accepts exact account/provider/model/service-tier prices,
+keyed by `accountPriceKey` in `models/route-economics.ts`. Personal prices override
+catalog quotes. `useCatalogPrices` explicitly permits exact-provider catalog prices
+as API-equivalent estimates, never actual subscription charges. No broker price is
+inferred by matching a model name. Missing or expired prices remain unknown.
+The common workload is a comparison assumption, not a prediction of task tokens.
+
+Within `request.economyPriceTolerance` of the cheapest qualified quote, measured
+request speed orders candidates. Observations require exact account, wire reasoning
+and service tier; request duration is not completed-task latency. Fresh quota,
+reserves and account admission remain mandatory. Measured task consumption controls
+expiry pressure when available; percentages are never converted from catalog prices.
+
+`/quest-reviewer` selects economical, measured cash, speed, quota, or an exact model.
+The helper remains pinned for its giver session until the user changes that setting.
+`bun scripts/route-plan.ts dispatch --task utility` displays the same automatic
+selection used by the reviewer and Quest workers, with price and quality provenance.
+The installed verification gate also uses that planner rather than list order.
+
+## Task and model measurements
+
+Every observed request retains its token components, saved price schedule, timing,
+account and exact model settings. `usage_status` reports all observed models over
+its selected time range (28 days by default), including models whose account
+identity is unavailable. No model names are enumerated in the measurement path.
+
+Quest runs automatically receive their dispatch task class. `quest_outcome report`
+and `bun scripts/workflow-report.ts --out <private-report.html>` join each run to
+its own observed requests and show token totals, mean tokens and cost per task,
+whole task duration, output tokens/second including reasoning, visible streaming
+speed and sample coverage. Per-task details remain available after reopening the
+HTML or JSON export. Pass/fail execution and evaluator acceptance are separate;
+cost per accepted task remains unknown while any settled task is unjudged.
+
+Estimates use the price recorded on each request; missing price/token capture does
+not become zero. Actual charges require an actual-charge observation. Reports
+include failed attempts, deduplicate repeated observations by request identity,
+and retain unknown counters. Other harnesses require their own measured counters;
+OpenCode request throughput is not a claim about unobserved external runs.
+
 ## Findings in this checkout
 
 The offline inventory found **70 configured provider/model pairs, 76 catalog rows
@@ -31,7 +81,7 @@ prints no reset timestamp unless its provenance is provider-observed.
   joined live (`models/live-routes.ts`), quality comes from the published
   per-effort board (`models/benchmarks.md`), the task class decides how much of
   that accuracy the work may trade (`models/task-demand.ts`), and the routes left
-  are ordered on recorded per-effort consumption (`models/route-cost.ts`).
+  are ordered using the configured economical policy (`models/route-economics.ts`).
 - `usage/usage-lib.ts:capacitySnapshot` reduces healthy sources to state/auth.
   It retains resetAt only for capped windows. Mapping capacity by providerID was
   wrong for brokers and has gone with the scorer that used it: a broker provider

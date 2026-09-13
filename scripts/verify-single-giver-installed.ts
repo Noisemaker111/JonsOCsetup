@@ -12,34 +12,16 @@ import {join,resolve} from 'node:path'
 import {QuestStore} from '../quest/store'
 import {projectIdentity} from '../quest/project'
 import {freePort} from './plugin-deploy'
-import {getAccountUsage,ACCOUNT_USAGE_FILE} from '../usage/account-api'
-import {liveDispatchRoutes} from '../models/live-routes'
-import {unusableRoutes} from '../models/dispatch-planner'
-import {chooseVerificationRoute} from '../models/verification-route'
+import {ACCOUNT_USAGE_FILE} from '../usage/account-api'
+import {dispatchPlanInput} from '../models/dispatch-planner'
+import {planRoutes} from '../models/route-planner'
 const root=resolve(process.argv[2]),reservations=resolve(process.argv[3]),output=process.argv[4]?resolve(process.argv[4]):join(root,'.visual-e2e','installed-single-giver-'+Date.now())
 const policy=JSON.parse(readFileSync(join(root,'models/dispatch-policy.json'),'utf8'))
-// The check must run on a lane that has capacity. Pinning the primary route, or a hardcoded
-// giver model, fails the whole gate when that account is spent even though other routes are free.
-const snapshot=await getAccountUsage()
-// Choose from the same candidate pool a real dispatch ranks -- the policy's curated routes plus
-// whatever the live join derives -- or this gate fails whenever the curated accounts are spent
-// and the router would happily have run somewhere else.
-const live=await liveDispatchRoutes(policy,snapshot)
-const candidates=[...live.curated,...live.derived]
-// Which lane to verify on, and why, lives in models/verification-route.ts.
-const broken=unusableRoutes()
-const probeFailure=(r:any)=>broken.byRoute.get(r.id)??broken.byModel.get(r.providerID+'/'+r.modelID)
-const activated=(()=>{try{const c=JSON.parse(readFileSync(join(root,"..","..","dev.json"),"utf8"));return String(c.model??"")}catch{return ""}})()
-const chosen=chooseVerificationRoute({
- candidates,activated,
- primaryRouteID:policy.request.primaryRouteID,
- allowedRouteIDs:policy.request.allowedRouteIDs,
- derivedIDs:live.derived.map((r:any)=>r.id),
- available:(id?:string)=>snapshot.accounts.some((a:any)=>a.id===id&&a.state==='available'),
- probeFailure,
-})
-if(!('route' in chosen))throw Error('No authorized route is both funded and working; this check cannot produce real dispatch evidence. '+(chosen.refused.map(r=>r.id+': '+r.reason).join('; ')||'no candidate routes at all'))
-const route=chosen.route
+// Verification uses the same automatic task policy as real work; list order is not a model choice.
+const plan=await dispatchPlanInput({policyFile:join(root,'models/dispatch-policy.json'),task:'utility'})
+const decision=planRoutes(plan)
+const route=plan.routes.find(r=>r.id===decision.selected?.routeID)
+if(!route)throw Error('No eligible automatic verification route: '+JSON.stringify(decision.excluded))
 const holds=()=>policy.billing[route.accountID]==='subscription'&&policy.request.subscriptionConcurrency==='unlimited'?[]:JSON.parse(readFileSync(reservations,'utf8')).reservations.filter((r:any)=>r.accountID===route.accountID&&r.exclusive&&['active','unknown'].includes(r.state))
 if(holds().length)throw Error('Existing uncertain account ownership blocks this successful dispatch check; inspect it first')
 const workerModel=route.providerID+'/'+route.modelID+'#'+route.reasoning

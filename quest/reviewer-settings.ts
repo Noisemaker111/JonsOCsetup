@@ -5,15 +5,15 @@ import {acquireLock} from './locking'
 import {digest} from './privacy'
 import {dispatchPlanInput,configuredDispatchPolicyFile,dispatchReservationFile} from '../models/dispatch-planner'
 import {RouteReservations} from '../models/route-reservations'
-export type ReviewerSettings={version:1;model?:string;preference:'cash'|'latency'|'quota'}
+export type ReviewerSettings={version:1;model?:string;preference:'economy'|'cash'|'latency'|'quota'}
 export const reviewerSettingsFile=()=>join(dirname(workspaceSettingsFile()),'permission-reviewer.json')
 export function reviewerSettings(file=reviewerSettingsFile()):ReviewerSettings{
- const value=existsSync(file)?JSON.parse(readFileSync(file,'utf8')):{version:1,preference:'cash'}
- if(value.version!==1||!['cash','latency','quota'].includes(value.preference)||value.model!==undefined&&(typeof value.model!=='string'||!value.model.trim()))throw Error('Invalid permission reviewer settings; preserve and repair the user selection')
+ const value=existsSync(file)?JSON.parse(readFileSync(file,'utf8')):{version:1,preference:'economy'}
+ if(value.version!==1||!['economy','cash','latency','quota'].includes(value.preference)||value.model!==undefined&&(typeof value.model!=='string'||!value.model.trim()))throw Error('Invalid permission reviewer settings; preserve and repair the user selection')
  return value
 }
 export function setReviewerSettings(value:ReviewerSettings,file=reviewerSettingsFile()){
- if(value.version!==1||!['cash','latency','quota'].includes(value.preference)||value.model!==undefined&&!value.model.trim())throw Error('Invalid reviewer selection')
+ if(value.version!==1||!['economy','cash','latency','quota'].includes(value.preference)||value.model!==undefined&&!value.model.trim())throw Error('Invalid reviewer selection')
  const lock=acquireLock(dirname(file),'reviewer-settings')
  try{mkdirSync(dirname(file),{recursive:true});const tmp=file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(value,null,2)+'\n');renameSync(tmp,file);return reviewerSettings(file)}finally{lock.release()}
 }

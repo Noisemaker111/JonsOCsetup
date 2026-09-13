@@ -34,6 +34,8 @@ export type CatalogModel = {
   modelID: string
   /** Effort levels the provider actually accepts, in the order models.dev declares them. */
   efforts: string[]
+  /** Exact provider quote; never an actual subscription charge. */
+  cost?: { input?: number; output?: number; cache_read?: number; cache_write?: number }
   releaseDate?: string
 }
 export type LiveCatalog = { models: CatalogModel[]; source: "live" | "cache" | "stale-cache" | "unavailable"; at?: string; error?: string }
@@ -50,7 +52,7 @@ function parseCatalog(payload: unknown): CatalogModel[] {
       const modelID = typeof model?.id === "string" && model.id ? model.id : key
       const effort = (model?.reasoning_options ?? []).find((option: any) => option?.type === "effort")
       const efforts = (effort?.values ?? []).filter((value: unknown): value is string => typeof value === "string" && value.trim().length > 0 && value !== "null")
-      models.push({ providerID, modelID, efforts, releaseDate: typeof model?.release_date === "string" ? model.release_date : undefined })
+      models.push({ providerID, modelID, efforts, cost: model.cost, releaseDate: typeof model?.release_date === "string" ? model.release_date : undefined })
     }
   }
   return models
@@ -66,7 +68,7 @@ export async function liveModelCatalog(now = Date.now(), maxAgeMs = 6 * 60 * 60 
   let cached: { at?: string; models?: CatalogModel[] } | undefined
   try { cached = JSON.parse(readFileSync(file, "utf8")) } catch {}
   const cachedAt = Date.parse(cached?.at ?? "")
-  if (cached?.models?.length && Number.isFinite(cachedAt) && now - cachedAt >= 0 && now - cachedAt < maxAgeMs) return { models: cached.models, source: "cache", at: cached.at }
+  if (cached?.schema === 2 && cached?.models?.length && Number.isFinite(cachedAt) && now - cachedAt >= 0 && now - cachedAt < maxAgeMs) return { models: cached.models, source: "cache", at: cached.at }
   try {
     const response = await fetch(CATALOG_URL, { signal: AbortSignal.timeout(timeoutMs) })
     if (!response.ok) throw new Error("models.dev returned HTTP " + response.status)
@@ -74,7 +76,7 @@ export async function liveModelCatalog(now = Date.now(), maxAgeMs = 6 * 60 * 60 
     if (!models.length) throw new Error("models.dev returned no models")
     const at = new Date(now).toISOString()
     mkdirSync(dirname(file), { recursive: true })
-    writeFileSync(file, JSON.stringify({ at, models }))
+    writeFileSync(file, JSON.stringify({ schema: 2, at, models }))
     return { models, source: "live", at }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
