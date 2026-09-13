@@ -31,5 +31,16 @@ If a sentence could be deleted without losing information, delete it.
 
 Never put a hard cap on anything counted in tokens or characters. Report the size; let it be judged.
 
-Record a correction the moment it happens, without being asked, and say what you recorded:
-🧠 **Memory updated:** <the thing>
+## Memory
+
+Record a correction the moment it happens, without being asked. A correction is something Jk told you
+about how to work, or a fact about this setup that nothing on disk states. A finding from the task in
+hand is not one — it belongs in the deliverable. If a grep answers it, or it goes stale the next time a
+config changes, leave it out.
+
+Announce the fact now in force, never the edit that made it true:
+
+🧠 **Memory updated:** <one line, in Jk's terms>
+
+The `memory` skill carries the rest: the shared-vs-private split, and when a memory has become a
+document that belongs in a repo.

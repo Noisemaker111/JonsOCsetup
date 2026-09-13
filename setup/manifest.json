@@ -53,7 +53,7 @@
     },
     {
       "target": ".claude/CLAUDE.md",
-      "sha256": "8a330c07d9d6c34ae73d2dfc6b0206d5973054d6ba214d8a60afc4f60e30127a"
+      "sha256": "4fca259317dcd44b5c51af8f6be8420b9db313262f5c1048accb1eed52c6101c"
     },
     {
       "target": ".claude/settings.json",
@@ -82,6 +82,31 @@
     {
       "target": ".codex/rules/default.rules",
       "sha256": "3455aef0455a525519617708bdddc315364d0681d08ff13cdca8bfae1978968a"
+    },
+    {
+      "source": "skills/agents-and-main/agents/openai.yaml",
+      "target": ".agents/skills/agents-and-main/agents/openai.yaml",
+      "sha256": "38348ef19b0eed0be5ba637099e04217c18a8cafdd2537ecd22356fd81741e03"
+    },
+    {
+      "source": "skills/agents-and-main/references/project-policy.md",
+      "target": ".agents/skills/agents-and-main/references/project-policy.md",
+      "sha256": "66012a37a3a2a2b4f50ec6b7f4d0c0d3c3ee1452637f4ecb0110bc26c4c383f2"
+    },
+    {
+      "source": "skills/agents-and-main/scripts/install.ps1",
+      "target": ".agents/skills/agents-and-main/scripts/install.ps1",
+      "sha256": "1b20d0c3a441583f19c0d878574d58485688e5ba5a740a9613bf02e60e7e59d3"
+    },
+    {
+      "source": "skills/agents-and-main/scripts/sb.ps1",
+      "target": ".agents/skills/agents-and-main/scripts/sb.ps1",
+      "sha256": "abba45ab23f897a313b98325d6dce643d045ed48842782238a156181467fbc73"
+    },
+    {
+      "source": "skills/agents-and-main/SKILL.md",
+      "target": ".agents/skills/agents-and-main/SKILL.md",
+      "sha256": "07b4ade87b67d4b9996394dcbd5de7449f8df53156f6039ed4d677a442b09f79"
     },
     {
       "source": "skills/github/SKILL.md",
@@ -598,6 +623,10 @@
     {
       "target": ".agents/skills-disabled/wizard/template.sh",
       "sha256": "33cbe9dfb1d0e9185b60248a52aabed14bc64785a00cac695e302e739dd6c153"
+    },
+    {
+      "target": ".claude/skills/memory/SKILL.md",
+      "sha256": "eaf343297eaa86d8dcd536c5890146b7e0383ca54b13586389649a83c1dd104e"
     }
   ],
   "dependencies": [
