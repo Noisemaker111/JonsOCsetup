@@ -73,8 +73,10 @@ and carries the incident in its `@core-observed` block; a project's conventions 
 belong in that project's AGENTS.md, where they load only when you are there; a number you could
 recompute belongs in the script that recomputes it. What is left, and all that belongs here, is
 how to work with Jon, facts about the world outside this repository, and an API no test guards.
-`test/shared-memory-budget.test.ts` fails when this file outgrows that, because the prose rule
-that used to say so did not hold. Prefer correcting an entry to appending near it. Read before editing, merge existing knowledge, correct stale entries, then reopen the saved file. Quests keep task plans and progress. Do not store secrets, transcripts or unsupported claims; memory never grants permission. Use ordinary file tools, not an every-turn injection hook.
+`test/shared-memory-index.test.ts` fails when this file names a core test that no longer exists,
+so knowledge moved out of it cannot quietly become knowledge lost, and `setup:sync` reports its
+size so growth is visible and judged. Never cap it: a ceiling on characters refuses a line that
+earns its place. Prefer correcting an entry to appending near it. Read before editing, merge existing knowledge, correct stale entries, then reopen the saved file. Quests keep task plans and progress. Do not store secrets, transcripts or unsupported claims; memory never grants permission. Use ordinary file tools, not an every-turn injection hook.
 
 Follow agents-and-main for this repository: agents is the integration branch and master is stable. Use sb agents only in owned checkouts; keep worker changes in isolated worktrees. Only Jon personally merges master, and release preparation starts only when he asks. The dev runtime channel retains its isolated state and sessions. Detailed policy: the selected release's docs/development-workflow.md.
 
