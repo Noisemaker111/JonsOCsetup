@@ -3,7 +3,7 @@
  * @core-observed September 13 Codex transcripts contained five blocked docs searches; the Quest MCP list failed Git identity after 15000 ms and advertised quest.quest with a nested create payload.
  */
 import {test,expect} from 'bun:test'
-import {mkdtempSync,mkdirSync,rmSync,readdirSync} from 'node:fs'
+import {mkdtempSync,mkdirSync,rmSync,readdirSync,realpathSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {spawnSync} from 'node:child_process'
@@ -13,7 +13,7 @@ import {codexHook} from '../quest/codex/runtime'
 import {checkoutIndependent,hasCheckout} from '../quest/codex/recovery-workspace'
 import {questMCP} from '../quest/mcp-server'
 
-const fixture=()=>{const root=mkdtempSync(join(tmpdir(),'quest-host-'));const cwd=join(root,'project');mkdirSync(cwd);return {root,cwd,store:new QuestStore(join(root,'ledger'))}}
+const fixture=()=>{const root=realpathSync.native(mkdtempSync(join(tmpdir(),'quest-host-')));const cwd=join(root,'project');mkdirSync(cwd);return {root,cwd,store:new QuestStore(join(root,'ledger'))}}
 test('flat MCP operations use host session metadata and persist a create/update/get round trip',async()=>{
  const {root,cwd,store}=fixture()
  try{
