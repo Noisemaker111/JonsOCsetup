@@ -718,10 +718,9 @@
       ]
     },
     "worker": {
-      "description": "Implementation worker for any dispatched route. Quest dispatch supplies the exact provider, model and reasoning variant, so this role carries the worker permissions rather than a pinned model.",
-      "mode": "subagent",
-      "hidden": true,
-      "model": "openai/gpt-6-astra",
+      "description": "Implementation worker for any dispatched route. Visible in its native session so follow-up prompts preserve the worker role. Quest dispatch supplies the exact provider, model and reasoning variant.",
+      "mode": "all",
+      "hidden": false,
       "permissions": [
         { "action": "subagent", "resource": "*", "effect": "deny" },
         { "action": "edit", "resource": "*", "effect": "allow" },
