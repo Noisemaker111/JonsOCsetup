@@ -10,6 +10,7 @@ import { join } from "node:path"
 import { QuestError,type StartRun } from "./api"
 import { QuestStore } from "./store"
 import { QuestWorkspaces } from "./workspaces"
+import { allocateWorkspace } from "./workspace-allocation"
 import { reserveDispatch, dispatchReservationFile } from "../models/dispatch-planner"
 import { workspaceRunID } from "./change-view"
 import { verifySourceBinding } from "./project"
@@ -28,7 +29,7 @@ export function startQuestRun(store:QuestStore,host:QuestHost,options:{policyFil
   try{mode=workspaceSettings(options.settingsFile).workspaceMode}catch(error){throw new QuestError("WORKSPACE_SETTINGS_INVALID",error instanceof Error?error.message:String(error))}
   if(input.readOnly&&!researchGuardReady(host))throw new QuestError("RESEARCH_GUARD_UNAVAILABLE","The host has no verified read-only research guard; no worker was started")
   const source=editingSource({project:input.context.project,directory},options.policyFile,input.files,{readOnly:input.readOnly})
-  const allocate=(bootstrap?:string[])=>input.readOnly?workspaces.createResearch({runID:input.runID,questID:input.quest.id,directory:source.source,project:source.project}):mode==="shared"?workspaces.createShared({runID:input.runID,questID:input.quest.id,directory:source.source,project:source.project,files:source.files,inheritRunIDs:inherited,store}):workspaces.create({runID:input.runID,questID:input.quest.id,directory:source.source,project:source.project,inheritRunIDs:inherited,bootstrap})
+  const allocate=(bootstrap?:string[])=>allocateWorkspace({runtime:store.runtime,projectRoot:store.projectRoot,...(input.readOnly?{mode:"research" as const,input:{runID:input.runID,questID:input.quest.id,directory:source.source,project:source.project}}:mode==="shared"?{mode:"shared" as const,input:{runID:input.runID,questID:input.quest.id,directory:source.source,project:source.project,files:source.files,inheritRunIDs:inherited}}:{mode:"worktree" as const,input:{runID:input.runID,questID:input.quest.id,directory:source.source,project:source.project,inheritRunIDs:inherited,bootstrap}})})
   const assigned=input.quest.stages.filter(s=>input.stepIDs.includes(s.id))
   if(input.readOnly&&assigned.some(s=>s.commandID))throw new QuestError("RESEARCH_COMMAND_DENIED","Read-only research cannot execute configured commands")
   const dependencyIDs = new Set<string>()
@@ -49,7 +50,7 @@ export function startQuestRun(store:QuestStore,host:QuestHost,options:{policyFil
    if(assigned.some(s=>!s.commandID))throw new QuestError("MIXED_EXECUTION","Run configured command steps separately from model work")
    let workspace:ReturnType<QuestWorkspaces["create"]>
    const sessionID="command_"+input.runID
-   try{const policy=JSON.parse(readFileSync(options.policyFile,"utf8")),commands=assigned.map(s=>configuredCommand(options.policyFile,input.context.project.id,s.commandID!));workspace=allocate(policy.bootstrapByProject?.[input.context.project.id])
+   try{const policy=JSON.parse(readFileSync(options.policyFile,"utf8")),commands=assigned.map(s=>configuredCommand(options.policyFile,input.context.project.id,s.commandID!));workspace=await allocate(policy.bootstrapByProject?.[input.context.project.id])
     if(!input.readOnly)workspaces.assertPreparedSource(workspace)
     store.apply(input.quest.id,"session-claimed",{callID:input.runID,runID:input.runID,sessionID,parentID:input.context.sessionID,agentRole:"command",role:"command",scope:{repo:workspace.root,worktree:workspace.path,branch:workspace.branch,files:workspace.fileScopes??source?.files??input.files??["."],requestedFiles:input.files??["."],readOnly:input.readOnly===true,workspaceMode:workspace.mode??"worktree"}},"quest:command")
     for(const [index,command] of commands.entries()){const step=assigned[index];store.apply(input.quest.id,"stage-state",{stageID:step.id,status:"working"},"quest:command");const result=await runKnownCommand(command,workspace.path,join(store.runtime,"command-logs",input.runID+"-"+index+".log"));const ok=result.exitCode===0&&!result.timedOut;const summary=command.description+": "+(result.timedOut?"timed out":"exit "+result.exitCode)+" in "+result.milliseconds+"ms";store.apply(input.quest.id,"stage-state",{stageID:step.id,status:ok?"done":"blocked",evidence:summary},"quest:command");const q=store.read(input.quest.id)!;store.apply(q.id,"patched",{evidence:{...q.evidence,artifacts:[...q.evidence.artifacts,normalizeArtifact({name:command.description,path:result.logFile,verified:true})]}},"quest:command");if(!ok)throw new QuestError("COMMAND_FAILED",summary)}
@@ -70,7 +71,7 @@ export function startQuestRun(store:QuestStore,host:QuestHost,options:{policyFil
   try{
    if(selected.route.serviceTier!=="default")throw new QuestError("SERVICE_TIER_UNAVAILABLE","The configured service tier cannot be represented by this host adapter; no default tier was substituted")
    if(selected.route.harness!=="native")throw new QuestError("HARNESS_UNAVAILABLE","This dispatch adapter requires a configured native route; the requested harness was not substituted")
-   const workspace=allocate(selected.bootstrapByProject[input.context.project.id])
+   const workspace=await allocate(selected.bootstrapByProject[input.context.project.id])
    const model={providerID:selected.route.providerID,id:selected.route.modelID,...(selected.route.reasoning!=="unknown"?{variant:selected.route.reasoning}:{})}
    const created=unwrap(await host.create({title:"Worker · "+input.quest.title,agent:selected.route.agent??"general",model,location:{directory:realpathSync.native(workspace.path)}}));sessionID=created?.id
    if(!sessionID)throw new QuestError("DISPATCH_OUTCOME_UNKNOWN","Host did not return a worker session identity; workspace and reservation retained")

@@ -85,15 +85,17 @@ function preserveArtifacts(store:QuestStore,q:Quest,workspace:string){
   unlinkSync(source)
  }
 }
-const watching=new WeakSet<object>()
+const watching=new WeakMap<object,()=>void>()
 /** Filesystem/host events, never a cleanup polling interval or cron. */
 export function installQuestCleanup(store:QuestStore,host:object){
- if(watching.has(host))return;watching.add(host)
+ const existing=watching.get(host);if(existing)return existing
  const root=join(store.projectRoot,'.opencode');mkdirSync(root,{recursive:true})
- const gitWatchers=new Set<string>()
- const watchMerges=()=>{const dir=join(store.runtime,'workspaces');for(const file of existsSync(dir)?readdirSync(dir):[]){if(!file.endsWith('.json'))continue;try{const w=JSON.parse(readFileSync(join(dir,file),'utf8'));if(w.mode==='research'||!existsSync(w.root))continue;const common=resolve(w.root,git(w.root,['rev-parse','--git-common-dir']));if(gitWatchers.has(common))continue;const watcher=watch(common,{recursive:true},(_,file)=>{if(file&&/^(refs[/\\]|packed-refs$)/.test(String(file)))trigger()});watcher.unref();watcher.on('error',e=>console.error('[quests] merge cleanup watcher',e));gitWatchers.add(common)}catch(e){console.error('[quests] cleanup watch',e)}}}
+ const gitWatchers=new Set<string>(),watchedRoots=new Set<string>(),mergeWatchers=new Set<ReturnType<typeof watch>>()
+ const watchMerges=()=>{const dir=join(store.runtime,'workspaces');for(const file of existsSync(dir)?readdirSync(dir):[]){if(!file.endsWith('.json'))continue;try{const w=JSON.parse(readFileSync(join(dir,file),'utf8'));if(w.mode==='research'||watchedRoots.has(w.root)||!existsSync(w.root))continue;const common=resolve(w.root,git(w.root,['rev-parse','--git-common-dir']));if(gitWatchers.has(common)){watchedRoots.add(w.root);continue}const watcher=watch(common,{recursive:true},(_,file)=>{if(file&&/^(refs[/\\]|packed-refs$)/.test(String(file)))trigger()});mergeWatchers.add(watcher);watcher.unref();watcher.on('error',e=>console.error('[quests] merge cleanup watcher',e));gitWatchers.add(common);watchedRoots.add(w.root)}catch(e){console.error('[quests] cleanup watch',e)}}}
  let pending:ReturnType<typeof setTimeout>|undefined
  const trigger=()=>{if(pending)return;pending=setTimeout(()=>{pending=undefined;watchMerges();void cleanupQuests(store,host).catch(e=>console.error('[quests] cleanup',e))},100);pending.unref()}
  const watcher=watch(root,{recursive:true},(_,file)=>{if(file&&/^quests(?:-archive)?[/\\].*\.md$/.test(String(file)))trigger()});watcher.unref();watcher.on('error',e=>console.error('[quests] cleanup watcher',e))
  trigger()
+ const dispose=()=>{if(pending)clearTimeout(pending);watcher.close();for(const merge of mergeWatchers)merge.close();watching.delete(host)}
+ watching.set(host,dispose);return dispose
 }

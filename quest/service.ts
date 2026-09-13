@@ -52,15 +52,16 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
   poll('continuation',()=>continuation.tick()),
   poll('return delivery',()=>returns.tick()),
  ]
- installQuestCleanup(store,host)
+ let disposeCleanup:(()=>void)|undefined
  const directory=options.directory?physicalDirectory(options.directory):undefined
  const timer=setInterval(()=>{
   // Worker locations also load this plugin. Only the registered giver's location
   // coordinates the board; workers retain their tools and local host observations.
   if(directory&&readUserGiver(store.runtime)?.directory!==directory)return
+  disposeCleanup??=installQuestCleanup(store,host)
   for(const poll of polls)void poll()
  },5000);timer.unref()
- options.onDispose?.(()=>clearInterval(timer))
+ options.onDispose?.(()=>{clearInterval(timer);disposeCleanup?.()})
  const workspaces=new QuestWorkspaces(store.runtime)
  const seen=new Map<string,SeenRequest>()
  const remember=(key:string,fingerprint:string,waited=false)=>{seen.delete(key);seen.set(key,{fingerprint,waited});if(seen.size>SEEN_LIMIT)seen.delete(seen.keys().next().value as string)}

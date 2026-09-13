@@ -47,3 +47,33 @@ test('locations share one authenticated listener and retiring a worker keeps the
   expect(readdirSync(registry)).toHaveLength(0)
  } finally {worker?.dispose();giver?.dispose();rmSync(root,{recursive:true,force:true})}
 })
+
+/** @core-observed September 13 the fresh host timed out discovery while synchronous workspace preparation admitted a real coding worker. */
+test('workspace installation leaves the actual API listener responsive',async()=>{
+ const {mkdtempSync,mkdirSync,writeFileSync,existsSync,rmSync}=await import('node:fs')
+ const {spawnSync}=await import('node:child_process')
+ const {tmpdir}=await import('node:os')
+ const {join}=await import('node:path')
+ const {QuestStore}=await import('../quest/store')
+ const {allocateWorkspace}=await import('../quest/workspace-allocation')
+ const {serveQuestAPI}=await import('../quest/api-server')
+ const {saveUserGiver}=await import('../quest/giver-registry.mjs')
+ const {discoverQuestAPI}=await import('../quest/client.mjs')
+ const root=mkdtempSync(join(tmpdir(),'quest-responsive-')),repo=join(root,'repo'),store=new QuestStore(join(root,'board'))
+ mkdirSync(repo);writeFileSync(join(repo,'README.md'),'owned fixture')
+ const git=(args:string[])=>{const r=spawnSync('git',['-C',repo,...args],{encoding:'utf8',windowsHide:true});if(r.status!==0)throw Error(r.stderr)}
+ git(['init']);git(['add','.']);git(['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','fixture'])
+ let endpoint:any,preparation:Promise<any>|undefined
+ try{
+  saveUserGiver(store.runtime,{state:'bound',sessionID:'ses_giver',directory:repo})
+  endpoint=await serveQuestAPI(store,{call:async()=>({})} as any,repo)
+  const marker=join(root,'install-started')
+  let complete=false
+  preparation=allocateWorkspace({runtime:store.runtime,projectRoot:store.projectRoot,mode:'worktree',input:{runID:'responsive',questID:'fixture',directory:repo,bootstrap:['bun','-e',`require('node:fs').writeFileSync(${JSON.stringify(marker)},'started');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,1800)`]}}).finally(()=>{complete=true})
+  while(!existsSync(marker)&&!complete)await new Promise(resolve=>setTimeout(resolve,10))
+  expect(complete).toBe(false)
+  expect((await discoverQuestAPI({registry:join(store.runtime,'quest-api'),signal:AbortSignal.timeout(1000)})).url).toBe(endpoint.url)
+  expect(complete).toBe(false)
+  expect((await preparation).bootstrapComplete).toBe(true)
+ }finally{await preparation?.catch(()=>{});endpoint?.dispose();rmSync(root,{recursive:true,force:true})}
+},20000)
