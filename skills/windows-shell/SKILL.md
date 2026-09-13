@@ -120,6 +120,17 @@ So read a range or a search hit. Read a file whole only when you are about to
 rewrite it. If you want it again after a compaction, that is what the session
 ledger is for.
 
+A prefix repeated once per line is the other half of this, and it is the half you
+can actually delete. Print the base once and the leaves under it: run the command
+from the directory so paths come back relative, `Resolve-Path -Relative` when they
+do not, and `rg` from inside the tree rather than passing absolute roots. The same
+holds for data we own -- a field that is always derivable from another is a prefix
+in disguise. `setup/manifest.json` stored every path three times per entry:
+`importedFrom` equalled `target` in all 153 entries and was read by nothing, and
+`source` was `setup/files/` plus `target` in 148 of them. Storing only the five
+exceptions took the file from 60,257 bytes to 32,382 with a byte-identical install
+plan.
+
 Do not try to shave the boilerplate instead. Import blocks are the visible part --
 2,490 import lines reached context in that session, ~35k tokens, 4.7% of this tree --
 but stripping them buys nothing, because `rg -n` charges its line-number prefixes

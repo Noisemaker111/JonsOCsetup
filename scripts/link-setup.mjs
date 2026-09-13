@@ -34,7 +34,7 @@ const wanted = manifest.entries.filter(e => {
 const linked = [], already = [], skipped = [], conflicts = []
 for (const entry of wanted) {
   const target = join(home, entry.target.replaceAll('\\', '/'))
-  const source = join(root, entry.source)
+  const source = join(root, entry.source ?? 'setup/files/' + entry.target)
   if (!existsSync(source)) { skipped.push({target: entry.target, reason: 'source missing'}); continue }
 
   if (existsSync(target) && lstatSync(target).isSymbolicLink()) {

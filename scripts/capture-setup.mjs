@@ -30,7 +30,10 @@ function file(target){
  if(usable(existing))source=existing
  else if(usable(prior))source=prior
  else{source='setup/files/'+target.replaceAll('\\','/');mkdirSync(dirname(join(root,source)),{recursive:true});writeFileSync(join(root,source),bytes)}
- entries.push({source,target:target.replaceAll('\\','/'),sha256:hash(bytes),importedFrom:target.replaceAll('\\','/')})
+ // `source` is stored only when it is not the default, and the target is never repeated back as a
+ // second field: half of this manifest used to be the same path written three times per entry.
+ const rel=target.replaceAll('\\','/')
+ entries.push(source==='setup/files/'+rel?{target:rel,sha256:hash(bytes)}:{source,target:rel,sha256:hash(bytes)})
 }
 function tree(target){if(!existsSync(join(home,target)))return;for(const e of readdirSync(join(home,target),{withFileTypes:true})){if(['node_modules','.git','__pycache__'].includes(e.name))continue;const path=join(target,e.name);if(e.isDirectory())tree(path);else if(e.isSymbolicLink()){if(existsSync(join(home,path))&&statSync(join(home,path)).isDirectory())omitted.push({path,reason:'directory link requires explicit mapping'});else file(path)}else file(path)}}
 // .agents/quest.mjs and its filing alias are the shared Quest board's entry point for every
@@ -63,4 +66,4 @@ if(existsSync(claudeSkills))for(const e of readdirSync(claudeSkills,{withFileTyp
  else tree(path)
 }
 writeFileSync('setup/manifest.json',JSON.stringify({schema:1,name:'JonsOCsetup',entries,dependencies,omitted,excluded:['credentials and account tokens','session databases and logs','Quest runtime journals','generated plugin generations and caches','upstream host binaries and source checkouts']},null,2)+'\n')
-console.log(JSON.stringify({mappedFiles:entries.length,bytes:entries.reduce((n,e)=>n+statSync(join(root,e.source)).size,0),dependencies:dependencies.length,omitted}))
+console.log(JSON.stringify({mappedFiles:entries.length,bytes:entries.reduce((n,e)=>n+statSync(join(root,e.source??'setup/files/'+e.target)).size,0),dependencies:dependencies.length,omitted}))

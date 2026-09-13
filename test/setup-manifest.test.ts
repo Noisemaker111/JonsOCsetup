@@ -14,9 +14,10 @@ test("every manifest entry points at bytes that still hash to what it recorded",
   const stale: string[] = []
   const absent: string[] = []
   for (const entry of manifest.entries) {
-    if (!existsSync(entry.source)) { absent.push(entry.target); continue }
-    const actual = createHash("sha256").update(readFileSync(entry.source)).digest("hex")
-    if (actual !== entry.sha256) stale.push(`${entry.target} (${entry.source})`)
+    const source = entry.source ?? `setup/files/${entry.target}`
+    if (!existsSync(source)) { absent.push(entry.target); continue }
+    const actual = createHash("sha256").update(readFileSync(source)).digest("hex")
+    if (actual !== entry.sha256) stale.push(`${entry.target} (${source})`)
   }
   // Named rather than counted: the point of failing is to say which file to re-capture.
   expect(absent).toEqual([])
