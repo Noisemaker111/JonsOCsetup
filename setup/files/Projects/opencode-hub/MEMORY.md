@@ -16,7 +16,7 @@ delete a wrong one, keep the evidence. User instructions outrank memory.
   differ the moment a dash or a quote is not ASCII.
 - Luna medium is prohibited for every role, selection, verification, fallback and resume — no
   lower-effort workaround, no alias for unsupported max. Astra medium is independently authorized.
-  `access-policy.json` owns enforcement.
+  `models/access-policy.json` owns enforcement.
 - Routine worker permission reviews go to a lower-cost capable reviewer from his own routes, chosen
   via `/quest-reviewer` and retained for the giver session. Keep them out of the SOTA giver
   conversation; escalate only new decisions. Manual approval stays as a fallback.
@@ -35,8 +35,8 @@ Model and route resolution
 - Native provider reasoning belongs under `settings.providerOptions.reasoningEffort`. Flat
   `settings.reasoningEffort` was silently dropped while the UI still displayed xhigh. A session label
   is not wire-level effort evidence.
-- `nimbus_quill` (Fable) reports `usedPoints: 0` with no reset across 2,390 observations. No signal,
-  not headroom.
+- `nimbus_quill` (Fable) reports `usedPoints: 0` with no reset across every observation ever taken
+  (2,764 and counting). No signal, not headroom.
 
 Harnesses and drives
 
@@ -52,10 +52,8 @@ Harnesses and drives
 - `prepare dev --ref agents` resolves a stale local ref and builds the wrong commit. Pass
   `--ref origin/agents` after fetching. Activation's tree check makes a candidate stale the moment
   anything else merges, so prepare, gate and activate in one pass while the branch is quiet.
-- A fake-host unit test cannot tell you a route is being hijacked before the hook runs. Drive the
-  real TUI.
-- A slash alias can collide with a host command and silently open the wrong screen (`/time` opened
-  the host Timeline). Verify an alias by typing it in the real TUI.
+- A fake-host unit test cannot tell you a route is being hijacked before the hook runs, and a slash
+  alias can collide with a host command and silently open the wrong screen. Drive the real TUI.
 - Read the installed gate report, not just its exit code. A timeout watching the first giver, or a
   same-title empty Quest, is not evidence that the worker failed.
 
@@ -80,7 +78,8 @@ Measurement
 - Dispatch dominates every tool that writes: median `patch` is 7.74s dispatch against 11ms
   execution, `write` 2.12s against 12ms. Fewer, larger calls are the only thing that moves it.
 - Recorded tool duration includes time blocked on human approval, so a tool can look slow when it
-  never ran. 19 calls of 39,597 held 53.1% of all turn wall time; `glob`'s median execution is 79ms.
+  never ran. Nineteen calls hold over half of all turn wall time and eighteen of them ended in error;
+  `glob` leads them and its median execution is under 100ms. Re-derive before quoting a figure.
 - An interrupted call's `completed` is stamped when the abort lands, so its span measures how long an
   abandoned call went uncollected, never execution.
 - The host creates an assistant message lazily on the provider's first output event, so request
