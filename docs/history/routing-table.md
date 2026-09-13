@@ -1,3 +1,5 @@
+> Historical record from the earlier setup. Model defaults, prices, account limits, paths, and assignments below are not current instructions. Use [model selection](../account-aware-routing.md) and the user's live settings.
+
 # Model routing (Allbot + OpenCode)
 
 Source of truth for *which model and which thinking level* to send a job to. Read this before dispatching.

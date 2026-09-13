@@ -18,6 +18,4 @@ not a generated model catalog. Model inventory refresh must not overwrite it.
 - Reasoning effort is chosen, not fixed. A dispatch names what kind of work it is (`task` on `quest run`: coding, review, planning, utility), and the class sets only how much published accuracy the work may trade away. Which model and which effort that yields comes from the live per-effort board and the recorded per-effort consumption, never from a written-down pairing. Omitting `task` is safe and means the default coding demand; a read-only research run is classified `review` by its enforced access mode. State `planning` when the work is deciding what to do and `utility` when it is a bounded status or mechanical check.
 - Runtime restrictions can still reject an authorized choice. Report that limitation without inventing a substitute or claiming that the user's payment preference is invalid.
 
-When maintaining the config repository, see docs/account-aware-routing.md for
-the planner's integration status and docs/quest-cleanup-review.md for the
-user-owned routing design. Neither document proves that planned routing is live.
+When maintaining this repository, see [model selection and measurements](../../docs/account-aware-routing.md). User-editable policy owns the objective: economy, speed, capacity, and explicit choices are distinct. No old routing table or dated model assignment overrides that policy.

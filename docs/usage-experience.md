@@ -1,3 +1,5 @@
+> Historical record: this is a dated investigation or implementation receipt, not current operating instructions. Its pending work, model choices, commands, and verification counts describe that run. Use the [current documentation](README.md).
+
 # Usage evidence experience — implementation and acceptance handoff
 
 Date: 2026-09-09 UTC. Quest `57ec514763d0e1ecec35c8bc29`, assigned step

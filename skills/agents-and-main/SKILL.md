@@ -42,13 +42,13 @@ A branch alone does not isolate production. Trace the running frontend through i
 
 Implement the project's authorized branch protections, CI and deployment mapping. Make production consume only reviewed revisions merged into the stable branch. If unattended integration is requested, configure and exercise an actual CI job or coordinator. Written instructions and a platform's auto-merge toggle do not prove that a job runs or that its checks protect the correct branch. Do not introduce privileged execution of untrusted PR code.
 
-Before calling adoption complete, reopen the saved root `AGENTS.md` and follow its policy link to confirm the workflow is discoverable and consistent. Verify adoption with a small real dev change: checks pass, its PR merges into dev, the dev environment serves the result, and production retains its prior code identity and isolated data. Report any missing enforcement precisely.
+Before calling adoption complete, reopen the saved root `AGENTS.md` and follow its policy link to confirm the workflow is discoverable and consistent. Verify adoption with a small real dev change: checks pass, its PR merges into `agents`, the dev environment serves the result, and production retains its prior code identity and isolated data. Report any missing enforcement precisely.
 
 ## Own the agents loop
 
-1. Start from current dev in an owned checkout. Reuse a PR already handling the same work. The parent prepares the runtime and declared dependencies before dispatching workers; unexpected setup failures return to the parent for repair.
+1. Start from current `agents` in an owned checkout. Reuse a PR already handling the same work. The parent prepares the runtime and declared dependencies before dispatching workers; unexpected setup failures return to the parent for repair.
 2. Implement the requested change and run the project's required checks plus a real check of the affected user operation. Use test data and the configured dev host. Scale verification to the change; documentation edits do not require an unrelated application rebuild unless repository gates require it.
-3. Commit only owned changes and create or update a ready PR targeting dev. Inspect the actual diff, current head, base, required checks and mergeability. Within the recorded authorization, merge when those conditions pass. Resolve failures instead of bypassing checks. If the head changes, validate the new revision before merging.
+3. Commit only owned changes and create or update a ready PR targeting `agents`. Inspect the actual diff, current head, base, required checks and mergeability. Within the recorded authorization, merge when those conditions pass. Resolve failures instead of bypassing checks. If the head changes, validate the new revision before merging.
 4. Verify the merged result through the configured dev build or runtime. Distinguish saved source, merged PR, deployed artifact and loaded process. For delegated work, confirm that the original coordinator receives the saved result automatically when automatic returns are part of the project workflow.
 5. Report the result and any remaining limitation. Continue to completion within the authorized dev scope without asking the user to perform routine technical review.
 
@@ -66,7 +66,7 @@ release PR number. The human still personally performs the stable merge.
 
 ## Prepare a deliberate stable release only when requested
 
-Prepare a concrete release candidate from a specific verified dev revision. Open a release PR against stable and freeze the candidate so later dev work cannot silently join an approved batch. Review the entire candidate's diff against stable, including changes from other contributors.
+Prepare a concrete release candidate from a specific verified `agents` revision. Open a release PR against stable and freeze the candidate so later dev work cannot silently join an approved batch. Review the entire candidate's diff against stable, including changes from other contributors.
 
 Automatically generate patch notes for the exact frozen release candidate from its merged PRs/changes, attach them to the release PR, and run release CI. Keep evidence and behavior claims grounded in the actual changes; mark unverified migrations or effects instead of inventing them. Preserve the candidate when later agents commits arrive; prepare a separate next batch. Provide a short demonstration or acceptance check, applicable migration steps, rollout checks and a rollback target. Check frontend and backend compatibility separately, including old clients during rollout. Prefer compatible migration stages; reverting application code does not undo a destructive data migration.
 

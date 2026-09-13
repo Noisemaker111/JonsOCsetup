@@ -32,7 +32,7 @@ Load `config/skills/opencode/SKILL.md` first. It holds the brick invariants (the
 - **Custom models, providers, routing**: provider blocks in `config/opencode.jsonc` (declare `limit: { context, output }` for providers the catalog does not know), the `config/models/` plugin, `config/cliproxyapi/` for the proxy, `config/skills/model-routing` for policy.
 - **New workflow**: a skill at `config/skills/<name>/SKILL.md` whose description says when it applies, or Quest steps (`config/quest/`, `config/skills/workspace-flow`). Harnesses that drive other coding CLIs live in `config/harnesses/`.
 - **Things to remember**: one line in `config/AGENTS.md` only if it must hold in every project. Otherwise this file, or the skill that owns the topic.
-- **Ship**: from `config/`, `bun scripts/plugin-deploy.ts --no-publish --no-prune` builds an immutable generation under `config/generations/` and points `plugin-activation.json` at it. Terminals already open keep their old generation until restart. Dropping `--no-publish` pushes public mirrors and needs authorization.
+- **Integrate and activate**: follow `config/docs/development-workflow.md` for the managed channel, its acceptance evidence, and the actual selected source. Low-level `plugin-deploy.ts` builds a local generation; it does not publish mirrors or prove that a running terminal loaded it.
 
 ## Debugging a session
 
@@ -78,7 +78,7 @@ so knowledge moved out of it cannot quietly become knowledge lost, and `setup:sy
 size so growth is visible and judged. Never cap it: a ceiling on characters refuses a line that
 earns its place. Prefer correcting an entry to appending near it. Read before editing, merge existing knowledge, correct stale entries, then reopen the saved file. Quests keep task plans and progress. Do not store secrets, transcripts or unsupported claims; memory never grants permission. Use ordinary file tools, not an every-turn injection hook.
 
-Follow agents-and-main for this repository: agents is the integration branch and master is stable. Use sb agents only in owned checkouts; keep worker changes in isolated worktrees. Only Jon personally merges master, and release preparation starts only when he asks. The dev runtime channel retains its isolated state and sessions. Detailed policy: the selected release's docs/development-workflow.md.
+Follow agents-and-main for this repository: agents is the integration branch and main is stable. Use sb agents only in owned checkouts; keep worker changes in isolated worktrees. Only Jon personally merges main, and release preparation starts only when he asks. The dev runtime channel retains its isolated state and sessions. Detailed policy: the selected release's docs/development-workflow.md.
 
 ## File intent before acting on it
 

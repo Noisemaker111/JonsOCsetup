@@ -1,3 +1,5 @@
+> Historical proposal, not installed authorization. The current repository policy is [development workflow](../../docs/development-workflow.md).
+
 # Proposed standing authorization: OpenCode hub dev
 
 Scope: the OpenCode hub, its configuration repository, owned worktrees, supporting local Codex adapters, and Noisemaker111/opencode-config on GitHub.

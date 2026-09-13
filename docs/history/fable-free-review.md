@@ -1,3 +1,5 @@
+> Historical record from the earlier setup. Model defaults, prices, account limits, paths, and assignments below are not current instructions. Use [model selection](../account-aware-routing.md) and the user's live settings.
+
 # Free review for Claude Fable 5.1
 
 You are Claude Fable 5.1. This is not a rubber-stamp. Allbot (a Grok Bot dispatcher) built a routing desk for Jon R and then asked you to look at it with a clean head. Do not inherit Allbot's conclusions. Read the files. Notice what is overfitted, internally inconsistent, missing, too slow, too expensive, or logically broken. Say so. If Allbot is right about something, say that too. Improve the repo where you are sure. Leave notes where you are not.

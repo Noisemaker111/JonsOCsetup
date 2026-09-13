@@ -2,11 +2,7 @@
 
 This repository's stable branch is `main`. `agents` is the integration branch.
 
-`main` was established on 2026-09-11 from a verified `agents` revision. The former stable branch,
-`master`, shares no common ancestor with `agents` -- separate root commits, 462 commits against 134,
-because `agents` was seeded from the live working tree rather than branched from `master`. No merge
-between them could fast-forward, so a stable release was impossible without a force. `master` is
-preserved at the tag `legacy/master-20260911` and is no longer a release target.
+The repository uses `agents` for integration and `main` for the published baseline. Legacy branch names in dated receipts are historical, not current targets.
 These rules apply to OpenCode2 configuration and extensions, not other projects.
 
 The agent owns the full change: inspect existing work and PRs, use an isolated
@@ -108,14 +104,12 @@ a checkout you own. Stable is `main`, so use `sb main`, or `git switch main` fol
 The agents branch replaces dev. The existing runtime channel is still called dev:
 `oc`, `.channels/dev.json`, and its isolated state are runtime identities, not Git
 branches. Keeping those identities preserves real sessions, Quests and queued work.
-Activation validates the candidate against origin/agents. Stable source and runtime
-are unchanged by this branch migration; the open stable-pointer repair owns the
-remaining stable launcher work.
+Activation validates the candidate against origin/agents. The branch choice and selected runtime are separate; inspect their recorded identities rather than inferring one from the other.
 
 Eligible contributors have current GitHub write, maintain or admin permission;
 bots additionally need recorded maintainer authorization. The authorized coordinator
-reviews the current head and diff, verifies actual app evidence, waits for the
-required `core` CI check and mergeability, then merges the exact head into agents.
+reviews the current head and diff, verifies the affected user operation, and queues
+`gh pr merge --auto --merge` so GitHub merges after the required `core` check passes.
 No privileged CI executes PR code. This coordinator is the integration mechanism;
 there is no unattended merge service. Stable releases are human-only.
 
@@ -186,8 +180,7 @@ banner says by how many commits.
 ## Running any other branch
 
 `oc <branch>` prepares a dev candidate from that branch and launches it. It does not
-gate and does not activate: `.channels/dev.json` is untouched, so `oc` with no branch
-keeps running the release that was actually accepted, and `activate` keeps its two
+gate and does not activate: `.channels/dev.json` is untouched, so plain `oc` keeps its saved branch/gated preference, and `activate` keeps its two
 acceptance runs and its origin/agents tree check. Preparation is the only cost -- a
 worktree, one frozen lockfile restore, and one real prompt to the configured model --
 and it is paid once per commit, because a second `oc <branch>` on the same commit
