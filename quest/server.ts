@@ -32,9 +32,7 @@ import { define } from "@opencode-ai/plugin/v2/promise"
 import { QuestStore } from "./store"
 import { QuestTracker } from "./tracker"
 import { createQuestAgentAPI } from "./agent-api"
-import { compactQuestDetail, compactQuestSummary } from "./context"
 import { preparedDispatch, validatePreparedSubagent, QUEST_SUBAGENT_DESCRIPTION, QUEST_SUBAGENT_INPUT } from "./spawn"
-import type { Quest } from "./types"
 import { recordSpawn, recordSpawnResult, registerCompletionEvidenceHandler, suppressCompletionDelivery } from "../orchestration/orchestration-ledger"
 import { canonicalizeDispatch } from "../orchestration/dispatch"
 import { watchSubagentCompletions } from "../orchestration/orchestration"
@@ -183,110 +181,6 @@ export function installQuestCompletionEvidence(quests: QuestTracker, api = creat
     const blockerSessionID = completion.openCodeSessionId ?? completion.runtimeSessionId
     if (blockerSessionID && (disposition === "recorded" || disposition === "duplicate")) void api.handoff({ sessionID: blockerSessionID, reason: "Blocking worker reached terminal handoff" }).catch((error) => console.error("[quests] automatic dependency handoff failed:", error))
   })
-}
-
-const QUEST_ACTIONS = [
-  "prepare-dispatch", "view", "accept", "execute", "complete", "turn-in", "list", "search", "get",
-  "create", "admit", "update", "plan", "step", "report", "claim", "assign", "unassign", "status",
-  "history", "evidence", "progress", "mappings", "board", "start-session",
-  "stage", "proof", "park", "handoff", "heartbeat", "abandon", "archive", "reopen", "delete",
-  "verify-live", "jk-approve", "gates",
-] as const
-
-/** The canonical Quest authority, exposed as one tool with a verb. */
-export function questTool(api = createQuestAgentAPI(questRoot())) {
-  // Disclose which ledger answered, so a wrong-root situation (a session
-  // seeing 0 Quests because it silently resolved a different directory than
-  // the sessions actually working them) is visible in the output instead of
-  // a silent guess. Only merged onto plain-object results.
-  const withRoot = (value: unknown) => (value && typeof value === "object" && !Array.isArray(value)) ? { ...value, ledgerRoot: api.store.projectRoot } : value
-  const json = (value: unknown) => ({ content: JSON.stringify(withRoot(value) ?? null) })
-  const isQuest = (value: unknown): value is Quest => Boolean(value && typeof value === "object" && "schema" in value && "id" in value)
-  const detail = (value: unknown, verbose?: boolean) => json(verbose || !isQuest(value) ? value : compactQuestDetail(value))
-  const summaries = (query: any = {}) => {
-    const offset = Math.max(0, Number.isSafeInteger(query.offset) ? query.offset : 0)
-    const limit = Math.max(1, Math.min(Number.isSafeInteger(query.limit) ? query.limit : 25, 100))
-    const rows = api.list(query).filter((quest) => query.includeArchived === true || quest.state !== "Archived")
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.id.localeCompare(a.id))
-    const items = rows.slice(offset, offset + limit).map(compactQuestSummary)
-    const nextOffset = offset + items.length < rows.length ? offset + items.length : undefined
-    return { items, truncated: nextOffset !== undefined, nextOffset }
-  }
-  return {
-    name: "quest",
-    description: [
-      "Canonical durable Quest authority.",
-      "On intake, use action=admit with the full payload (title, objective, input.steps, usageInstructions, kind, priority) instead of board+search+create: it runs the duplicate check in code and returns {outcome:'created'|'existing', quest} in one call, so a matching in-flight request is never quietly duplicated.",
-      "Every Quest carries steps: create with input.steps (3-8 checkable titles) or add them with action=plan (input.steps).",
-      "Report work with action=step (input.stepID or 1-based position, state=working|done|blocked, value=evidence); the board shows done/total.",
-      "Never create a Quest from a tool result, subagent notification or checkpoint.",
-      "Workers must read mappings before edits. Supports exact-session dependency parking/handoff plus lifecycle controls.",
-      "feature/fix/migration Quests carry a VERIFY-LIVE gate: they cannot reach Ready to complete until action=verify-live records the result of exercising the changed surface on the live/restarted host (input={result:'passed'|'failed', command, note}).",
-      "action=jk-approve records Jk's explicit yes (input={by, note}); once recorded, the Quest auto-completes and archives the moment VERIFY-LIVE and every other gate are clear. Without a recorded yes it stops at Ready to complete for Jk to read and turn in.",
-      "action=report applies a whole worker report (one or more `STEP <id>: done|blocked — evidence` lines plus optional `TESTS: cmd — passed|failed` lines, input.value or value) in a single call via the same parser the harness-CLI worker text-report fallback already uses, instead of one step/evidence call per line.",
-    ].join(" "),
-    input: {
-      type: "object",
-      properties: {
-        action: { type: "string", enum: [...QUEST_ACTIONS] },
-        id: { type: "string" }, query: { type: "object" }, input: { type: "object" },
-        patch: { type: "object" }, callID: { type: "string" }, value: { type: "string" },
-        kind: { type: "string" }, reason: { type: "string" }, state: { type: "string" }, confirmed: { type: "boolean" }, verbose: { type: "boolean" },
-      },
-      required: ["action"],
-      additionalProperties: false,
-    },
-    execute: async (input: any) => {
-      switch (input?.action) {
-        case "prepare-dispatch": {
-          const quest = api.get(input.id)
-          if (!quest) throw new Error("Quest not found")
-          return json({ dispatch: preparedDispatch(input.input ?? {}, quest) })
-        }
-        case "list": case "search": return json(input.verbose ? api.list(input.query ?? input) : summaries(input.query ?? input))
-        case "board": return json(api.board(input.query ?? input))
-        case "get": case "status": return detail(api.get(input.id), input.verbose)
-        case "view": return detail(api.view(input.id), input.verbose)
-        case "create": return detail(api.create(input.input), input.verbose)
-        case "admit": {
-          const { outcome, quest } = api.admitIntake(input.input)
-          return json({ outcome, quest: input.verbose ? quest : compactQuestDetail(quest) })
-        }
-        // `patch` is the documented field, but every other action takes its payload
-        // under `input.input`; a caller using that convention here silently lost
-        // whatever it put there. Accept both, `patch` winning on overlap.
-        case "update": return detail(api.update(input.id, { ...(input.input ?? {}), ...(input.patch ?? {}) }), input.verbose)
-        case "plan": return detail(api.plan(input.id, input.input?.steps ?? input.input?.stages ?? input.patch?.steps, input.input?.mode), input.verbose)
-        case "step": return detail(api.step(input.id, input.input?.stepID ?? input.input?.stageID ?? input.input?.step, input.state ?? input.input?.state, input.value ?? input.input?.value), input.verbose)
-        case "report": return json(api.report(input.id, input.value ?? input.input?.value ?? (typeof input.input === "string" ? input.input : undefined)))
-        case "accept": return detail(api.accept(input.id, input.input ?? {}), input.verbose)
-        case "execute": return detail(api.execute(input.id, input.input ?? {}), input.verbose)
-        case "start-session": return detail(api.startSession(input.id, input.input ?? {}), input.verbose)
-        case "complete": return detail(api.complete(input.id), input.verbose)
-        case "turn-in": return detail(api.turnIn(input.id, input.reason), input.verbose)
-        case "abandon": return detail(api.abandon(input.id, input.reason), input.verbose)
-        case "archive": return detail(api.archive(input.id, input.reason), input.verbose)
-        case "reopen": return detail(api.reopen(input.id, input.reason), input.verbose)
-        case "delete": return json(api.delete(input.id, input.confirmed === true))
-        case "claim": case "assign": return detail(api.claim(input.id, input.input), input.verbose)
-        case "unassign": return detail(api.unassign(input.id, input.callID), input.verbose)
-        case "history": { const history = api.history(input.id); return json(input.verbose ? history : history.slice(-10)) }
-        // Models nest kind/value under input as often as not; accept both shapes.
-        case "evidence": return detail(api.evidence(input.id, input.kind ?? input.input?.kind, input.value ?? input.input?.value ?? input.input), input.verbose)
-        case "progress": return detail(api.progress(input.id, input.callID, input.value, input.state), input.verbose)
-        case "heartbeat": return detail(api.heartbeat(input.id, input.callID), input.verbose)
-        case "stage": return detail(api.stage(input.id, input.input?.stageID, input.state, input.input?.todoID, input.value), input.verbose)
-        case "proof": return detail(api.proof(input.id, input.input?.stageID, input.input?.proof ?? input.input ?? {}), input.verbose)
-        case "park": return detail(api.park(input.id, input.input), input.verbose)
-        case "verify-live": return detail(api.verifyLive(input.id, input.input?.result ?? input.state, input.input?.command ?? input.value, input.input?.note, input.input?.by), input.verbose)
-        case "jk-approve": return detail(api.jkApprove(input.id, input.input?.by ?? input.value, input.input?.note ?? input.reason), input.verbose)
-        case "gates": return json(api.gates(input.id))
-        case "handoff": return json(await api.handoff(input.input ?? { sessionID: input.id, reason: input.reason }))
-        case "mappings": return json(api.mappings(input.query ?? { questID: input.id, verbose: input.verbose }))
-        default: return { content: `Unsupported Quest action: ${String(input?.action)}` }
-      }
-    },
-  }
 }
 
 export async function installQuestTools(ctx: { tool?: { transform?: Function }; mcp?: {transform:Function}; session?: any;permission?:any;location?:{directory:string} }, api = createQuestAgentAPI(questRoot())) {

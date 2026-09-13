@@ -9,16 +9,17 @@ import {questRoot} from './root'
 import {questsAPI,QuestError} from './api'
 import {projectIdentity} from './project'
 import {coordination} from './coordination'
-import {QUEST_TOOL_INPUT} from './tool-schema.mjs'
+import {questOperations} from './operations.mjs'
 import {validateToolSchema} from './codex/validate-schema.mjs'
 import {consumeTicket} from './codex/runtime'
 import {toolSummary,toolDetail,toolSection} from './tool-projection'
 const instructions='Quest stores shared titles, descriptions, plans, status and deliverables. Use quest list/get/create/update; hooks handle checkout ownership and host context. Work in this session and keep decisions here. Record actual checks and attach deliverables. Implementation, verification and integration are separate steps. Use inspect for full records and ownership diagnostics. Do not use OpenCode dispatch.'
 export function questMCP(options:{store?:QuestStore}={}){
  const store=options.store??new QuestStore(questRoot())
- const schema:any=structuredClone(QUEST_TOOL_INPUT)
- schema.properties.action.enum=['list','get','create','update','inspect']
- delete schema.properties.run
+ // The existing Codex ticket adapter retains its host boundary, using the public field definitions.
+ const schema:any={type:'object',properties:{action:{type:'string',enum:['list','get','create','update','inspect']},id:{type:'string'},query:structuredClone(questOperations.list.input),inspect:structuredClone(questOperations.get.input.properties.inspect),create:structuredClone(questOperations.create.input),update:structuredClone(questOperations.update.input)},required:['action'],additionalProperties:false}
+ delete schema.properties.update.properties.id
+ schema.properties.update.required=[]
 
  for(const k of ['preference','workspaceMode','cancelContinuation'])delete schema.properties.update.properties[k]
 

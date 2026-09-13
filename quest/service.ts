@@ -1,4 +1,5 @@
 import { consumeQuestStarts, requestQuestStart, requestQuestReview } from './start-request'
+import { devQueueGeneration } from './runtime-queues'
 import { questOperations, coordinatorInput } from './operations.mjs'
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv-provider.js'
 import { readUserGiver } from './giver-registry.mjs'
@@ -87,7 +88,7 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
   if(!isWorker&&userGiverID(store)&&userGiverID(store)!==context.sessionID&&['create','update','run','start'].includes(input.action))throw new QuestError('SINGLE_GIVER_REQUIRED','Continue in your one Quest Giver: '+userGiverID(store))
   const trusted=isWorker?{project:workerLedgerProject(store,context.sessionID,directory,input.id)??projectIdentity(directory),directory:physicalDirectory(directory),sessionID:context.sessionID,requestID}:giverContext(store,{...(session?.data??session),id:context.sessionID},requestID,input.id,input.action==='create')
   if(!isWorker&&trusted.giverDirectory&&input.id)adoptQuestGiver(store,input.id)
-  if(input.action==='start'){questsAPI(store,trusted,start).get(input.id);return requestQuestStart(store,input.id)}
+  if(input.action==='start'){questsAPI(store,trusted,start).get(input.id);return requestQuestStart(store,input.id,devQueueGeneration())}
   if(input.action==='run'){
    if((input.run?.maxConcurrent!==undefined||input.run?.stepModels!==undefined)&&input.run?.continue!==true)throw new QuestError('INVALID_INPUT','Parallel options require run.continue')
    if((input.run?.maxConcurrent??1)>1&&workspaceSettings(options.settingsFile).workspaceMode!=='worktree')throw new QuestError('WORKSPACE_MODE_REQUIRED','Parallel continuation requires isolated worktrees')
@@ -148,7 +149,7 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
    }
    if(waited)result={...result,waited}
    collectWorkflowOutcomes(store)
-   if(input.action==='update'&&!isWorker)requestQuestReview(store,input.id)
+   if(input.action==='update'&&!isWorker)requestQuestReview(store,input.id,devQueueGeneration())
    return JSON.parse(JSON.stringify(result))
  }}
 }

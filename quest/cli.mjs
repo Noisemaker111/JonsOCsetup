@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { pathToFileURL } from 'node:url'
+import { realpathSync } from 'node:fs'
 import { questOperations } from './operations.mjs'
 import { createQuestClient } from './client.mjs'
 
 const flag = key => '--' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase())
 export function questHelp(method) {
-  if (!method) return ['quest <operation> [arguments]', '', ...Object.entries(questOperations).map(([name, op]) => `  ${name} ${op.positional.map(key => '<' + key + '>').join(' ')}\n    ${op.description}`), '', 'Use quest <operation> --help for arguments. Results are JSON.'].join('\n')
+  if (!method) return ['quest <operation> [arguments]', '', ...Object.entries(questOperations).map(([name, op]) => `  ${name} ${op.positional.map(key => '<' + key + '>').join(' ')}\n    ${op.description}`), '', '  mcp\n    Serve the same operations over MCP stdio.', '', 'Use quest <operation> --help for arguments. Results are JSON.'].join('\n')
   const op = questOperations[method]
   if (!op) throw Error('Unknown Quest operation: ' + method)
   return [`quest ${method} ${op.positional.map(key => '<' + key + '>').join(' ')}`, op.description, '', ...Object.entries(op.input.properties).filter(([key]) => !op.positional.includes(key)).map(([key, schema]) => `  ${flag(key)} <${schema.type ?? 'JSON'}>${op.input.required.includes(key) ? ' (required)' : ''}${schema.description ? '\n    ' + schema.description : ''}`)].join('\n')
@@ -42,7 +43,7 @@ export async function runQuestCLI(args, client = createQuestClient()) {
   return JSON.stringify(await client[method](input))
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   try { const result = await runQuestCLI(process.argv.slice(2)); if (result !== undefined) console.log(result) }
   catch (error) { console.error(JSON.stringify({ code: error.code ?? 'INVALID_INPUT', message: error.message })); process.exitCode = 1 }
 }

@@ -2,6 +2,7 @@ import { QuestError } from './api'
 import type { Quest } from './types'
 
 export type QuestWorkflow = {
+  readOnly?: boolean
   task?: 'coding' | 'review' | 'planning' | 'utility'
   model?: string
   maxConcurrent?: number
@@ -12,7 +13,8 @@ export type QuestWorkflow = {
 export function parseWorkflow(value: unknown): QuestWorkflow {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new QuestError('INVALID_INPUT', 'workflow must be an object')
   const input = value as Record<string, unknown>
-  if (Object.keys(input).some(key => !['task', 'model', 'maxConcurrent', 'delivery'].includes(key))) throw new QuestError('INVALID_INPUT', 'Unknown workflow setting')
+  if (Object.keys(input).some(key => !['readOnly', 'task', 'model', 'maxConcurrent', 'delivery'].includes(key))) throw new QuestError('INVALID_INPUT', 'Unknown workflow setting')
+  if (input.readOnly !== undefined && typeof input.readOnly !== 'boolean') throw new QuestError('INVALID_INPUT', 'workflow.readOnly must be a boolean')
   if (input.task !== undefined && !['coding', 'review', 'planning', 'utility'].includes(String(input.task))) throw new QuestError('INVALID_INPUT', 'Unknown workflow task')
   if (input.model !== undefined && (typeof input.model !== 'string' || !input.model.trim())) throw new QuestError('INVALID_INPUT', 'workflow.model must be an exact route')
   if (input.maxConcurrent !== undefined && (!Number.isSafeInteger(input.maxConcurrent) || Number(input.maxConcurrent) < 1)) throw new QuestError('INVALID_INPUT', 'workflow.maxConcurrent must be a positive integer')

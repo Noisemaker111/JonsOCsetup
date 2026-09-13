@@ -67,7 +67,7 @@
     "quest/command-runtime.ts",
     "usage/telemetry-api.ts",
     "quest/api.ts",
-    "quest/tool-schema.mjs",
+    "quest/operations.mjs",
     "usage/benchmark-evaluation.ts",
     "quest/worker-observation.mjs",
     "quest/giver-public.ts",

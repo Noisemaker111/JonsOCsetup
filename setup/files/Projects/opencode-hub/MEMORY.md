@@ -68,8 +68,8 @@ home: a test fails when the behaviour regresses, and it costs nothing to carry. 
   `new-conversation-succeeds-giver`, `giver-discovery-scan`
 - Tracked setup hashes and links — `setup-manifest`
 
-Two things are APIs rather than invariants, so no test guards them. The Quest board is importable:
-`openBoard()` from `~/.agents/quest-api.mjs` returns plain data and throws `BoardError` with a `code`,
-so never spawn a process to parse text back. And the typed quest tool forwards `run`'s arguments as an
-explicit field list at two call sites in `quest/typed-tool.ts`, so a new field stays invisible to the
-giver until both are updated.
+Quest operations share one contract exposed through the installed `quest` CLI and
+the `quests` MCP namespace. Agents use those interfaces; implementation files are
+internal. The giver stays in the hub and the runtime resolves its reviewed source
+mapping for workers. Models remain user-selectable settings; omitted selections use
+task-based routing.

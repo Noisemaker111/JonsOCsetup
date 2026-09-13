@@ -86,7 +86,8 @@ Follow agents-and-main for this repository: agents is the integration branch and
 When Jon states something he wants, file it as a draft Quest **before** you start work on it, in
 the same turn he says it:
 
-    bun ~/.agents/quest.mjs file "<outcome, not activity>" "<what he actually asked for>" [step]...
+Use the `quests.create` MCP operation in OpenCode Code Mode, or the installed
+`quest create` command. `quest create --help` describes its generated arguments.
 
 This is not bookkeeping. Your session is not durable: when it ends or compacts, anything not on the
 board is gone, and Jon has to notice the gap and say it again. That has already happened — the bad
@@ -97,18 +98,18 @@ File it even when you are about to do it immediately, because "about to" is wher
 dropped when something more urgent arrives. Archive it when it is done; a finished Quest costs
 nothing and a lost one costs the conversation.
 
-The same CLI is the whole loop, from any harness, against the one ledger -- `quest.mjs help` lists
-it. Take a step before working it so nobody doubles up, report against it as you go, and hand it
-back or finish it:
+The API exposes list, get, create, update, start, run and wait through generated CLI
+commands and MCP operations. `quest --help` lists them; results are JSON. Standard
+MCP clients use command `quest` with argument `mcp`. Record step progress and
+deliverables through update. The runtime owns assignment and workspace coordination.
+Use these public interfaces, never implementation file paths or direct ledger writes.
 
-    list [--mine|--open|--blocked] [--project .]   read <id>   who
-    claim <id> <step>   progress <id> <step> "<note>"   evidence <id> <step> "<cmd>" --result passed
-    done <id> <step> "<note>"   block <id> <step> "<reason>"   release <id> <step>
-
-`claim` exits 3 without taking anything while another agent holds that step, and `--json` is on
-every command. `quest-draft.mjs` still files, as an alias for `quest.mjs file`.
-
-`quest start <id>` saves a durable start request on the same configured board as `oc`. The connected OpenCode adapter dispatches the saved steps without a giver model turn. If OpenCode is closed, the request remains queued until it opens. Repeating start returns the existing admission. Save task, optional exact model, concurrency and delivery with the Quest workflow; the id-only start reads them. An explicit `OPENCODE_QUEST_ROOT` keeps isolated checks and intentional alternate boards separate.
+`quest start <id>` saves a durable start request on the same board as `oc`, without
+a giver planning turn. OpenCode must be running to accept calls; accepted requests
+survive restart. Repeating start returns the existing admission. Save task, optional
+exact model, concurrency, readOnly and delivery on the Quest workflow. The giver
+stays in this hub; the runtime maps its reviewed source for research and owned
+editing workspaces. `QUEST_API_REGISTRY` selects an intentional alternate service.
 
 ## Say whether you traced it or inferred it
 
