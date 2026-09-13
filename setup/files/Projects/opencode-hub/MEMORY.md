@@ -18,6 +18,8 @@ the rest lives". Correct a stale line in place, delete a wrong one. User instruc
   max. Astra medium is fine. `models/access-policy.json` enforces it and
   `test/model-selection-policy.test.ts` keeps it enforced; this line exists only so you do not propose
   it and lose a turn.
+- Models for chats, workers and reviewers must remain user-selectable and changeable. Automatic
+  choices use the user’s accounts, pricing, usage, speed and task evidence; never a model name in code.
 - Routine worker permission reviews go to a lower-cost capable reviewer from his own routes, chosen via
   `/quest-reviewer` and kept for the giver session. Escalate only new decisions to the giver
   conversation. Manual approval stays as a fallback.
@@ -52,7 +54,7 @@ home: a test fails when the behaviour regresses, and it costs nothing to carry. 
   `duration-graph`, `execute-abort-attribution`, `execute-attribution`, `context-graph`
 - A stale local branch building the wrong candidate — `try-ref-candidate`
 - A prompt lost to a stale model catalog — `refused-request-visibility`
-- A derived route reaching dispatch unusable — `live-route-derivation`, `verification-route`
+- A derived route reaching dispatch unusable — `live-route-derivation`, `task-aware-effort`
 - Reasoning effort and task classification — `model-selection-policy`, `task-aware-effort`
 - Oversized tool results re-sent every turn — `result-budget`
 - Locks and leases outliving the process that took them — `release-lock-reclaim`,

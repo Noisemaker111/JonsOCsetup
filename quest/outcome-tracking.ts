@@ -1,3 +1,4 @@
+import {classifyDispatch} from '../models/task-demand'
 import {readContinuations} from './runtime-queues'
 import {workspaceSettings} from "./workspace-settings"
 import {existsSync,readFileSync,writeFileSync,renameSync,mkdirSync} from 'node:fs'
@@ -24,7 +25,7 @@ export function configureLearning(store:QuestStore,context:QuestContext,questID:
 /** Metadata is registered before launch; execution outcomes are read separately and never judged here. */
 export function trackedStart(store:QuestStore,start:StartRun,settingsFile?:string):StartRun{return async input=>{
  const intents=readContinuations(store.runtime);const parallel=intents.some((r:any)=>r.questID===input.quest.id&&(r.maxConcurrent??1)>1&&(!['done','stopped'].includes(r.state)||r.admissions?.some((a:any)=>a.runID===input.runID)));if(parallel&&workspaceSettings(settingsFile).workspaceMode!=="worktree")throw new QuestError("WORKSPACE_MODE_REQUIRED","Parallel continuation requires isolated worktrees at every admission")
- change(store,state=>{if(state.runs.some(r=>r.runID===input.runID))return;const config=state.configs.find(c=>c.questID===input.quest.id);state.runs.push({questID:input.quest.id,projectID:input.context.project.id,workflowTitle:input.quest.title,runID:input.runID,stepID:input.stepIDs.join(','),taskTags:[...new Set(input.stepIDs.flatMap(id=>config?.tags[id]??['unclassified']))],startedAt:Date.now()})})
+ change(store,state=>{if(state.runs.some(r=>r.runID===input.runID))return;const config=state.configs.find(c=>c.questID===input.quest.id);state.runs.push({questID:input.quest.id,projectID:input.context.project.id,workflowTitle:input.quest.title,runID:input.runID,stepID:input.stepIDs.join(','),taskTags:[...new Set(input.stepIDs.flatMap(id=>[classifyDispatch({task:input.task,readOnly:input.readOnly,questKind:input.quest.kind}).task,...(config?.tags[id]??[])]))],startedAt:Date.now()})})
  try{return await start(input)}finally{try{collectWorkflowOutcomes(store)}catch(error){console.error('[quests] workflow measurement failed',error)}}
 }}
 const keys=['input','cacheRead','cacheWrite','output','reasoning'] as const
