@@ -30,7 +30,7 @@ if (command === "dispatch") {
     const route = plan.routes.find(r => r.id === c.routeID)!
     return {
       route: c.routeID, model: route.providerID + "/" + route.modelID, effort: route.reasoning,
-      publishedPassAt1: c.benchmarkPassAt1, economics: c.economics,
+      publishedPassAt1: c.benchmarkPassAt1, economics: c.economics, requestPerformance: c.requestPerformance,
     }
   }
   console.log(JSON.stringify({

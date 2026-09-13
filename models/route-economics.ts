@@ -41,6 +41,9 @@ export function withRouteEconomics(routes: Route[], catalog: LiveCatalog, policy
     }
   } catch { /* Unavailable telemetry never invents a speed. */ }
   return routes.map(route => {
+    const samples = speeds.get(exactRequestKey(route)) ?? []
+    const requestMilliseconds = samples.length >= policy.minSpeedSamples ? [...samples].sort((a,b) => a-b)[Math.floor(samples.length / 2)] : undefined
+    if(requestMilliseconds!==undefined)route={...route,requestPerformance:{milliseconds:requestMilliseconds,samples:samples.length}}
     const personal = policy.accountPrices?.[accountPriceKey(route)]
     const model = catalog.models.find(m => m.providerID === route.providerID && m.modelID === route.modelID)
     const cost = model?.cost
@@ -62,8 +65,6 @@ export function withRouteEconomics(routes: Route[], catalog: LiveCatalog, policy
     const workload=own?"observed "+task+" task profile ("+observed.length+" tasks)":pooled?"pooled "+task+" task profile ("+taskRuns.length+" tasks)":"configured comparison workload"
     const value = valueRequest({id:"comparison",sessionID:"comparison",kind:"price-comparison",route,startedAt:now,state:"completed",tokens,price})
     if (!value.complete || value.value === null || value.currency === null) return route
-    const samples = speeds.get(exactRequestKey(route)) ?? []
-    const requestMilliseconds = samples.length >= policy.minSpeedSamples ? [...samples].sort((a,b) => a-b)[Math.floor(samples.length / 2)] : undefined
     return {...route,economics:{amount:value.value,currency:value.currency,basis:personal ? "account-price" as const : "catalog-equivalent" as const,source:personal ? "user account pricing" : "https://models.dev/api.json",observedAt:price.date,requestMilliseconds,samples:samples.length,workload}}
   })
 }

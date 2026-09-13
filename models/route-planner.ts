@@ -73,6 +73,7 @@ export type Route = {
   outcomeIssue?: {task:TaskClass;reason:string}
   evidence: RouteEvidence[]
   benchmark?: RouteBenchmark
+  requestPerformance?: { milliseconds: number; samples: number }
   economics?: { amount: number; currency: string; basis: "account-price" | "catalog-equivalent"; source: string; observedAt: string; requestMilliseconds?: number; samples?: number; workload?: string }
   /** Measured task consumption, in each shared account window's units. */
   quotaPerTask: Record<string, number>
@@ -134,6 +135,7 @@ type Candidate = {
   benchmarkPassAt1: number | null
   benchmarkProvenance?: "independent" | "vendor"
   intelligence: number | null
+  requestPerformance: Route["requestPerformance"] | null
   economics: Route["economics"] | null
   evidenceSource: string
   /** What the caller must still be told about an uncalibrated admission, if anything. */
@@ -326,6 +328,7 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
       expiryOpportunity: !evidence || (chosen && unknownConsumption) ? null : expiryOpportunity, limitingWindow,
       benchmarkPassAt1, benchmarkProvenance: benchmarkPassAt1 === null ? undefined : prior!.provenance,
       intelligence: benchmarkPassAt1 === null ? null : prior!.intelligence ?? null,
+      requestPerformance: route.requestPerformance ?? null,
       economics: route.economics && nonnegative(route.economics.amount) && route.economics.currency === (req.cashCurrency ?? "USD") && route.economics.source?.trim() && finite(date(route.economics.observedAt)) && now >= date(route.economics.observedAt) && now - date(route.economics.observedAt) <= req.maxEvidenceAgeDays * 86400000 ? route.economics : null,
       evidenceSource: evidence ? evidence.source : benchmarkNote || "configured choice; outcomes and consumption uncalibrated",
       note: unknownConsumption
@@ -360,11 +363,11 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
       // A quote values the SAME configured workload on every route. It is never a measured
       // task bill, and reasoning-token counts from unrelated work are not a price schedule.
       const price = (a.economics?.amount ?? Infinity) - (b.economics?.amount ?? Infinity)
-      const speed = (a.economics?.requestMilliseconds ?? Infinity) - (b.economics?.requestMilliseconds ?? Infinity)
+      const speed = (a.requestPerformance?.milliseconds ?? a.economics?.requestMilliseconds ?? Infinity) - (b.requestPerformance?.milliseconds ?? b.economics?.requestMilliseconds ?? Infinity)
       return speed || price || (b.expiryOpportunity ?? -Infinity) - (a.expiryOpportunity ?? -Infinity) ||
         provenanceRank(a) - provenanceRank(b) || (b.benchmarkPassAt1 ?? 0) - (a.benchmarkPassAt1 ?? 0) || a.routeID.localeCompare(b.routeID)
     }
-    return (req.preference === "cash" ? (a.cashPerSuccess ?? Infinity) - (b.cashPerSuccess ?? Infinity) : req.preference === "latency" ? (a.millisecondsPerSuccess ?? a.economics?.requestMilliseconds ?? Infinity) - (b.millisecondsPerSuccess ?? b.economics?.requestMilliseconds ?? Infinity) : (b.expiryOpportunity ?? -Infinity) - (a.expiryOpportunity ?? -Infinity)) ||
+    return (req.preference === "cash" ? (a.cashPerSuccess ?? Infinity) - (b.cashPerSuccess ?? Infinity) : req.preference === "latency" ? (a.millisecondsPerSuccess ?? a.requestPerformance?.milliseconds ?? a.economics?.requestMilliseconds ?? Infinity) - (b.millisecondsPerSuccess ?? b.requestPerformance?.milliseconds ?? b.economics?.requestMilliseconds ?? Infinity) : (b.expiryOpportunity ?? -Infinity) - (a.expiryOpportunity ?? -Infinity)) ||
       (a.millisecondsPerSuccess ?? Infinity) - (b.millisecondsPerSuccess ?? Infinity) ||
       (a.cashPerSuccess ?? Infinity) - (b.cashPerSuccess ?? Infinity) ||
       (b.successRate ?? 0) - (a.successRate ?? 0) ||
@@ -389,7 +392,8 @@ function describe(selected: Candidate, req: RoutingRequest) {
       (selected.expiryOpportunity === null ? "expiry pressure unavailable" : "expiry pressure " + selected.expiryOpportunity.toFixed(2) + " task slots/hour")]
   const quote = selected.economics
   parts.push(quote ? quote.currency + " " + quote.amount.toFixed(6) + "/" + (quote.workload ?? "comparison workload") + " (" + quote.basis + ", " + quote.source + "); estimate, not an actual charge" : "comparable price unavailable; unknown is not free")
-  parts.push(quote?.requestMilliseconds !== undefined ? Math.round(quote.requestMilliseconds) + "ms/observed request over " + quote.samples + " exact-account/effort samples; task latency uncalibrated" : "request speed unknown")
+  const speed=selected.requestPerformance??(quote?.requestMilliseconds!==undefined?{milliseconds:quote.requestMilliseconds,samples:quote.samples}:undefined)
+  parts.push(speed ? Math.round(speed.milliseconds) + "ms/observed request over " + speed.samples + " exact-account/effort samples; task latency uncalibrated" : "request speed unknown")
   if (selected.note) parts.push(selected.note)
   return selected.routeID + ": " + parts.join("; ")
 }
