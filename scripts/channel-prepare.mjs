@@ -10,7 +10,7 @@
  * built the wrong commit on 2026-09-11. So the remote-tracking ref wins whenever one exists, and
  * what was resolved is recorded on the release and shown at launch.
  */
-import {existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, readdirSync} from 'node:fs'
+import {existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, readdirSync, realpathSync} from 'node:fs'
 import {join, dirname} from 'node:path'
 import {spawnSync, spawn} from 'node:child_process'
 import {homedir} from 'node:os'
@@ -23,6 +23,15 @@ export function git(cwd, argv) {
   if (p.status !== 0) throw Error(p.stderr || String(p.error))
   return p.stdout.trim()
 }
+/** The hub's installed source mapping owns repository selection; runtimeHome only stores runtime data. */
+export function sourceRepository(source = join(homedir(), 'Projects', 'opencode-hub', 'source')) {
+  const directory = realpathSync.native(source)
+  return repositoryOwner(directory)
+}
+function repositoryOwner(directory) {
+  return realpathSync.native(dirname(git(directory, ['rev-parse', '--path-format=absolute', '--git-common-dir'])))
+}
+const sameRepository = (a, b) => process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b
 const read = path => JSON.parse(readFileSync(path, 'utf8'))
 export function atomic(path, value) {
   mkdirSync(dirname(path), {recursive: true})
@@ -72,7 +81,8 @@ export function resolveRef(repository, ref, {fetch = true} = {}) {
 }
 
 /** A prepared release for this commit that a launch can use as it stands, newest first. */
-export function findPrepared(commit, registry = registryRoot) {
+export function findPrepared(commit, registry = registryRoot, repository) {
+  const owner = repository && repositoryOwner(repository)
   const dir = join(registry, 'releases')
   if (!existsSync(dir)) return undefined
   const prefix = 'dev-' + commit.slice(0, 12) + '-'
@@ -89,6 +99,7 @@ export function findPrepared(commit, registry = registryRoot) {
       if (pointer.evidence?.ok !== true || pointer.evidence.sourceCommit !== commit) continue
       if (!existsSync(join(root, 'generations', pointer.activeGeneration, 'plugin-set.json'))) continue
       if (git(root, ['rev-parse', 'HEAD']) !== commit) continue
+      if (owner && !sameRepository(repositoryOwner(root), owner)) continue
       return {root, release, generation: pointer.activeGeneration}
     } catch {continue}
   }
@@ -108,7 +119,7 @@ export async function prepareDevRelease({repository, registry = registryRoot, co
   // Frozen lockfile restores the environment once, before dispatching any work.
   await run('bun', ['install', '--frozen-lockfile'], root, process.env)
   await run('bun', [join(root, 'scripts/prepare-channel.ts'), '--model', model], root, envFor(root, 'dev', registry))
-  const release = {schema: 1, cleanupProtocol: existsSync(join(root, 'scripts/release-retirement.mjs')) ? 1 : undefined, channel: 'dev', commit, root, model, ref, resolved, subject, integrationRef: integration, preparedAt: new Date().toISOString()}
+  const release = {schema: 1, cleanupProtocol: existsSync(join(root, 'scripts/release-retirement.mjs')) ? 1 : undefined, channel: 'dev', commit, root, repository: repositoryOwner(repository), model, ref, resolved, subject, integrationRef: integration, preparedAt: new Date().toISOString()}
   atomic(join(root, 'channel-release.json'), release)
   return {root, release}
 }

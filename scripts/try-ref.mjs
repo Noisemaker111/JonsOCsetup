@@ -13,7 +13,7 @@
 import {existsSync, readFileSync, writeFileSync} from 'node:fs'
 import {join} from 'node:path'
 import {pathToFileURL} from 'node:url'
-import {registryRoot, runtimeHome, resolveRef, findPrepared, prepareDevRelease} from './channel-prepare.mjs'
+import {registryRoot, sourceRepository, resolveRef, findPrepared, prepareDevRelease} from './channel-prepare.mjs'
 
 const read = path => JSON.parse(readFileSync(path, 'utf8'))
 const argv = process.argv.slice(2)
@@ -23,13 +23,13 @@ const named = new Set([option('--model'), option('--plan')].filter(Boolean))
 const ref = argv.find(arg => !arg.startsWith('-') && !named.has(arg))
 if (!ref) throw Error('Name the branch, tag or commit to run: oc <branch> [--model <exact-route>] [--fresh]')
 
-const repository = runtimeHome, registry = registryRoot
+const repository = sourceRepository(), registry = registryRoot
 const selectedPath = join(registry, 'dev.json'), selected = existsSync(selectedPath) ? read(selectedPath) : undefined
 const model = option('--model') ?? selected?.model
 if (!model) throw Error('No dev channel is activated, so there is no model to inherit: pass --model <exact-route>')
 
 const target = resolveRef(repository, ref)
-const existing = flag('--fresh') ? undefined : findPrepared(target.commit, registry)
+const existing = flag('--fresh') ? undefined : findPrepared(target.commit, registry, repository)
 const {root, release} = existing
   ? {root: existing.root, release: existing.release}
   : await prepareDevRelease({repository, registry, model, ...target})
