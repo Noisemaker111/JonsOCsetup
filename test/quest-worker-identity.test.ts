@@ -1,6 +1,6 @@
 /**
  * @core-prevents a worker session binding a different agent or model than dispatch reserved, so a Quest records work that a different route actually did
- * @core-observed Dispatch reserves an exact account/model/reasoning route; a host that bound something else would be invisible without this check (2026-09-09).
+ * @core-observed On 2026-09-13 a native follow-up in the hidden generic worker session made the composer switch it to quest-giver and that role's model; the identity guard stopped inference after forty minutes of investigation.
  */
 import {test,expect} from 'bun:test'
 import {assertWorkerIdentity} from '../quest/worker-identity'
@@ -139,4 +139,13 @@ test('reviewer choice is user-owned and a changed preference invalidates the ses
   if(!target.toLowerCase().startsWith((allowed+'\\quest-reviewer-').toLowerCase()))throw Error('Unexpected test cleanup target')
   rmSync(target,{recursive:true,force:true})
  }
+})
+
+
+import JSON5 from 'json5'
+test('generic dispatched worker is selectable by the native composer and has no overriding model default',()=>{
+ const config=JSON5.parse(readFileSync(new URL('../opencode.jsonc',import.meta.url),'utf8'))
+ expect(config.agents.worker.hidden).not.toBe(true)
+ expect(config.agents.worker.mode).not.toBe('subagent')
+ expect(config.agents.worker.model).toBeUndefined()
 })
