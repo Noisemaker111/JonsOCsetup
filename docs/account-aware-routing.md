@@ -313,3 +313,11 @@ Focused replay, planner, reservation, configured-choice and package tests passed
 ### Model-specific windows in dispatch (2026-09-05)
 
 Live admission now uses the shared account API’s canonical model-window selector. Every route consumes the account’s shared windows and matching model windows; unrelated model windows do not gate that route. The planner and reservation writer use the same applicability mapping, preserving one account identity and shared concurrency holds. Exhausted, unknown or elapsed-reset model windows reject admission. Only applicable measured consumption and reset identities are reserved. Future-window capacity is no longer assumed to be 100; expiry forecasts omit replenishment that the provider has not reported. Deterministic tests exercise the real dispatch entry point and concurrent ledger without model inference.
+
+Permission-review inference is linked to the owning run by the exact interval around
+each native generation. A shared reviewer session is never charged wholesale to a
+task. Reports show worker-only measurements, linked review measurements, their
+measured sum and attribution coverage. Unclosed review intervals suppress complete
+cost-per-task values. Unallocated giver/integration work and historical reviews
+remain outside that measured sum; it is not a complete bill. Worker route token
+profiles and throughput remain separate from reviewer-model performance.

@@ -56,3 +56,30 @@ test("task accounting includes failed attempts, deduplicates updates and never l
  expect(partial.cost[0].estimatedCost).toBeNull()
  expect(partial.cost[0].estimateMissingRequests).toBe(1)
 })
+
+
+test("shared reviewer requests belong only to their task interval; incomplete support never becomes a complete task cost",async()=>{
+ const {mkdtempSync,writeFileSync,rmSync}=await import("node:fs"),{tmpdir}=await import("node:os"),{join}=await import("node:path")
+ const {beginWorkflowRun,observeWorkflowRun,recordWorkflowSupport,reportWorkflowOutcomes,readWorkflowOutcomes}=await import("../usage/workflow-outcomes")
+ const dir=mkdtempSync(join(tmpdir(),"task-review-accounting-")),file=join(dir,"workflows.json"),requestsFile=join(dir,"requests.jsonl"),at=Date.parse(now)
+ try{
+  const identity={workflowID:"quest",stepID:"step",taskTags:["coding"],startedAt:at,route:{accountID:"account",providerID:"provider",modelID:"worker",reasoning:"high",harness:"native",version:"unknown",serviceTier:"default"}}
+  for(const id of ["a","b"]){beginWorkflowRun(file,{...identity,runID:id,sessionID:id});observeWorkflowRun(file,{runID:id,observedAt:at+6000,completedAt:at+5000,state:"completed",tokens:{input:1,cacheRead:0,cacheWrite:0,output:1,reasoning:0},reviewMilliseconds:null,integrationMilliseconds:null})}
+  recordWorkflowSupport(file,"a",{id:"review-a",role:"permission-review",sessionID:"shared",startedAt:at+1000,completedAt:at+2000})
+  recordWorkflowSupport(file,"b",{id:"review-b",role:"permission-review",sessionID:"shared",startedAt:at+2000,completedAt:at+3000})
+  expect(()=>recordWorkflowSupport(file,"b",{id:"review-a",role:"permission-review",sessionID:"shared",startedAt:at+1000})).toThrow()
+  const request=(id:string,sessionID:string,offset:number)=>({id,sessionID,route:{providerID:"provider",modelID:sessionID==="shared"?"reviewer":"worker"},kind:"chat",startedAt:at+offset,completedAt:at+offset+100,state:"completed",tokens:{input:1,cacheRead:0,cacheWrite:0,output:1,reasoning:0},actualCharge:{currency:"USD",value:1}})
+  const rows=[request("a","a",0),request("b","b",0),request("review-a","shared",1000),request("review-b","shared",2000),request("unrelated","shared",4000)]
+  writeFileSync(requestsFile,rows.map(request=>JSON.stringify({version:1,request})).join("\n"))
+  const report=reportWorkflowOutcomes(file,{now:at+10000,requestsFile})
+  expect(report.runs.map(r=>[r.metrics.requests,r.supportMetrics.requests,r.taskMetrics.requests])).toEqual([[1,1,2],[1,1,2]])
+  expect(report.matrix[0].costs[0].actualPerTask).toBe(2)
+  expect(report.runs[0].metrics.cost[0].actualCharge).toBe(1)
+  expect(readWorkflowOutcomes(file).runs[0].support?.[0].id).toBe("review-a")
+  expect(()=>beginWorkflowRun(file,{...identity,runID:"a",sessionID:"a"})).not.toThrow()
+  recordWorkflowSupport(file,"a",{id:"unfinished",role:"permission-review",sessionID:"shared",startedAt:at+4000})
+  const incomplete=reportWorkflowOutcomes(file,{now:at+10000,requestsFile})
+  expect(incomplete.runs[0].supportCoverage.unclosedReviews).toBe(1)
+  expect(incomplete.matrix[0].costs[0].actualPerTask).toBeNull()
+ }finally{rmSync(dir,{recursive:true,force:true})}
+})
