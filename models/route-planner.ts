@@ -354,7 +354,9 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
     return false
   })
   const cheapest = Math.min(Infinity, ...qualified.map(c => c.economics?.amount ?? Infinity))
+  // An automatic economy choice needs a price basis. No quote is not permission to pick by ID.
   const ranked = qualified.filter(c => {
+    if (economical && !req.explicitRouteID && !c.economics) {excluded.push({routeID:c.routeID,reasons:["comparable price unavailable for automatic economical selection"]});return false}
     if (!economical || req.explicitRouteID || !Number.isFinite(cheapest) || (c.economics?.amount ?? Infinity) <= cheapest * (1 + (req.economyPriceTolerance ?? 0))) return true
     excluded.push({routeID:c.routeID,reasons:["outside configured price range of the cheapest qualified route"]})
     return false

@@ -15,6 +15,7 @@ test("qualified cheap routes compete without local history; unknown price is not
  const practiced=route("practiced",.8,10);practiced.evidence=[{task:"utility",source:"outcomes",measuredAt:now,trials:10,passed:10,totalMilliseconds:1000,p95Milliseconds:100,totalCash:10}]
  const routes=[practiced,route("affordable",.5,1),route("unknown",.9),route("incapable",.1,.01)]
  expect(choose(routes).selected?.routeID).toBe("affordable")
+ expect(choose([route("unknown",.9)]).selected).toBeNull()
  expect(choose(routes,{explicitRouteID:"practiced"}).selected?.routeID).toBe("practiced")
  expect(planRoutes({request,accounts:[{...accounts[0],capacity:"exhausted"}],routes}).selected).toBeNull()
  expect(choose(routes.map(r=>({...r,verified:false}))).selected).toBeNull()

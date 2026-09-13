@@ -17,6 +17,8 @@ delete a wrong one, keep the evidence. User instructions outrank memory.
 - Luna medium is prohibited for every role, selection, verification, fallback and resume — no
   lower-effort workaround, no alias for unsupported max. Astra medium is independently authorized.
   `models/access-policy.json` owns enforcement.
+- Models for chats, workers and reviewers must remain user-selectable and changeable. Automatic
+  choices use the user’s accounts, pricing, usage, speed and task evidence; never a model name in code.
 - Routine worker permission reviews go to a lower-cost capable reviewer from his own routes, chosen
   via `/quest-reviewer` and retained for the giver session. Keep them out of the SOTA giver
   conversation; escalate only new decisions. Manual approval stays as a fallback.
