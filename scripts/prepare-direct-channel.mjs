@@ -4,10 +4,11 @@ import {join} from 'node:path'
 import {homedir} from 'node:os'
 import {pathToFileURL} from 'node:url'
 import {createRequire} from 'node:module'
-import {commitsBehind} from './channel-prepare.mjs'
+import {commitsBehind, sourceRepository} from './channel-prepare.mjs'
 const channel=process.argv[2]
 if(!['dev','stable'].includes(channel))throw Error('Choose dev or stable')
-const repository=join(homedir(),'.config','opencode'),registry=join(repository,'.channels')
+const runtimeHome=join(homedir(),'.config','opencode'),registry=join(runtimeHome,'.channels')
+const repository=channel==='dev'?sourceRepository():runtimeHome
 const read=path=>JSON.parse(readFileSync(path,'utf8'))
 const selectedPath=join(registry,'dev.json'),selectedDev=existsSync(selectedPath)?read(selectedPath):undefined
 // Explicit candidate verification uses the ordinary native launcher and existing dev state.
@@ -17,7 +18,7 @@ const candidate=channel==='dev'?process.env.OPENCODE_DEV_CANDIDATE:undefined
 const dev=candidate?read(join(candidate,'channel-release.json')):selectedDev
 if(!dev)throw Error('No dev channel is activated; prepare and activate one, or run a branch with oc <branch>')
 if(candidate&&(dev.channel!=='dev'||dev.root!==candidate))throw Error('Invalid explicit dev candidate')
-const root=channel==='dev'?dev.root:repository
+const root=channel==='dev'?dev.root:runtimeHome
 const {useRelease}=await import(pathToFileURL(join(dev.root,'scripts/release-retirement.mjs')))
 const ownerAt=process.argv.indexOf('--owner-pid'),ownerPID=Number(process.argv[ownerAt+1]);if(ownerAt<0||!Number.isSafeInteger(ownerPID)||ownerPID<1)throw Error('Direct launcher owner PID required')
 const releaseLease=useRelease(root,ownerPID)

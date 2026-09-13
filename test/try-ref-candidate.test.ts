@@ -3,10 +3,10 @@
  * @core-observed `prepare dev --ref agents` resolved the local branch and silently built the wrong commit (2026-09-11), and 3.2 GB of release directories sat unretirable because retirement only ever compared a release against origin/agents.
  */
 import {test, expect} from 'bun:test'
-import {mkdtempSync, writeFileSync, mkdirSync, rmSync, realpathSync, existsSync} from 'node:fs'
+import {mkdtempSync, writeFileSync, mkdirSync, rmSync, realpathSync, existsSync, symlinkSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {resolveRef, findPrepared} from '../scripts/channel-prepare.mjs'
+import {resolveRef, findPrepared, sourceRepository} from '../scripts/channel-prepare.mjs'
 import {git, removeIntegratedWorktree} from '../quest/cleanup-git.mjs'
 
 test('a ref resolves to its remote-tracking commit, and a candidate is judged against the ref it was built from', () => {
@@ -89,4 +89,33 @@ test('a prepared release is only reused when its own receipts prove it is that c
     // Still refused: the directory is not a checkout of that commit, so `git rev-parse HEAD` fails.
     expect(findPrepared(commit, registry)).toBeUndefined()
   } finally {rmSync(registry, {recursive: true, force: true})}
+})
+
+/** @core-observed September 13 plain oc prepared the merged commit from the historical config repository; hub workers consequently landed under .config/opencode despite hub/source selecting JonsOCsetup. */
+test('normal oc follows the hub source and refuses an identical candidate owned by another repository', () => {
+  const home=realpathSync.native(mkdtempSync(join(tmpdir(),'oc-source-owner-')))
+  try {
+    const source=join(home,'source-repo'),historical=join(home,'historical'),hub=join(home,'hub'),registry=join(home,'registry')
+    mkdirSync(source);mkdirSync(hub)
+    git(source,['init','--initial-branch=agents'])
+    writeFileSync(join(source,'work.txt'),'reviewed source')
+    git(source,['add','.']);git(source,['-c','user.name=Check','-c','user.email=check@example.invalid','commit','-m','source'])
+    git(home,['clone','--no-hardlinks',source,historical])
+    symlinkSync(source,join(hub,'source'),process.platform==='win32'?'junction':'dir')
+    expect(sourceRepository(join(hub,'source'))).toBe(source)
+    const commit=git(source,['rev-parse','HEAD'])
+    const prepared=(repository:string,suffix:string)=>{
+      const root=join(registry,'releases','dev-'+commit.slice(0,12)+'-'+suffix)
+      mkdirSync(join(registry,'releases'),{recursive:true});git(repository,['worktree','add','--detach',root,commit])
+      mkdirSync(join(root,'generations','gen-a'),{recursive:true})
+      writeFileSync(join(root,'generations','gen-a','plugin-set.json'),'{}')
+      writeFileSync(join(root,'channel-release.json'),JSON.stringify({channel:'dev',commit,root}))
+      writeFileSync(join(root,'plugin-activation.json'),JSON.stringify({activeGeneration:'gen-a',evidence:{ok:true,sourceCommit:commit}}))
+      return root
+    }
+    const correct=prepared(source,'1'),wrong=prepared(historical,'2')
+    expect(findPrepared(commit,registry,historical)?.root).toBe(wrong)
+    expect(findPrepared(commit,registry,source)?.root).toBe(correct)
+    expect(sourceRepository(correct)).toBe(source)
+  } finally {rmSync(home,{recursive:true,force:true})}
 })

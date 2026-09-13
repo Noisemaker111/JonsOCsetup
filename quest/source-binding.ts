@@ -32,7 +32,7 @@ export function editingSource(context:{project:ProjectIdentity;directory:string}
   const selected=sourceCheckout(directory)
   // Pin both physical paths: retargeting a junction cannot silently choose a different checkout.
   const same=(a:string,b:string)=>process.platform==='win32'?a.toLowerCase()===b.toLowerCase():a===b
-  // A prepared release is a worktree of the config repo, so its project root is that repo,
+  // A prepared candidate is a worktree of the source repository, so its project root is that repository,
   // not the release. Pin the checkout we actually redirected to instead.
   const pinned=devRelease?physicalDirectory(selected.source):selected.project.root
   const expected=devRelease?directory:resolve(expectedRoot)
