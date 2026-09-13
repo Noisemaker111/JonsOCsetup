@@ -31,10 +31,12 @@ const rememberKey=(sessionID:string,questID:string,inspect:any,runID?:string)=>s
 export function typedQuestTool(store:QuestStore,host:QuestHost,options:{policyFile?:string;settingsFile?:string;startRun?:StartRun}={}) {
  const {start,returns}=questDispatch(store,host,options)
  const continuation=new QuestContinuation(store,start,{verifyContext:async(context)=>{const result=await host.get({sessionID:context.sessionID});verifyGiverBinding(store,context,result?.data??result)}})
- let polling=false
- const tick=async()=>{if(polling)return;polling=true;try{await reconcileWorkers(store,host);await consumeQuestStarts(store,host,continuation);await continuation.tick();await returns.tick();collectWorkflowOutcomes(store)}catch(error){console.error('[quests] inspection/continuation failed',error)}finally{polling=false}}
+ let polling=false,admitting=false
+ // New saved work must not wait for inspection of unrelated historical worker sessions.
+ const admit=async()=>{if(admitting)return;admitting=true;try{await consumeQuestStarts(store,host,continuation)}catch(error){console.error('[quests] start admission failed',error)}finally{admitting=false}}
+ const tick=async()=>{if(polling)return;polling=true;try{await reconcileWorkers(store,host);await continuation.tick();await returns.tick();collectWorkflowOutcomes(store)}catch(error){console.error('[quests] inspection/continuation failed',error)}finally{polling=false}}
  installQuestCleanup(store,host)
- const timer=setInterval(()=>void tick(),5000);timer.unref()
+ const timer=setInterval(()=>{void admit();void tick()},5000);timer.unref()
  const workspaces=new QuestWorkspaces(store.runtime)
  const seen=new Map<string,SeenRequest>()
  const remember=(key:string,fingerprint:string,waited=false)=>{seen.delete(key);seen.set(key,{fingerprint,waited});if(seen.size>SEEN_LIMIT)seen.delete(seen.keys().next().value as string)}
