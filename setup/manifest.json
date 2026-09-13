@@ -4,7 +4,7 @@
   "entries": [
     {
       "target": "Projects/opencode-hub/AGENTS.md",
-      "sha256": "6ddedb5ff5853336367446ed2c9c9aa8eb19ba420205eb8128219ab72e5f4a0b"
+      "sha256": "2a4d08e96bfbc34cf7740f63fd5ed811c45b0164d2c5fb99933d27b0ff7f50e4"
     },
     {
       "target": "Projects/opencode-hub/CLAUDE.md",
@@ -41,7 +41,7 @@
     },
     {
       "target": ".agents/quest-api.mjs",
-      "sha256": "9d2af0df500982eb742b5ca9fa6b64880cd4b5f8ceb675026f471fbd71f0ac45"
+      "sha256": "aa0cc10b024f2068d6866fcab481f450e14e11f3c8ee240ccfcb73f07241c817"
     },
     {
       "target": ".codex/AGENTS.md",

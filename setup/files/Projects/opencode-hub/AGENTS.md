@@ -8,7 +8,7 @@ You are looking at the OpenCode ecosystem on this machine. `source/` is the curr
 | `config/` | `~/.config/opencode` | Installed runtime registry, snapshots and historical checkout. Inspect here; do not implement changes here. |
 | `data/` | `~/.local/share/opencode` | Host data: sessions and messages in `opencode.db` (sqlite), `log/`, `tool-output/`, `auth.json`. Read to debug. Never hand-edit. |
 | `state/` | `~/.local/state/opencode` | State our plugins write: usage cache, orchestration ledger, `plugin-health.json`, requests. Evidence, not source. |
-| `quests/` | `~/.opencode` | Quest ledger and archives shared across projects. Not a project and not a worker workspace. |
+| `quests/` | `~/.opencode` | Historical standalone Quest ledger. Managed `oc` and the shared API use `config/.channels/state/dev/quests`; preserve both histories. |
 | `host/` | npm global `@opencode-ai/cli` | The `opencode2` binary that is actually running. Read-only. |
 | `upstream/` | `~/Projects/opencode2` (branch v2) | anomalyco/opencode source for the host we run. Read it to learn how plugins, slots, tools, hooks and instructions load. **Never edit, never commit, never open PRs from here.** |
 | `upstream-v1/` | `~/Projects/opencode1` (branch dev) | v1 source, comparison only. Same rule. |
@@ -39,7 +39,7 @@ Load `source/skills/opencode/SKILL.md` first. It holds the brick invariants (the
 
 - Managed `oc` sessions: `config/.channels/state/dev/host.db`; its Quests: `config/.channels/state/dev/quests/.opencode/quests/`. `data/opencode.db` and `quests/` contain historical standalone sessions and work, not the current channel board. Preserve both histories.
 - Plugin load or activation failures: `state/plugin-health.json`, `config/run/runtime/`, `config/plugin-activation.json` evidence block.
-- Quest runs and workers: `quests/quests/`, `state/orchestration.jsonl`, `source/docs/worker-recovery.md`.
+- Managed Quest runs and workers: `config/.channels/state/dev/quests/`, `config/.channels/state/dev/orchestration.jsonl`, `source/docs/worker-recovery.md`.
 - How the host actually behaves: read `upstream/packages/core/src` and `upstream/packages/plugin`, then confirm against `host/` since the installed beta can lag the branch.
 
 ## OpenCode2 dev ownership

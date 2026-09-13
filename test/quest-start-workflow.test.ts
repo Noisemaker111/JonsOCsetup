@@ -20,6 +20,7 @@ test('the callable board persists workflow choices and one admission across reop
   const {quest}=board.file({title:'Summarize account costs',intent:'Produce a cost summary from saved task measurements',project:ledgerRoot,steps:['Summarize measurements'],workflow:{task:'utility',delivery:'none'}})
   const first=board.start(quest.id),again=(await openBoard(options)).start(quest.id)
   expect(again).toEqual(first)
+  expect(first.generation).toBeUndefined()
   expect(startRequests(new QuestStore(ledgerRoot),quest.id)).toHaveLength(1)
   // A recorded Start, bound by the runtime to this continuation, is distinct from assignment text.
   const store=new QuestStore(ledgerRoot),requestFile=join(store.runtime,'start-requests',first.requestID+'.json')

@@ -82,7 +82,7 @@ export async function consumeQuestStarts(store: QuestStore, host: QuestHost, con
   const generation = devQueueGeneration()
   const giver = readUserGiver(store.runtime)
   if (giver?.state !== 'bound' || !giver.sessionID) return
-  for (const pending of startRequests(store).filter(row => row.state === 'queued' && row.generation === generation)) {
+  for (const pending of startRequests(store).filter(row => row.state === 'queued' && (!row.generation || row.generation === generation))) {
     let row: Request
     const lock = acquireLock(store.runtime, 'start-requests')
     try {

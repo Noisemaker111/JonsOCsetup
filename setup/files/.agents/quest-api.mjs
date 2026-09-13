@@ -117,7 +117,6 @@ export async function openBoard(options = {}) {
   const api = createQuestAgentAPI(ledgerRoot)
   const { requestQuestStart, requestQuestReview, startRequests } = await load("quest/start-request.ts")
   const { parseWorkflow } = await load("quest/workflow.ts")
-  const generation = () => existsSync(join(root, "plugin-activation.json")) ? JSON.parse(readFileSync(join(root, "plugin-activation.json"), "utf8")).activeGeneration : undefined
 
   const me = String(options.agent ?? process.env.QUEST_AGENT ?? detectHarness()).trim()
   const harness = detectHarness()
@@ -194,7 +193,8 @@ export async function openBoard(options = {}) {
     },
 
     /** Start all saved pending steps without another model turn or caller-supplied worker identity. */
-    start(id) { return requestQuestStart(api.store, id, generation()) },
+    // A host-independent request belongs to the connected giver, not the helper's source snapshot.
+    start(id) { return requestQuestStart(api.store, id) },
 
     /** Replace saved workflow choices; omitting a model restores automatic routing. */
     configure(id, workflow) {
@@ -310,7 +310,7 @@ export async function openBoard(options = {}) {
       retrying(() => api.step(quest.id, step.id, "done", note || `finished by ${me}`))
       if (holder) retrying(() => api.store.apply(quest.id, "session-state", { callID: callIDFor(step.id), state: "completed", evidence: note || `step ${step.id} done`, result: "completed" }, source))
       const after = api.get(quest.id), progress = questProgress(after)
-      requestQuestReview(api.store, id, generation())
+      requestQuestReview(api.store, id)
       return { quest: after.id, step: step.id, agent: me, progress: { done: progress.done, total: progress.total }, nextAction: after.nextAction }
     },
 
