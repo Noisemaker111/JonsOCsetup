@@ -73,7 +73,7 @@ export type Route = {
   outcomeIssue?: {task:TaskClass;reason:string}
   evidence: RouteEvidence[]
   benchmark?: RouteBenchmark
-  economics?: { amount: number; currency: string; basis: "account-price" | "catalog-equivalent"; source: string; observedAt: string; requestMilliseconds?: number; samples?: number }
+  economics?: { amount: number; currency: string; basis: "account-price" | "catalog-equivalent"; source: string; observedAt: string; requestMilliseconds?: number; samples?: number; workload?: string }
   /** Measured task consumption, in each shared account window's units. */
   quotaPerTask: Record<string, number>
   cashReservation?: { currency:string; upperBound:number }
@@ -388,7 +388,7 @@ function describe(selected: Candidate, req: RoutingRequest) {
       (selected.millisecondsPerSuccess === null ? "speed unavailable" : Math.round(selected.millisecondsPerSuccess / 1000) + "s/success") + "; " +
       (selected.expiryOpportunity === null ? "expiry pressure unavailable" : "expiry pressure " + selected.expiryOpportunity.toFixed(2) + " task slots/hour")]
   const quote = selected.economics
-  parts.push(quote ? quote.currency + " " + quote.amount.toFixed(6) + "/comparison workload (" + quote.basis + ", " + quote.source + "); estimate, not an actual charge" : "comparable price unavailable; unknown is not free")
+  parts.push(quote ? quote.currency + " " + quote.amount.toFixed(6) + "/" + (quote.workload ?? "comparison workload") + " (" + quote.basis + ", " + quote.source + "); estimate, not an actual charge" : "comparable price unavailable; unknown is not free")
   parts.push(quote?.requestMilliseconds !== undefined ? Math.round(quote.requestMilliseconds) + "ms/observed request over " + quote.samples + " exact-account/effort samples; task latency uncalibrated" : "request speed unknown")
   if (selected.note) parts.push(selected.note)
   return selected.routeID + ": " + parts.join("; ")

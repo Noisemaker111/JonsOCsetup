@@ -31,7 +31,7 @@ export function telemetryLines(value: ReturnType<typeof aggregateTelemetry> & { 
       const scenario=p.empiricalScenario
       return w.label+" / "+p.windowID+": provisional "+scenario.points!.toFixed(3)+" points; historical-error scenario "+scenario.observedErrorScenario!.low.toFixed(3)+"–"+scenario.observedErrorScenario!.high.toFixed(3)+" (not a confidence bound or capacity guarantee)"
     })),
-    ...(value.models ?? []).map(m => m.route.modelID + " (" + (m.route.reasoning ?? m.route.variant ?? "reasoning unknown") + ", " + (m.route.serviceTier ?? "tier unknown") + "): " + m.requests + " requests / " + m.sessions + " sessions in 30m; " + m.completeTokenRequests + " complete token records"),
+    ...(value.models ?? []).map(m => m.route.modelID + " (" + (m.route.reasoning ?? m.route.variant ?? "reasoning unknown") + ", " + (m.route.serviceTier ?? "tier unknown") + "): " + m.requests + " requests / " + m.sessions + " sessions in " + Math.round(m.windowMinutes/1440) + "d; " + m.completeTokenRequests + " complete token records; " + number(m.metrics.speed.outputIncludingReasoningPerSecond) + " output tokens/s incl. reasoning; " + number(m.metrics.speed.visibleOutputTokensPerSecond) + " visible stream tokens/s; " + (m.metrics.cost.map(c=>c.currency+" actual "+number(c.actualCharge)+", estimated "+number(c.estimatedCost)).join("; ") || "cost unknown")),
     value.requests + " recorded requests",
     (value.filter.sessionID?"Current context: ":"Latest observed session context: ")+(value.context.current?number(value.context.current.tokens)+" ("+value.context.current.source+")":"unavailable"),
     "Input " + number(t.input) + " · cache read " + number(t.cacheRead) + " · cache write " + number(t.cacheWrite),

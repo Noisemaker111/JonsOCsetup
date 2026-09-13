@@ -35,6 +35,27 @@ The helper remains pinned for its giver session until the user changes that sett
 selection used by the reviewer and Quest workers, with price and quality provenance.
 The installed verification gate also uses that planner rather than list order.
 
+## Task and model measurements
+
+Every observed request retains its token components, saved price schedule, timing,
+account and exact model settings. `usage_status` reports all observed models over
+its selected time range (28 days by default), including models whose account
+identity is unavailable. No model names are enumerated in the measurement path.
+
+Quest runs automatically receive their dispatch task class. `quest_outcome report`
+and `bun scripts/workflow-report.ts --out <private-report.html>` join each run to
+its own observed requests and show token totals, mean tokens and cost per task,
+whole task duration, output tokens/second including reasoning, visible streaming
+speed and sample coverage. Per-task details remain available after reopening the
+HTML or JSON export. Pass/fail execution and evaluator acceptance are separate;
+cost per accepted task remains unknown while any settled task is unjudged.
+
+Estimates use the price recorded on each request; missing price/token capture does
+not become zero. Actual charges require an actual-charge observation. Reports
+include failed attempts, deduplicate repeated observations by request identity,
+and retain unknown counters. Other harnesses require their own measured counters;
+OpenCode request throughput is not a claim about unobserved external runs.
+
 ## Findings in this checkout
 
 The offline inventory found **70 configured provider/model pairs, 76 catalog rows

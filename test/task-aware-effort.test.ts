@@ -41,3 +41,17 @@ test("personal account pricing overrides exact-provider catalog quotes without a
  expect(withRouteEconomics([{...r,providerID:"broker"}],catalog,policy,Date.parse(now))[0].economics).toBeUndefined()
  expect(withRouteEconomics([r],catalog,policy,Date.parse(now)+8*86400000)[0].economics).toBeUndefined()
 })
+
+test("task accounting includes failed attempts, deduplicates updates and never labels estimates as actual charges",async()=>{
+ const {requestMetrics}=await import("../usage/request-metrics")
+ const r={id:"request",sessionID:"session",route:{providerID:"provider",modelID:"model"},kind:"chat",startedAt:0,completedAt:2000,state:"completed" as const,tokens:{input:1000,cacheRead:0,cacheWrite:0,output:80,reasoning:20},price:{version:"recorded",provider:"provider",model:"model",date:now,currency:"USD",perMillion:{input:1,output:2,reasoning:2}}}
+ const failed={...r,id:"retry",state:"failed" as const,startedAt:2000,completedAt:3000}
+ const m=requestMetrics([r,r,failed])
+ expect(m.requests).toBe(2)
+ expect(m.cost[0].estimatedCost).toBeCloseTo(.0024)
+ expect(m.cost[0].actualCharge).toBeNull()
+ expect(m.speed.outputIncludingReasoningPerSecond).toBeCloseTo(200/3)
+ const partial=requestMetrics([r,{...failed,price:undefined}])
+ expect(partial.cost[0].estimatedCost).toBeNull()
+ expect(partial.cost[0].estimateMissingRequests).toBe(1)
+})

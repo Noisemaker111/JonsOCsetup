@@ -1,4 +1,5 @@
 /** Stable shared calculation and observation surface for routing and Quest runtime consumers. */
+export {requestMetrics} from "./request-metrics"
 export {aggregateTelemetry,normalizeTokens,valueRequest,requestTiming} from "./telemetry"
 export type {Tokens,Price,RequestRecord,TelemetryFilter} from "./telemetry"
 export {readRequests,TELEMETRY_FILE} from "./telemetry-store"
