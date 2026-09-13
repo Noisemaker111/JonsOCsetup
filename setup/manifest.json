@@ -17,7 +17,7 @@
     {
       "source": "setup/files/Projects/opencode-hub/MEMORY.md",
       "target": "Projects/opencode-hub/MEMORY.md",
-      "sha256": "e1d460f47a5b9a1dbf71924efaa7b503c5192068f7bd2101d6588678f403960f",
+      "sha256": "3508f78a4882ec2a07659d4559b9d3f95b4e55552d45eb9094a1ffad1086b2cb",
       "importedFrom": "Projects/opencode-hub/MEMORY.md"
     },
     {
@@ -77,7 +77,7 @@
     {
       "source": "setup/files/.claude/CLAUDE.md",
       "target": ".claude/CLAUDE.md",
-      "sha256": "fd00063e9e0d08f4a3f911e7e1793d1a4dbfc89136e5a7ce29e54ca5afd49cc4",
+      "sha256": "6b6eb5d00fca52ae3e5746dcd981aa7bb1b141ad3b38d2a694df5cd3c3c5d1e8",
       "importedFrom": ".claude/CLAUDE.md"
     },
     {

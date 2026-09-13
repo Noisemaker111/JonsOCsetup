@@ -12,7 +12,9 @@ Keep this short. Project `CLAUDE.md` / skills own deep conventions.
 
 ## Scope & evidence
 
-- Never merge unless the user asks.
+- Never merge unless the user asks, except where a project grants standing authorization. JonsOCsetup
+  does: merging a green PR into `agents` is the agent's call, not Jon's. Queue it with
+  `gh pr merge <n> --auto --merge` — a direct merge is refused by auto mode and wastes the turn.
 
 ## Quick navigation
 
