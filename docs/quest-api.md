@@ -20,7 +20,10 @@ hook journal is not a separate Quest board. An explicit API registry or Quest
 root keeps intentional isolated verification separate.
 
 Codex checkout recovery preserves the logical hub directory and prepares an
-owned worktree for supported shell and patch operations. Literal file reads,
+owned worktree for supported shell and patch operations. Changing the hub's
+source mapping leaves earlier receipts and their worktrees untouched: a session
+reuses a valid workspace it already owns, and prepares the newly mapped checkout
+only when it has none. Literal file reads,
 directory inspection and supported rg searches do not need dependencies or create
 recovery command tickets. Preparation selects the current locked platform and
 exact cached versions, including Bun's hashed prerelease names, and copies them
