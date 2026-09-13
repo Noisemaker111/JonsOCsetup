@@ -1,6 +1,7 @@
 {
   "name": "jons-quest",
   "private": true,
+  "files": ["quest/cli.mjs", "quest/client.mjs", "quest/operations.mjs", "quest/mcp-client.mjs"],
   "bin": { "quest": "quest/cli.mjs" },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.14",
