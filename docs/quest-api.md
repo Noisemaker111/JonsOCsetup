@@ -11,3 +11,28 @@ Workers report only assigned steps using `report` with id, stepID, state and not
 `quest mcp` exposes the same operations over stdio. OpenCode discovers them through its configured `quests` MCP connection. Agents use these commands or discovered operations, not internal runtime scripts or reservation tools.
 
 The listener is shared by locations in one runtime process. Discovery validates process liveness and the endpoint identity, retaining stale receipts as evidence. Old hosts do not serve the current discovery format; reopen `oc` on current agents code after upgrading. Browser-origin requests are refused and local clients require the registry credential. A worker connection requires host-supplied session metadata and cannot acquire giver authority by changing arguments.
+
+The Codex Quest plugin exposes the same contract through its `quest` MCP namespace.
+For example, `quest plan <id>` in a shell and `quest.plan({id})` in MCP read the
+same saved plan; callers use one interface. The adapter retains the trusted
+Codex hook/session context gate, then calls the connected product API. Its local
+hook journal is not a separate Quest board. An explicit API registry or Quest
+root keeps intentional isolated verification separate.
+
+Codex checkout recovery preserves the logical hub directory and prepares an
+owned worktree for supported shell and patch operations. Literal file reads,
+directory inspection and supported rg searches do not need dependencies or create
+recovery command tickets. Preparation selects the current locked platform and
+exact cached versions, including Bun's hashed prerelease names, and copies them
+with bounded memory. It retains failed preflight evidence; only failures known
+to precede installer execution can prepare a fresh private cache automatically.
+Unknown command completion is never replayed. Git trust is command-local and
+limited to the validated workspace; global Git settings remain untouched.
+
+A running Codex conversation can retain an older MCP server or tool inventory
+after plugin installation. A hook trust prompt, an inactive session-context error,
+and a stale tool inventory are different conditions. Trust only the reviewed
+hooks when Codex requests it; repeated approval cannot update a loaded server.
+Use the installed CLI while reconnecting an outdated MCP session. Arbitrary
+persistent-tool filesystem rebinding remains outside this adapter's verified
+host support.
