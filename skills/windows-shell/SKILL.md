@@ -13,7 +13,9 @@ on Windows unless explicitly stated otherwise.
 
 - Use `pwsh` cmdlets and `rg`; use `Get-Content -Head/-Tail` and
   `Select-String` for text inspection.
-- Use forward slashes in Git and pnpm paths: `packages/example`.
+- Use forward slashes in every path, and relative paths once the cell is in the
+  project: each backslash is doubled on the way back into context, and the
+  escaped `C:\Users\Jk101` prefix alone appeared 2,160 times in one session.
 - Put every command a single decision needs into one tool call, joined with
   PowerShell `;` or `Promise.allSettled` over `exec_command`. See Turn economy.
 - Use the project's package manager. For Bun workspaces use `bun --cwd packages/<pkg> run <script>`; for pnpm use `pnpm -C <package-directory> <command>`.
@@ -21,6 +23,11 @@ on Windows unless explicitly stated otherwise.
   defines that script.
 - Use `git show --name-only --format= <commit>` for files changed by a commit;
   use `git ls-tree <tree-ish>` for files in a tree snapshot.
+- Pipe a file into `Select-String` rather than passing `-Path`: with `-Path`
+  every returned line carries the file's absolute path. On one 803-byte log the
+  same excerpt was 1,248 bytes with `-Path` and 440 piped.
+- Set `NO_COLOR=1` and `FORCE_COLOR=0` before running anything that colours its
+  output; the escape sequences survive into context as `u001b[32m` noise.
 
 ## Don't
 
@@ -36,6 +43,11 @@ on Windows unless explicitly stated otherwise.
   does real work.
 - Do not spend a tool call writing a line you already hold in the conversation.
 - Do not read a whole file to find one symbol; search first.
+- Do not read two whole files in one cell. Bundling commands is right; bundling
+  whole files is not.
+- Do not re-read `AGENTS.md`, `SKILL.md`, `MEMORY.md` or `user-verification.md`.
+  They arrive with the session; read one only when you are about to edit it.
+- Do not let a test, build or install print its whole transcript when it passed.
 - Do not set a `max_output_tokens` so tight that the read truncates; a truncated
   read is usually read again, and the retry costs far more than the tokens saved.
 
@@ -91,6 +103,44 @@ after a compaction. In that session `verify-single-giver-installed.ts` was read 
 times, `MEMORY.md` 14 and `dev.json` 13, entirely because eleven compactions kept
 erasing what had already been established.
 
+## Output density
+
+Turn economy says how many calls to make. This says what each one is allowed to
+bring back. From the same session, 1.73M tokens of tool output:
+
+Source code was 62% of it, 465 reads averaging 2,313 tokens, and most of it was
+never used. Of 189 whole-file reads, 145 named a file that no call in the next
+fifteen touched again -- roughly 417k tokens, a quarter of everything the session
+read, fetched on the chance it would matter. Forty cells read two to five whole
+files at once: 3% of the calls, 11% of the output. And 135 calls re-read
+instruction files, clustering right after each context reset, re-orienting on
+text the session already had.
+
+So read a range or a search hit. Read a file whole only when you are about to
+rewrite it. If you want it again after a compaction, that is what the session
+ledger is for.
+
+The rest is runner noise, and it is mechanical to remove. Test output was 83k
+tokens across 74 results, 18% of its lines individual `(pass)` lines with long
+behavioural names that say nothing when the run is green. Installs contributed
+73k tokens of resolver chatter, CI logs 38k tokens of timestamped workflow lines
+(`gh run view --log-failed`, never `--log`), and colour escapes 19k. Run these to
+a log and return the summary, or the failure excerpt:
+
+```powershell
+$env:NO_COLOR = '1'; $env:FORCE_COLOR = '0'
+bun run check:core *> run.log
+if ($LASTEXITCODE -eq 0) { Get-Content run.log -Tail 4 }
+else { Get-Content run.log | Select-String -Pattern '\(fail\)|^error:|Expected' -Context 1,5 | Select-Object -First 20; Get-Content run.log -Tail 4 }
+```
+
+Last, the envelope taxes every output by about 5%. Content comes back inside a
+JSON string, so each newline costs four characters as an escaped CRLF, each quote
+two, each backslash two: 363k characters of escaping in that session, ~91k tokens,
+of which ~31k was carriage returns alone. Strip CR before the output leaves the
+cell with `(Get-Content x -Raw).Replace([string][char]13,'')`, and prefer forward
+slashes so paths are not doubled.
+
 ## Verified PowerShell snippets
 
 These snippets are safe, non-interactive, and were verified with PowerShell:
@@ -105,4 +155,9 @@ Get-Content -Path README.md -Head 20
 
 ```powershell
 git show --name-only --format= HEAD
+```
+
+```powershell
+bun run check:repo *> run.log
+if ($LASTEXITCODE -eq 0) { Get-Content run.log -Tail 3 } else { Get-Content run.log | Select-String -Pattern '\(fail\)|^error:|Expected' -Context 1,5 | Select-Object -First 20 }
 ```

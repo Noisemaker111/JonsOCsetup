@@ -65,7 +65,7 @@
     {
       "source": "setup/files/.codex/AGENTS.md",
       "target": ".codex/AGENTS.md",
-      "sha256": "7e69cdb4a6eef1d5bfba6e640289798e4eeef61cfd9836442c7b9d23429e8c6b",
+      "sha256": "8ed4d9808f4c3cec77f36b394e7fd877782ba946c5364d0ff2ec1dc7571974eb",
       "importedFrom": ".codex/AGENTS.md"
     },
     {
@@ -227,7 +227,7 @@
     {
       "source": "skills/windows-shell/SKILL.md",
       "target": ".agents/skills/windows-shell/SKILL.md",
-      "sha256": "3b2f6880ea2039e601f7e197370725cf28e413029a83d5b0205c74f2783272ad",
+      "sha256": "3ad7d5befd4ba9f2b0c316e364175004f88e9cd497f756bac24b4e9187237073",
       "importedFrom": ".agents/skills/windows-shell/SKILL.md"
     },
     {
