@@ -24,9 +24,13 @@ test('the callable board persists workflow choices and one admission across reop
   expect(startRequests(new QuestStore(ledgerRoot),quest.id)).toHaveLength(1)
   // A recorded Start, bound by the runtime to this continuation, is distinct from assignment text.
   const store=new QuestStore(ledgerRoot),requestFile=join(store.runtime,'start-requests',first.requestID+'.json')
-  const request=JSON.parse(readFileSync(requestFile,'utf8'));request.state='started';request.authorization.giverID='giver'
+  const request=JSON.parse(readFileSync(requestFile,'utf8'));request.state='admitting';request.authorization.giverID='giver'
   writeFileSync(requestFile,JSON.stringify(request))
-  writeFileSync(runtimeQueuePath(store.runtime,'continuations',undefined,'.json'),JSON.stringify([{questID:quest.id,context:{sessionID:'giver',requestID:first.requestID},runID:'owned-run'}]))
+  const continuationFile=runtimeQueuePath(store.runtime,'continuations',undefined,'.json')
+  const admitted={id:'continuation',state:'running',questID:quest.id,context:{sessionID:'giver',requestID:first.requestID},runID:'owned-run'}
+  writeFileSync(continuationFile,JSON.stringify([admitted]))
+  expect(board.start(quest.id).state).toBe('running')
+  expect(startRequests(store,quest.id)[0].state).toBe('started')
   expect(questStartAuthorization(store,quest.id,'owned-run','giver')?.action).toBe('Start saved Quest')
   expect(questStartAuthorization(store,quest.id,'other-run','giver')).toBeUndefined()
   expect(questStartAuthorization(store,quest.id,'owned-run','other-giver')).toBeUndefined()
@@ -42,6 +46,10 @@ test('the callable board persists workflow choices and one admission across reop
   expect((await openBoard(options)).read(quest.id).steps[0].status).toBe('pending')
   store.apply(quest.id,'patched',{description:'Different work requires a new Start'})
   expect(questStartAuthorization(store,quest.id,'owned-run','giver')).toBeUndefined()
+  writeFileSync(continuationFile,JSON.stringify([{...admitted,state:'stopped'}]))
+  const next=board.start(quest.id)
+  expect(next.state).toBe('queued')
+  expect(next.requestID).not.toBe(first.requestID)
  }finally{rmSync(ledgerRoot,{recursive:true,force:true})}
 })
 

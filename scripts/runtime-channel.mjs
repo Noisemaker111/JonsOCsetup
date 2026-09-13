@@ -16,7 +16,7 @@ function read(path){return JSON.parse(readFileSync(path,'utf8'))}
 const envFor=(root,name)=>channelEnv(root,name,registry)
 if(!['dev','stable'].includes(channel))throw Error('Choose dev or stable: prepare dev --ref <branch> --model <exact-route>; activate dev --candidate <root> --evidence <report>; start dev|stable; status dev|stable')
 if(action==='prepare'){
-  if(channel!=='dev')throw Error('Stable preparation requires the separate human-merged agents-to-master release')
+  if(channel!=='dev')throw Error('Main promotion requires its separately authorized workflow')
   const ref=option('--ref'),model=option('--model');if(!ref||!model)throw Error('Preparation requires a committed ref and exact real model route')
   const target=resolveRef(source,ref)
   const {root,release}=await prepareDevRelease({repository,registry,model,...target})

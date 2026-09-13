@@ -41,11 +41,21 @@ export function requestQuestStart(store: QuestStore, id: string, generation?: st
     const quest = store.read(id)
     if (!quest) throw new QuestError('QUEST_NOT_FOUND', 'Quest not found')
     if (quest.archive || quest.state === 'Archived') throw new QuestError('QUEST_ARCHIVED', 'Reopen the Quest before starting it')
-    const pending = startRequests(store, id).find(row => !row.kind && ['queued', 'admitting', 'unknown'].includes(row.state))
+    const requests = startRequests(store, id), continuations = readContinuations(store.runtime)
+    // A host can exit after saving the continuation but before acknowledging admission.
+    // That durable continuation proves acceptance; its runs still own execution and retry safety.
+    for (const row of requests.filter(row => !row.kind && ['admitting', 'unknown'].includes(row.state))) {
+      const admitted = continuations.find(item => item.questID === id && item.context?.requestID === row.requestID && item.context?.sessionID === row.authorization?.giverID)
+      if (!admitted) continue
+      row.state = 'started'
+      row.result = { continuationID: admitted.id, state: admitted.state, runID: admitted.runID }
+      save(store, row)
+    }
+    const pending = requests.find(row => !row.kind && ['queued', 'admitting', 'unknown'].includes(row.state))
     if (pending) return pending
     const run = quest.sessions.findLast(row => active(row.state))
     if (run) return { quest: id, state: run.state, runID: run.runID, sessionID: run.openCodeSessionId ?? run.sessionID }
-    if (readContinuations(store.runtime).some(row => row.questID === id && !['done', 'stopped'].includes(row.state))) return { quest: id, state: 'running' }
+    if (continuations.some(row => row.questID === id && !['done', 'stopped'].includes(row.state))) return { quest: id, state: 'running' }
     if (!quest.stages.some(step => step.status === 'pending')) throw new QuestError('NO_ELIGIBLE_STEPS', 'No pending steps; inspect the saved result or blocker')
     const createdAt = new Date().toISOString()
     const row: Request = { quest: id, requestID: randomUUID(), generation, createdAt, state: 'queued', authorization: { at: createdAt, action: 'Start saved Quest', definition: definition(quest) } }
