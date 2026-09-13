@@ -251,6 +251,14 @@ clean source. Dev resolves the loaded immutable release and verifies its source 
 a source. A worker can update the hub Quest only from its verified owned workspace.
 
 Channel state remains under `~/.config/opencode/.channels` after source migration.
+The installed `~/.config/opencode` folder is not a Git editing checkout. Maintain
+OpenCode configuration, agents, skills and plugins in the JonsOCsetup source tree;
+`setup/files/` captures the other installed settings named by its manifest rather
+than mirroring that entire runtime folder. Use JonsOCsetup worktrees for changes.
+Historical Git metadata is archived outside the installed folder; existing old
+checkouts retain their Git pointers and history. Do not recreate `.git` in the
+installed folder or treat runtime data as uncommitted source work.
+
 For explicit candidate acceptance, set `OPENCODE_DEV_CANDIDATE` to a prepared dev
 release and invoke `oc`; the native launcher records that release's load receipt.
 This does not select a release for other launches. Clear the variable afterward.

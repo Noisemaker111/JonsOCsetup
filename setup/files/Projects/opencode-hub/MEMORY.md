@@ -8,6 +8,7 @@ the rest lives". Correct a stale line in place, delete a wrong one. User instruc
 
 ## Jon
 
+- Jon expects JonsOCsetup to be the maintained source and `.config/opencode` to be the installed destination. Describe historical Git archives separately from his current configuration; do not call the live config an unfinished worktree.
 - No Delete key, and speech-to-text input. Turn what he says into an assignment; do not forward it
   verbatim, and do not rely on Delete existing.
 - A failure he names is evidence about the system, not a request to patch that one instance.
@@ -52,7 +53,7 @@ the rest lives". Correct a stale line in place, delete a wrong one. User instruc
 ## Where the rest lives
 
 Everything this file used to say about how the code behaves is enforced by a core test in
-`config/test/`, whose `@core-observed` block holds the incident that produced it. That is the better
+`source/test/`, whose `@core-observed` block holds the incident that produced it. That is the better
 home: a test fails when the behaviour regresses, and it costs nothing to carry. Look there first.
 
 - Sandboxed drives redirecting every home or none — `drive-isolation`

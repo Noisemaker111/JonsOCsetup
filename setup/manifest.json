@@ -4,7 +4,7 @@
   "entries": [
     {
       "target": "Projects/opencode-hub/AGENTS.md",
-      "sha256": "18ebe63b7b6ff930fde46869a1faf8cd3a63d9897908c668067bdc536e39e8fd"
+      "sha256": "a90b1ca8194a7f6fabed223ded193ce2c835a6ed3630a83379c018ded59f76d6"
     },
     {
       "target": "Projects/opencode-hub/CLAUDE.md",
@@ -12,7 +12,7 @@
     },
     {
       "target": "Projects/opencode-hub/MEMORY.md",
-      "sha256": "7d8d45c7405e9faf46e6932afdfcc1364b0232eff08269783c9f78664093eaca"
+      "sha256": "97de7b5b188dd2cb9f31085dce7679cb04c3a76030c85f27b64cef4613ec5eb6"
     },
     {
       "target": ".agents/matt-pocock.md",
