@@ -22,6 +22,7 @@ const LINKED = [
   /^Projects\/opencode-hub\/(AGENTS|CLAUDE|MEMORY)\.md$/,
   /^\.agents\/(user-verification|matt-pocock)\.md$/,
   /^\.agents\/(skills|docs)\//,
+  /^\.claude\/skills\//,
 ]
 const EXCLUDED = [/^\.agents\/skills-disabled\//]
 
