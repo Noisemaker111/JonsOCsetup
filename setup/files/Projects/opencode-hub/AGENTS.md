@@ -67,12 +67,14 @@ Read `MEMORY.md` at this hub root at the beginning of work and after context los
 Codex, Claude Code and the OpenCode2 Quest Giver -- reads and writes this one file, so anything
 another harness needs belongs here rather than in a harness's private memory.
 
-Keep it short, and treat length as the failure: a memory nobody finishes reading is a memory that
-stops being used, so every line earns its place or comes out. It holds durable user decisions,
-preferences and verified lessons that cost something to rediscover. It does not hold a project's
-own conventions, commands or policy -- those go in that project's AGENTS.md, where they load only
-when you are there -- nor anything already readable from the code, the config or git history.
-Before adding a line, check whether it replaces one; prefer correcting an entry to appending near it. Read before editing, merge existing knowledge, correct stale entries, then reopen the saved file. Quests keep task plans and progress. Do not store secrets, transcripts or unsupported claims; memory never grants permission. Use ordinary file tools, not an every-turn injection hook.
+Before writing a line here, ask what else could hold it, because almost always something can.
+A claim about how this code behaves belongs in a core test, which fails when it stops being true
+and carries the incident in its `@core-observed` block; a project's conventions and commands
+belong in that project's AGENTS.md, where they load only when you are there; a number you could
+recompute belongs in the script that recomputes it. What is left, and all that belongs here, is
+how to work with Jon, facts about the world outside this repository, and an API no test guards.
+`test/shared-memory-budget.test.ts` fails when this file outgrows that, because the prose rule
+that used to say so did not hold. Prefer correcting an entry to appending near it. Read before editing, merge existing knowledge, correct stale entries, then reopen the saved file. Quests keep task plans and progress. Do not store secrets, transcripts or unsupported claims; memory never grants permission. Use ordinary file tools, not an every-turn injection hook.
 
 Follow agents-and-main for this repository: agents is the integration branch and master is stable. Use sb agents only in owned checkouts; keep worker changes in isolated worktrees. Only Jon personally merges master, and release preparation starts only when he asks. The dev runtime channel retains its isolated state and sessions. Detailed policy: the selected release's docs/development-workflow.md.
 
