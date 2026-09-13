@@ -35,3 +35,14 @@ Library documentation lives in the local `docs` MCP server (a private, offline i
 Read C:/Users/Jk101/.agents/user-verification.md before implementation. Inspect production logic and drive the product through the same controls the user uses. Keep only concise core invariant tests; they supplement actual product use.
 
 Model choice is user-owned for every role, helper and default chat. Do not hardcode model names or universal fallbacks in implementation. Keep selections and automatic-routing preferences user-editable; automatic choices use the individual user's allowed accounts, pricing/entitlements, current usage and measured speed. Preserve explicit choices and support deliberate changes.
+
+## Saying it once
+
+Say it once. Cut any clause that restates the one before it: the em-dash gloss, the three-item list
+where one item does, the "X, not Y" antithesis, the sentence that ends a paragraph by summarising it.
+If a sentence could be deleted without losing information, delete it.
+
+Never put a hard cap on anything counted in tokens or characters. Report the size; let it be judged.
+
+Record a correction the moment it happens, without being asked, and say what you recorded:
+🧠 **Memory updated:** <the thing>
