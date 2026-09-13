@@ -13,7 +13,7 @@ import {QuestStore} from '../quest/store'
 import {QuestWorkspaces} from '../quest/workspaces'
 
 test('research uses the reviewed repository, retains hub ledger identity and rejects a changed binding',()=>{
- const root=mkdtempSync(join(tmpdir(),'quest-hub-'))
+ const root=physicalDirectory(mkdtempSync(join(tmpdir(),'quest-hub-')))
  try{
   const hub=join(root,'hub'),repo=join(root,'repo');mkdirSync(hub);mkdirSync(repo)
   expect(spawnSync('git',['init',repo],{windowsHide:true}).status).toBe(0)

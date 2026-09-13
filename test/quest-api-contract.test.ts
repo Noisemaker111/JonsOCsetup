@@ -5,6 +5,7 @@
 import {test,expect} from 'bun:test'
 import {AjvJsonSchemaValidator} from '@modelcontextprotocol/sdk/validation/ajv-provider.js'
 import {questOperations} from '../quest/operations.mjs'
+import {realpathSync} from 'node:fs'
 
 test('updates require a real change and reject the old nested envelope',()=>{
  const validate=new AjvJsonSchemaValidator().getValidator(questOperations.update.input)
@@ -23,7 +24,7 @@ test('locations share one authenticated listener and retiring a worker keeps the
  const {serveQuestAPI}=await import('../quest/api-server')
  const {saveUserGiver}=await import('../quest/giver-registry.mjs')
  const {discoverQuestAPI}=await import('../quest/client.mjs')
- const root=mkdtempSync(join(tmpdir(),'quest-api-listener-')),store=new QuestStore(root)
+ const root=realpathSync.native(mkdtempSync(join(tmpdir(),'quest-api-listener-'))),store=new QuestStore(root)
  const calls:any[]=[]
  const service={call:async(method:string,input:any,context:any)=>{calls.push({method,input,context});return {id:input.id}}} as any
  let giver:any,worker:any
@@ -59,7 +60,7 @@ test('workspace installation leaves the actual API listener responsive',async()=
  const {serveQuestAPI}=await import('../quest/api-server')
  const {saveUserGiver}=await import('../quest/giver-registry.mjs')
  const {discoverQuestAPI}=await import('../quest/client.mjs')
- const root=mkdtempSync(join(tmpdir(),'quest-responsive-')),repo=join(root,'repo'),store=new QuestStore(join(root,'board'))
+ const root=realpathSync.native(mkdtempSync(join(tmpdir(),'quest-responsive-'))),repo=join(root,'repo'),store=new QuestStore(join(root,'board'))
  mkdirSync(repo);writeFileSync(join(repo,'README.md'),'owned fixture')
  const git=(args:string[])=>{const r=spawnSync('git',['-C',repo,...args],{encoding:'utf8',windowsHide:true});if(r.status!==0)throw Error(r.stderr)}
  git(['init']);git(['add','.']);git(['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','fixture'])
