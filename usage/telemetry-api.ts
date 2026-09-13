@@ -15,6 +15,6 @@ export {portfolioPacing,portfolioPacingLines,getUsagePacing} from "./portfolio-p
 
 export {readSessionLedgerRows} from "./passive-ledger"
 export type {LedgerRow} from "./passive-ledger"
-export {beginWorkflowRun,observeWorkflowRun,judgeWorkflowRun,readWorkflowOutcomes,reportWorkflowOutcomes} from "./workflow-outcomes"
+export {recordWorkflowSupport,beginWorkflowRun,observeWorkflowRun,judgeWorkflowRun,readWorkflowOutcomes,reportWorkflowOutcomes} from "./workflow-outcomes"
 export type {WorkflowBegin,WorkflowRun,WorkflowObservation,WorkflowJudgment,WorkflowRoute} from "./workflow-outcomes"
 export {renderWorkflowReport} from "./workflow-report"
