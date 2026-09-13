@@ -1,0 +1,260 @@
+model = "gpt-6-astra"
+model_reasoning_effort = "high"
+
+# Context replayed per call is ~90% of this machine's token spend: the 2026-09-12 OpenCode session
+# sawtoothed between 50k and 245k tokens across 799 calls for a 151k median. Compacting at 140k keeps
+# the same shape with a ~35% smaller average. Raise it if summaries start losing detail you then have
+# to re-read, which would cost more turns than it saves.
+model_auto_compact_token_limit = 140000
+
+# A guardrail against the 40k-character whole-directory dumps, not a substitute for searching first:
+# only the largest ~2% of that session's calls exceeded this.
+tool_output_token_limit = 6000
+
+
+
+
+approvals_reviewer = "auto_review"
+
+
+
+
+notify = [ "C:\\Users\\Jk101\\AppData\\Local\\OpenAI\\Codex\\runtimes\\cua_node\\440c4f095d41ea30\\bin\\node_modules\\@oai\\sky\\bin\\windows\\codex-computer-use.exe", "turn-ended" ]
+service_tier = "default"
+
+[marketplaces.openai-bundled]
+source_type = "local"
+source = '\\?\C:\Users\Jk101\.codex\.tmp\bundled-marketplaces\openai-bundled'
+
+[marketplaces.openai-primary-runtime]
+source_type = "local"
+source = '\\?\C:\Users\Jk101\.cache\codex-runtimes\codex-primary-runtime\plugins\openai-primary-runtime'
+
+[plugins."chrome@openai-bundled"]
+enabled = true
+
+[plugins."visualize@openai-bundled"]
+enabled = true
+
+[plugins."documents@openai-primary-runtime"]
+enabled = true
+
+[plugins."pdf@openai-primary-runtime"]
+enabled = true
+
+[plugins."spreadsheets@openai-primary-runtime"]
+enabled = true
+
+[plugins."presentations@openai-primary-runtime"]
+enabled = true
+
+[plugins."template-creator@openai-primary-runtime"]
+enabled = true
+
+[plugins."google-calendar@openai-curated"]
+enabled = true
+
+[plugins."slack@openai-curated"]
+enabled = true
+
+[plugins."sites@openai-bundled"]
+enabled = true
+
+[plugins."browser@openai-bundled"]
+enabled = true
+
+[plugins."codex-app-tools@openai-bundled"]
+enabled = true
+
+[plugins."unified-computer-use@openai-bundled"]
+enabled = true
+
+[plugins."computer-use@openai-bundled"]
+enabled = true
+
+[plugins."opencode-quests@personal"]
+enabled = true
+
+[features]
+js_repl = false
+
+[mcp_servers.node_repl]
+command = 'C:\Users\Jk101\AppData\Local\OpenAI\Codex\runtimes\cua_node\440c4f095d41ea30\bin\node_repl.exe'
+startup_timeout_sec = 120.0
+
+[mcp_servers.node_repl.env]
+BROWSER_USE_AVAILABLE_BACKENDS = "chrome,iab"
+BROWSER_USE_CODEX_APP_BUILD_FLAVOR = "prod"
+BROWSER_USE_CODEX_APP_VERSION = "26.901.41600"
+BROWSER_USE_TINYSKY_ENABLED = "1"
+CODEX_CLI_PATH = 'C:\Users\Jk101\AppData\Local\OpenAI\Codex\bin\27d6a192e9c98618\codex.exe'
+CODEX_HOME = 'C:\Users\Jk101\.codex'
+NODE_REPL_INSTRUCTIONS_USE_CASE_BROWSER = ""
+NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME = ""
+NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS = "1000"
+NODE_REPL_NODE_MODULE_DIRS = 'C:\Users\Jk101\AppData\Local\OpenAI\Codex\runtimes\cua_node\440c4f095d41ea30\bin\node_modules'
+NODE_REPL_NODE_PATH = 'C:\Users\Jk101\AppData\Local\OpenAI\Codex\runtimes\cua_node\440c4f095d41ea30\bin\node.exe'
+NODE_REPL_TRUSTED_CODE_PATHS = 'C:\Users\Jk101\.codex;C:\Users\Jk101\AppData\Local\OpenAI\Codex\runtimes\cua_node\440c4f095d41ea30\bin\node_modules'
+NODE_REPL_TRUSTED_SERVICES = '{"browser":"C:/Users/Jk101/.codex/plugins/cache/openai-bundled/browser/26.901.41600/scripts/browser-service.mjs","sky":"@oai/sky/service"}'
+SKY_CUA_NATIVE_PIPE = "1"
+SKY_CUA_NATIVE_PIPE_DIRECTORY = '\\.\pipe\codex-computer-use-6a4d4005-b3cf-4223-9362-12496ff6485d'
+
+[mcp_servers.docs]
+command = 'C:\Program Files\nodejs\node.exe'
+args = ['C:\Users\Jk101\AppData\Roaming\npm\node_modules\@arabold\docs-mcp-server\dist\index.js', "mcp", "--protocol", "stdio", "--logo", "false"]
+
+[mcp_servers.docs.env]
+DOCS_MCP_EMBEDDINGS_VECTOR_DIMENSION = "768"
+DOCS_MCP_EMBEDDING_MODEL = "openai:nomic-embed-text"
+OPENAI_API_BASE = "http://localhost:11434/v1"
+OPENAI_API_KEY = "ollama"
+
+[desktop]
+conversationDetailMode = "STEPS_COMMANDS"
+ambient-suggestions-enabled = true
+followUpQueueMode = "queue"
+keepRemoteControlAwakeWhilePluggedIn = true
+
+[windows]
+sandbox = "elevated"
+
+[projects.'c:\users\jk101\projects']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\jgengine']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\documents\papercuts']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\downloads\openusage-0.7.5']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\desktop\jgengine']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\desktop\nfsu2']
+trust_level = "trusted"
+
+# Agent instruction discovery (appended by jgengine agent-runtime setup)
+project_doc_fallback_filenames = ["CLAUDE.md", "Claude.md"]
+project_doc_max_bytes = 65536
+
+[projects.'c:\users\jk101\desktop\vps-code']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\appforgutters']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\fx']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\documents\codex\2026-08-29\rig']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\documents\codex\2026-08-30\we-wer']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\documents\codex\2026-08-30\we-were-in-the-middle-of']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\.config\opencode']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\btg-hub']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\desmakeswebsites']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\ai-lab-game']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\opencode-hub']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\btg-hub\appforgutters']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\seventh']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\.config\opencode\.worktrees\codex-quest-natural\.visual-e2e\codex-quest\sample']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\.config\opencode\.worktrees\runtime-repair\.visual-e2e\luna-runtime-1788934833303\repo']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\opencode-hub\.runtime-tests\luna-runtime-1788935030545\repo']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\opencode-hub\.runtime-tests\luna-review-1788937865820\repo']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\shell-forensics\.worktrees\codex-english-bench-20260910\work\codex-bench\csv-delegated-6dd32f84\workspace']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\shell-forensics\.worktrees\codex-english-bench-20260910\work\codex-bench\csv-delegated-a9b7a655\workspace']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\shell-forensics\.worktrees\codex-english-bench-20260910\work\codex-bench\csv-baseline-29c5100a\workspace']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\shell-forensics\.worktrees\codex-english-bench-20260910\work\codex-bench\csv-delegated-165b9871\workspace']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\shell-forensics\.worktrees\codex-english-bench-20260910\work\codex-bench\repair-delegated-04444f8f\workspace']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\shell-forensics\.worktrees\codex-english-bench-20260910\work\codex-bench\repair-delegated-d8d0434f\workspace']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\shell-forensics\.worktrees\codex-bench-merged-20260910\work\codex-bench\repair-delegated-fa942808\workspace']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\shell-forensics\.worktrees\ten-step-bench-20260910\work\ten-stage\baseline-fa82cff2\workspace']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\shell-forensics\.worktrees\ten-step-bench-20260910\work\ten-stage\baseline-e36d0e3b\workspace']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\shell-forensics\.worktrees\ten-step-bench-20260910\work\ten-stage\chained-8d42d93d\workspace']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\shell-forensics\.worktrees\ten-step-bench-20260910\work\ten-stage\grouped-26941e42\workspace']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\shell-forensics\.worktrees\ten-step-merged-20260910\work\merged-verification\baseline-f26bd657\workspace']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\command-model\.worktrees\command-model-rename-20260910\work\rename-host-check\csv-delegated-e8a9168b\workspace']
+trust_level = "trusted"
+
+[projects.'c:\users\jk101\projects\command-model\work\rename-merged-verification\csv-delegated-bd83d5ff\workspace']
+trust_level = "trusted"
+
+[shell_environment_policy.set]
+NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S = "0e084770cbad695203c2e3af7c00ac042e39892b86f84e629899f18968135073"
+
+[tui.model_availability_nux]
+gpt-6-astra = 4
+
+[notice]
+hide_rate_limit_model_nudge = true
+
+[hooks.state]
+
+[hooks.state."opencode-quests@personal:hooks/hooks.json:pre_tool_use:0:0"]
+trusted_hash = "sha256:2c28780a6a4bfa2118dc334e33c68be6292a1e7bdcfee5dbea683b3d881d88de"
+
+[hooks.state."opencode-quests@personal:hooks/hooks.json:post_tool_use:0:0"]
+trusted_hash = "sha256:0d3b36d3ef1756e4f9a543e925fcb37381640489cabb424c167825e9220d2147"
+
+[hooks.state."opencode-quests@personal:hooks/hooks.json:session_start:0:0"]
+trusted_hash = "sha256:a5d112aa0f6eae249b9098ef7978b90b6599dbe395e2787f6d4c91885c98273d"
+
+[hooks.state."opencode-quests@personal:hooks/hooks.json:session_end:0:0"]
+trusted_hash = "sha256:a037c811b0644fdbd2d744ae5a00b6a8a6a003a2404dac1054cb3712787784d0"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skill Maker"
+  short_description: "Create, check, publish and install skills end to end"
+  default_prompt: "Use $skill-maker to create and publish this skill, verify installation, and confirm its skills.sh page."

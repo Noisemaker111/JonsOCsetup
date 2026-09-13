@@ -19,7 +19,7 @@ Sibling experiments `~/.config/opencode-*` (claude-harness, scope-*) are separat
 
 - Work in `config/`. Everything else is evidence or reference. If a fix seems to need a change in `upstream/` or `host/`, it belongs in a plugin under `config/`, or it is not ours to make.
 - `config/AGENTS.md` is injected into every OpenCode session in every project. It stays a few lines of personal policy. Anything about how OpenCode itself is built belongs here, in a skill, in an agent prompt or in `config/docs/`.
-- Launch sessions at this hub root so this file loads. The host realpaths the cwd and walks up to `~`; a session started inside `config/` resolves to `~/.config/opencode` and never passes through here. PowerShell shortcuts: `oh` cds here, `ohc` opens Codex, `ohcc` opens Claude Code. `oc` opens OpenCode itself and launches at this root by default; `oc <branch>` runs that branch's code instead.
+- Launch sessions at this hub root so this file loads. The host realpaths the cwd and walks up to `~`; a session started inside `config/` resolves to `~/.config/opencode` and never passes through here. PowerShell shortcuts: `oh` cds here, `ohc` opens Codex, `ohcc` opens Claude Code. `oc` opens OpenCode itself and launches at this root by default, so this file loads; `oc <branch>` runs that branch's code instead, `oc --here` uses the current directory.
 - Verify every change by inspecting project logic and driving the actual product through the same controls the user uses; repeat the operation and reopen its saved result. Keep only a small core suite that directly exercises consequential production invariants. Core/build/type checks supplement actual product use. Before completion, search every source and instruction for replaced behavior and remove superseded code, registrations and obsolete fallbacks. This pre-user project has no backward-compatibility requirement. Preserve real data and active sessions.
 
 ## Extending OpenCode
@@ -45,7 +45,11 @@ Load `config/skills/opencode/SKILL.md` first. It holds the brick invariants (the
 
 Jon authorizes Codex and OpenCode2 agents to own the complete dev loop: implement
 in an isolated worktree, use the actual app, inspect results, push a ready PR to
-`agents`, merge it after verification, and activate and exercise the dev release.
+`agents`, merge it after verification, and exercise the result in OpenCode.
+Call development `agents` in conversation; runtime channel keys, generations and command
+arguments are internal details. Never say "release" to Jon at all, and never mention the stable
+or main branch: he raises promotion himself and does it himself, so an agent bringing it up is
+wrong as a stage, an offer or an aside. Say "merged into agents and tested in OpenCode".
 Do not stop at "mergeable", ask Jon to merge, or request the same dev approval
 again. This project-specific standing authorization overrides generic instructions
 to ask before every merge. Infer routine implementation and cleanup decisions
