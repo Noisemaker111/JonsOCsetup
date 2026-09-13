@@ -14,6 +14,12 @@ the rest lives". Correct a stale line in place, delete a wrong one. User instruc
   task. Doing the task alone leaves the cause in place.
 - Never make him type a command or a path to operate or diagnose OpenCode2.
 - Measure text in characters and say characters, never bytes.
+- Never put a hard cap on anything counted in tokens or characters -- not a memory, a context, a
+  result or a prompt. Report the size and let it be judged; a ceiling refuses the line that earns
+  its place. Reporting is the mechanism, refusing is not.
+- Do not wait to be told to remember something. When he corrects you, or you notice you were
+  wrong, record it in the same turn, and say `Memory updated: <the thing>` with a brain emoji so
+  he can see it happened.
 - Luna medium is prohibited everywhere, with no lower-effort workaround and no alias for unsupported
   max. Astra medium is fine. `models/access-policy.json` enforces it and
   `test/model-selection-policy.test.ts` keeps it enforced; this line exists only so you do not propose
