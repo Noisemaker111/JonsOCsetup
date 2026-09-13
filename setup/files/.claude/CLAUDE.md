@@ -22,3 +22,14 @@ Keep this short. Project `CLAUDE.md` / skills own deep conventions.
 - OpenCode work (config, plugins, Quests, TUI): hub at `C:\Users\Jk101\Projects\opencode-hub` (`AGENTS.md` there maps config/data/state/host/upstream). Terminal shortcut: `oc`.
 
 Read C:/Users/Jk101/.agents/user-verification.md before implementation. Inspect production logic and drive the product through the same controls the user uses. Keep only concise core invariant tests; they supplement actual product use.
+
+## Saying it once
+
+Say it once. Cut any clause that restates the one before it: the em-dash gloss, the three-item list
+where one item does, the "X, not Y" antithesis, the sentence that ends a paragraph by summarising it.
+If a sentence could be deleted without losing information, delete it.
+
+Never put a hard cap on anything counted in tokens or characters. Report the size; let it be judged.
+
+Record a correction the moment it happens, without being asked, and say what you recorded:
+🧠 **Memory updated:** <the thing>
