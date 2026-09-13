@@ -1,18 +1,4 @@
-/**
- * Offline route decisions. No provider calls, token prices, or model-name bonuses.
- * A route is an exact account + provider/model + harness + reasoning + service tier.
- *
- * Evidence is local to that route. A published benchmark is a different thing and stays a
- * different field: it is a prior, measured by someone else on someone else's harness, and it only
- * ever orders routes that have nothing measured of their own. The moment any candidate carries
- * local evidence for the task, the priors stop competing rather than being compared against a
- * number on another scale.
- *
- * Recorded cost is a third thing again, and it is not a quality signal at all: it is what a turn on
- * this exact route and effort billed, read from the host's own request records. It never admits or
- * excludes anything. It orders the routes that already cleared the task's quality demand, which is
- * how an effort level gets chosen instead of always being the top of the published curve.
- */
+/** Exact-account routing: task quality admits; user policy ranks price, speed and available capacity. */
 export type TaskClass = "coding" | "review" | "planning" | "utility"
 export type QuotaWindow = {
   /** Undefined means shared by every route on this account. */
@@ -70,16 +56,6 @@ export type RouteBenchmark = {
   /** Why this route's effort may claim the score, when the source did not state one. */
   attribution?: string
 }
-/** Recorded per-turn consumption of this exact route and effort. See `route-cost.ts`. */
-export type RouteCost = {
-  source: string
-  observedAt: string
-  turns: number
-  reasoningTokensPerTurn: number
-  outputTokensPerTurn: number
-  sentTokensPerTurn: number
-  cacheReadRate: number
-}
 export type Route = {
   id: string
   accountID: string
@@ -97,8 +73,7 @@ export type Route = {
   outcomeIssue?: {task:TaskClass;reason:string}
   evidence: RouteEvidence[]
   benchmark?: RouteBenchmark
-  /** Recorded consumption of this exact route and effort. Orders, never admits or excludes. */
-  cost?: RouteCost
+  economics?: { amount: number; currency: string; basis: "account-price" | "catalog-equivalent"; source: string; observedAt: string; requestMilliseconds?: number; samples?: number }
   /** Measured task consumption, in each shared account window's units. */
   quotaPerTask: Record<string, number>
   cashReservation?: { currency:string; upperBound:number }
@@ -129,7 +104,11 @@ export type RoutingRequest = {
   fallback?: { when:"admission-unavailable"; routeIDs:string[] }
   /** The supplied routes are authorized offline inputs; live callers must pin an allowlist. */
   allowedRouteIDs?: string[]
-  preference?: "capacity" | "latency" | "cash"
+  preference?: "capacity" | "latency" | "cash" | "economy"
+  /** Routine work can use its own floor instead of chasing the strongest eligible model. */
+  qualitySelection?: "near-best" | "floor"
+  /** Within this fraction of the cheapest comparable quote, prefer observed speed. */
+  economyPriceTolerance?: number
   /** Absolute allowance units held for demanding queued work, by account/window. */
   reserveByAccount?: Record<string, Record<string, number>>
 }
@@ -155,10 +134,7 @@ type Candidate = {
   benchmarkPassAt1: number | null
   benchmarkProvenance?: "independent" | "vendor"
   intelligence: number | null
-  /** Recorded discretionary spend on this exact effort. Null means nothing has run here. */
-  reasoningTokensPerTurn: number | null
-  cacheReadRate: number | null
-  costSource: string | null
+  economics: Route["economics"] | null
   evidenceSource: string
   /** What the caller must still be told about an uncalibrated admission, if anything. */
   note?: string
@@ -176,10 +152,12 @@ const positive = (n: number) => finite(n) && n > 0
 const date = (s: string) => typeof s === "string" ? Date.parse(s) : NaN
 
 function validateRequest(r: RoutingRequest) {
+  if (r.economyPriceTolerance !== undefined && (!nonnegative(r.economyPriceTolerance) || r.economyPriceTolerance > 1)) throw new Error("Invalid economical price tolerance")
+  if (r.qualitySelection !== undefined && !["near-best", "floor"].includes(r.qualitySelection)) throw new Error("Invalid quality selection")
   if (r.subscriptionConcurrency !== undefined && !["unlimited", "calibrated"].includes(r.subscriptionConcurrency)) throw new Error("Invalid subscription concurrency policy")
   if(r.cashCurrency!==undefined&&(!r.cashCurrency.trim()||r.cashBudget&&r.cashBudget.currency!==r.cashCurrency))throw new Error("Invalid or conflicting cash currency")
   if(r.cashBudget){const b=r.cashBudget;if(!b.id?.trim()||!b.currency?.trim()||![b.limit,b.spent,b.reserved??0].every(nonnegative)||!finite(date(b.startsAt))||!finite(date(b.endsAt))||date(b.startsAt)>=date(b.endsAt))throw new Error("Invalid cash budget")}
-  if (r.preference !== undefined && !["capacity", "latency", "cash"].includes(r.preference)) throw new Error("Invalid routing preference")
+  if (r.preference !== undefined && !["capacity", "latency", "cash", "economy"].includes(r.preference)) throw new Error("Invalid routing preference")
   if (r.allowedRouteIDs !== undefined && (!Array.isArray(r.allowedRouteIDs) || r.allowedRouteIDs.some(id => typeof id !== "string"))) throw new Error("Invalid route allowlist")
   if (r.minBenchmarkPassAt1 !== undefined && (!nonnegative(r.minBenchmarkPassAt1) || r.minBenchmarkPassAt1 > 1)) throw new Error("Invalid benchmark floor")
   if (!["coding", "review", "planning", "utility"].includes(r.task) || !finite(date(r.now)) ||
@@ -210,7 +188,7 @@ export function planRoutes(input: PlannerInput): RoutingDecision {
  const alternative=planEligibleRoutes({...input,request:{...req,allowedRouteIDs:req.fallback.routeIDs}})
  if(!alternative.selected)return {...alternative,excluded:[...first.excluded,...alternative.excluded],summary:"Configured primary and fallback routes unavailable"}
  const fallback={fromRouteID:req.primaryRouteID,toRouteID:alternative.selected.routeID,reasons}
- return {...alternative,fallback,excluded:[...first.excluded,...alternative.excluded.filter(r=>r.routeID!==req.primaryRouteID)],summary:"Configured fallback "+fallback.fromRouteID+" → "+fallback.toRouteID+": "+reasons.join("; ")}
+ return {...alternative,fallback,excluded:[...first.excluded,...alternative.excluded.filter(r=>r.routeID!==req.primaryRouteID)],summary:"Configured fallback "+fallback.fromRouteID+" -> "+fallback.toRouteID+": "+reasons.join("; ")}
 }
 function planEligibleRoutes(input: PlannerInput): RoutingDecision {
   const { request: req, accounts, routes } = input
@@ -271,13 +249,6 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
         benchmarkNote = prior.suite + " " + (prior.passAt1 * 100).toFixed(1) + "% at effort " + prior.effort + " (" + prior.provenance + ", " + prior.measuredAt + ", " + prior.source + ")" + (prior.attribution ? "; " + prior.attribution : "")
       }
     }
-    // Recorded consumption of this exact effort. A malformed record is ignored rather than
-    // excluding the route: cost only ever orders, so being unable to read it is the same as never
-    // having run here, and that already sorts last.
-    const recorded = route.cost
-    const cost = recorded && positive(recorded.turns) && Number.isInteger(recorded.turns) &&
-      [recorded.reasoningTokensPerTurn, recorded.outputTokensPerTurn, recorded.sentTokensPerTurn, recorded.cacheReadRate].every(nonnegative) &&
-      recorded.cacheReadRate <= 1 && recorded.source?.trim() && finite(date(recorded.observedAt)) ? recorded : undefined
     let successRate = 0
     if (!evidence && !chosen) reasons.push("no evidence for this task and exact route")
     else if (evidence) {
@@ -297,6 +268,7 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
         if (req.maxTaskMilliseconds !== undefined && evidence.p95Milliseconds > req.maxTaskMilliseconds) reasons.push("p95 latency exceeds task deadline")
       }
     }
+    if (!named && req.preference === "economy" && !evidence && benchmarkPassAt1 === null) reasons.push("no current task-quality evidence for automatic economical selection")
     let expiryOpportunity = 0
     let limitingWindow: string | undefined
     if (account) {
@@ -354,9 +326,7 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
       expiryOpportunity: !evidence || (chosen && unknownConsumption) ? null : expiryOpportunity, limitingWindow,
       benchmarkPassAt1, benchmarkProvenance: benchmarkPassAt1 === null ? undefined : prior!.provenance,
       intelligence: benchmarkPassAt1 === null ? null : prior!.intelligence ?? null,
-      reasoningTokensPerTurn: cost ? cost.reasoningTokensPerTurn : null,
-      cacheReadRate: cost ? cost.cacheReadRate : null,
-      costSource: cost ? cost.turns + " recorded turns at this effort (" + cost.source + ", " + cost.observedAt + ")" : null,
+      economics: route.economics && nonnegative(route.economics.amount) && route.economics.currency === (req.cashCurrency ?? "USD") && route.economics.source?.trim() && finite(date(route.economics.observedAt)) && now >= date(route.economics.observedAt) && now - date(route.economics.observedAt) <= req.maxEvidenceAgeDays * 86400000 ? route.economics : null,
       evidenceSource: evidence ? evidence.source : benchmarkNote || "configured choice; outcomes and consumption uncalibrated",
       note: unknownConsumption
         ? (unlimitedSubscriptionConcurrency(account!, req) ? "consumption uncalibrated; user policy permits concurrent subscription workers without a fixed account cap. Fresh quota is required; unknown consumption is not a capacity guarantee."
@@ -366,44 +336,42 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
     })
   }
   if (req.explicitRouteID && !routes.some(r => r.id === req.explicitRouteID)) excluded.push({ routeID: req.explicitRouteID, reasons: ["explicit route is not registered"] })
-  // Measured outcomes and public priors are different scales on different harnesses, so they are
-  // never compared. Anything measured locally for this task wins the field outright; the priors
-  // only order the routes that are left when nothing has been measured at all.
+  // Compare quality only within its own evidence scale. Passing local outcomes must not
+  // permanently shut out a cheaper route that independently clears the published prior floor.
   const measured = candidates.filter(c => c.successRate !== null)
-  const pool = measured.length ? measured : candidates
+  const economical = req.preference === "economy"
+  const pool = economical || !measured.length ? candidates : measured
   for (const c of candidates) if (!pool.includes(c)) excluded.push({ routeID: c.routeID, reasons: ["only a published benchmark prior; measured routes are available for this task"] })
   const quality = (c: Candidate) => c.successRate ?? c.benchmarkPassAt1 ?? 0
-  const bestQuality = Math.max(0, ...pool.map(quality))
+  const bestFor = (c: Candidate) => Math.max(0, ...pool.filter(p => (p.successRate !== null) === (c.successRate !== null)).map(quality))
   const provenanceRank = (c: Candidate) => c.benchmarkProvenance === "vendor" ? 1 : 0
-  // The pool is homogeneous by construction -- either every candidate has local outcomes for this
-  // task or none does -- so recorded cost can order the whole uncalibrated pool without ever
-  // competing against a measured cash-per-success on a different scale.
-  const uncalibrated = !measured.length
-  // Unknown cost is not cheap. A route nothing has ever run on sorts behind every route that has
-  // recorded turns, and then falls through to the published board exactly as it did before.
-  const spend = (c: Candidate) => c.reasoningTokensPerTurn ?? Infinity
-  const ranked = pool.filter(c => {
-    if (quality(c) + req.qualityTolerance + 1e-12 >= bestQuality) return true
+  const qualified = pool.filter(c => {
+    if (req.explicitRouteID || req.qualitySelection === "floor" || quality(c) + req.qualityTolerance + 1e-12 >= bestFor(c)) return true
     excluded.push({ routeID: c.routeID, reasons: ["outside quality tolerance of best eligible route"] })
     return false
-  }).sort((a, b) =>
-    (req.preference === "cash" ? (a.cashPerSuccess ?? Infinity) - (b.cashPerSuccess ?? Infinity) : req.preference === "latency" ? (a.millisecondsPerSuccess ?? Infinity) - (b.millisecondsPerSuccess ?? Infinity) : (b.expiryOpportunity ?? -Infinity) - (a.expiryOpportunity ?? -Infinity)) ||
-    (a.millisecondsPerSuccess ?? Infinity) - (b.millisecondsPerSuccess ?? Infinity) ||
-    (a.cashPerSuccess ?? Infinity) - (b.cashPerSuccess ?? Infinity) ||
-    (b.successRate ?? 0) - (a.successRate ?? 0) ||
-    // Everything above is null or equal across an uncalibrated pool, which is why the published
-    // board used to decide the effort by itself: pass@1 descending is monotone in effort for
-    // almost every model, so automatic selection could only ever pick the top of the curve.
-    // Every candidate here already clears the task's quality demand, so the question left is not
-    // which one scores highest but which one spends least to get there.
-    (uncalibrated ? spend(a) - spend(b) : 0) ||
-    // A route that never caches re-bills and re-processes the resident context every turn.
-    (uncalibrated ? (b.cacheReadRate ?? -1) - (a.cacheReadRate ?? -1) : 0) ||
-    // Nothing measured and nothing recorded on either side: the published board is the only signal
-    // left, and an independent measurement beats a vendor's own number at the same score.
-    (b.benchmarkPassAt1 ?? 0) - (a.benchmarkPassAt1 ?? 0) ||
-    provenanceRank(a) - provenanceRank(b) ||
-    (b.intelligence ?? 0) - (a.intelligence ?? 0) || a.routeID.localeCompare(b.routeID))
+  })
+  const cheapest = Math.min(Infinity, ...qualified.map(c => c.economics?.amount ?? Infinity))
+  const ranked = qualified.filter(c => {
+    if (!economical || req.explicitRouteID || !Number.isFinite(cheapest) || (c.economics?.amount ?? Infinity) <= cheapest * (1 + (req.economyPriceTolerance ?? 0))) return true
+    excluded.push({routeID:c.routeID,reasons:["outside configured price range of the cheapest qualified route"]})
+    return false
+  }).sort((a, b) => {
+    if (economical) {
+      // A quote values the SAME configured workload on every route. It is never a measured
+      // task bill, and reasoning-token counts from unrelated work are not a price schedule.
+      const price = (a.economics?.amount ?? Infinity) - (b.economics?.amount ?? Infinity)
+      const speed = (a.economics?.requestMilliseconds ?? Infinity) - (b.economics?.requestMilliseconds ?? Infinity)
+      return speed || price || (b.expiryOpportunity ?? -Infinity) - (a.expiryOpportunity ?? -Infinity) ||
+        provenanceRank(a) - provenanceRank(b) || (b.benchmarkPassAt1 ?? 0) - (a.benchmarkPassAt1 ?? 0) || a.routeID.localeCompare(b.routeID)
+    }
+    return (req.preference === "cash" ? (a.cashPerSuccess ?? Infinity) - (b.cashPerSuccess ?? Infinity) : req.preference === "latency" ? (a.millisecondsPerSuccess ?? a.economics?.requestMilliseconds ?? Infinity) - (b.millisecondsPerSuccess ?? b.economics?.requestMilliseconds ?? Infinity) : (b.expiryOpportunity ?? -Infinity) - (a.expiryOpportunity ?? -Infinity)) ||
+      (a.millisecondsPerSuccess ?? Infinity) - (b.millisecondsPerSuccess ?? Infinity) ||
+      (a.cashPerSuccess ?? Infinity) - (b.cashPerSuccess ?? Infinity) ||
+      (b.successRate ?? 0) - (a.successRate ?? 0) ||
+      (a.economics?.amount ?? Infinity) - (b.economics?.amount ?? Infinity) ||
+      (b.benchmarkPassAt1 ?? 0) - (a.benchmarkPassAt1 ?? 0) || provenanceRank(a) - provenanceRank(b) ||
+      (b.intelligence ?? 0) - (a.intelligence ?? 0) || a.routeID.localeCompare(b.routeID)
+  })
   const selected = ranked[0] ?? null
   return {
     selected, ranked, excluded,
@@ -419,11 +387,9 @@ function describe(selected: Candidate, req: RoutingRequest) {
       (selected.cashPerSuccess === null ? "actual cash unavailable" : (req.cashCurrency ?? req.cashBudget?.currency ?? "USD") + " " + selected.cashPerSuccess.toFixed(4) + "/success") + "; " +
       (selected.millisecondsPerSuccess === null ? "speed unavailable" : Math.round(selected.millisecondsPerSuccess / 1000) + "s/success") + "; " +
       (selected.expiryOpportunity === null ? "expiry pressure unavailable" : "expiry pressure " + selected.expiryOpportunity.toFixed(2) + " task slots/hour")]
-  // A cheaper effort was chosen on recorded numbers, so the numbers travel with the decision.
-  parts.push(selected.reasoningTokensPerTurn === null
-    ? "no recorded turns at this effort; ranked behind every route that has some"
-    : "recorded " + selected.reasoningTokensPerTurn.toFixed(1) + " reasoning tokens/turn and " +
-      ((selected.cacheReadRate ?? 0) * 100).toFixed(1) + "% cache read over " + selected.costSource)
+  const quote = selected.economics
+  parts.push(quote ? quote.currency + " " + quote.amount.toFixed(6) + "/comparison workload (" + quote.basis + ", " + quote.source + "); estimate, not an actual charge" : "comparable price unavailable; unknown is not free")
+  parts.push(quote?.requestMilliseconds !== undefined ? Math.round(quote.requestMilliseconds) + "ms/observed request over " + quote.samples + " exact-account/effort samples; task latency uncalibrated" : "request speed unknown")
   if (selected.note) parts.push(selected.note)
   return selected.routeID + ": " + parts.join("; ")
 }

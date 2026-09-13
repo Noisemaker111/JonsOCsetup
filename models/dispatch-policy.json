@@ -28,13 +28,17 @@
         "qualityTolerance": 0.02
       },
       "review": {
-        "qualityTolerance": 0.1
+        "qualityTolerance": 0.1,
+        "qualitySelection": "floor"
       },
       "utility": {
         "qualityTolerance": 0.2,
-        "minBenchmarkPassAt1": 0.4
+        "minBenchmarkPassAt1": 0.4,
+        "qualitySelection": "floor"
       }
-    }
+    },
+    "preference": "economy",
+    "economyPriceTolerance": 0.25
   },
   "routes": [
     {
@@ -175,5 +179,17 @@
       "scopePrefix": "config",
       "loadedDevRelease": true
     }
+  },
+  "economy": {
+    "useCatalogPrices": true,
+    "comparisonTokens": {
+      "input": 8000,
+      "cacheRead": 0,
+      "cacheWrite": 0,
+      "output": 1000,
+      "reasoning": 0
+    },
+    "maxPriceAgeDays": 7,
+    "minSpeedSamples": 5
   }
 }
