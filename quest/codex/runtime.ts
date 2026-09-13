@@ -6,6 +6,7 @@ import {spawnSync} from "node:child_process"
 import {coordination} from "../coordination"
 import {QuestStore} from "../store"
 import {questRoot} from "../root"
+import {questOperations} from "../operations.mjs"
 import {questsAPI,QuestError} from "../api"
 import {projectIdentity} from "../project"
 import {acquireLock} from "../locking"
@@ -114,7 +115,7 @@ export function codexHook(input:HookInput,store=new QuestStore(questRoot()),reco
  if(!sameDirectory(state.directory,input.cwd))throw new Error('Session checkout changed; open a fresh session in the intended checkout')
  let directory=state.recovery?.directory??input.cwd
  let context={directory,sessionID:input.session_id,host:'codex'}
- const event=input.hook_event_name,questCall=/^mcp__quest__(?:list|get|create|update|inspect)$/.test(input.tool_name??'')
+ const event=input.hook_event_name,questCall=(input.tool_name??'').startsWith('mcp__quest__')&&Object.hasOwn(questOperations,(input.tool_name??'').slice('mcp__quest__'.length))
  state.transcript??=input.transcript_path
  if(event==='SessionStart'){state.ended=false;save(file,state);reconcilePriorSessions(store,input.cwd,input.session_id);return {}}
  if(event==='PreToolUse'){
@@ -125,11 +126,8 @@ export function codexHook(input:HookInput,store=new QuestStore(questRoot()),reco
    if(checkoutIndependent(input.tool_name??'',input.tool_input)){
     if(!state.recovery)return {}
     let updatedInput=recoveryReadInput(state.recovery,input.tool_name??'',input.tool_input)
-    if(updatedInput&&input.tool_name==='Bash'){
-     validateRecoveryBinding(state.recovery)
-      const recovered=boundRecoveryCommand(store,state.recovery,updatedInput.command,{...recoveryOptions,needsEnvironment:false},updatedInput.workdir)
-     updatedInput={...updatedInput,command:recovered.command}
-    }
+    // Literal reads retain the host's normal filesystem boundary. Rewriting a
+    // read into a recovery ticket would add writes and dependency preparation.
     if(updatedInput)return {hookSpecificOutput:{hookEventName:event,permissionDecision:'allow',updatedInput,additionalContext:'Task reads use recovered checkout '+state.recovery.directory}}
     // Literal external skill reads and web operations remain checkout independent.
     // Audit commands have an implicit cwd and must retain the task binding.
@@ -184,12 +182,7 @@ export function codexHook(input:HookInput,store=new QuestStore(questRoot()),reco
  }
  if(event==='PostToolUse'){
   if(questCall){
-   // Inspecting another Quest must not silently adopt it as this task.
-   if(input.tool_name==='mcp__quest__create'){
-    const response=resultObject(input.tool_response)
-    const value=response?.structuredContent??resultObject(response?.content?.find((x:any)=>x.type==='text')?.text)
-    if(value?.id)state.questID=value.id
-   }
+   // Remote Quest IDs are not local hook-journal records. Explicit reports use the product API.
    save(file,state);return {}
   }
   if(checkoutIndependent(input.tool_name??'',input.tool_input))return {}

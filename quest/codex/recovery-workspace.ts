@@ -5,6 +5,7 @@ import {dirname, isAbsolute, join, relative, resolve} from 'node:path'
 import {spawnSync} from 'node:child_process'
 import type {QuestStore} from '../store'
 import {gitMetadataDirectory} from '../project'
+import {readOnlyShell} from './read-command'
 
 export type RecoveryBinding = {origin:string; repository:string; directory:string; branch:string; head:string; sessionID:string; preparation?:{state:'ready'|'blocked'; source:'clean-checkout'|'explicit-commit'|'tracked-snapshot'; tree?:string; applied?:boolean; applicationStarted?:boolean; dirty:boolean; environment:string; reason?:string}}
 // An explicit immutable source is caller authorization, never inferred from a
@@ -13,10 +14,12 @@ export type RecoveryBinding = {origin:string; repository:string; directory:strin
 export type RecoveryOptions = {aliases?:Record<string,string>; runner?:string; sourceCommit?:string; needsEnvironment?:boolean}
 const key=(value:string)=>process.platform==='win32'?resolve(value).toLowerCase():resolve(value)
 function safeGit(directory:string){
- const config=spawnSync('git',['-C',directory,'config','--name-only','--get-regexp','^filter[.]'],{encoding:'utf8',windowsHide:true,timeout:20000})
+ directory=realpathSync(directory)
+ const trust=['-c','safe.directory='+directory]
+ const config=spawnSync('git',[...trust,'-C',directory,'config','--name-only','--get-regexp','^filter[.]'],{encoding:'utf8',windowsHide:true,timeout:20000})
  if(config.error||![0,1].includes(config.status??-1))throw Error('Could not inspect repository filter configuration')
  const drivers=[...new Set(config.stdout.trim().split('\n').map(line=>/^filter\.(.+)\.(?:clean|smudge|process|required)$/.exec(line.trim())?.[1]).filter((v):v is string=>!!v))]
- return ['-C',directory,'-c','core.fsmonitor=false','-c','core.hooksPath=',...drivers.flatMap(driver=>['-c',`filter.${driver}.clean=`,'-c',`filter.${driver}.smudge=`,'-c',`filter.${driver}.process=`,'-c',`filter.${driver}.required=false`])]
+ return [...trust,'-C',directory,'-c','core.fsmonitor=false','-c','core.hooksPath=',...drivers.flatMap(driver=>['-c',`filter.${driver}.clean=`,'-c',`filter.${driver}.smudge=`,'-c',`filter.${driver}.process=`,'-c',`filter.${driver}.required=false`])]
 }
 const git=(directory:string,args:string[])=>{
  const r=spawnSync('git',[...safeGit(directory),...args],{encoding:'utf8',windowsHide:true,timeout:20000})
@@ -187,15 +190,7 @@ export function checkoutIndependent(tool:string,input:any):boolean{
  if(tool==='mcp__cua_repl__js'&&typeof input?.code==='string'&&/^\s*await cua\.getState\(\);?\s*$/.test(input.code))return true
  if(CHECKOUT_FREE_CONTROLS.has(tool)||WEB_TOOLS.has(tool)||['Read','Glob','Grep','view_image'].includes(tool))return true
  if(tool!=='Bash'||typeof input?.command!=='string')return false
- // Deliberately tiny literal-only PowerShell read grammar. No expressions,
- // variables, redirection, pipelines, wildcards, invocation operators or scriptblocks.
- // A nonmatching command takes the normal isolated execution path.
- return input.command.trim().split(';').every((part:string)=>{
-   if(/^\s*Get-Location\s*$/i.test(part))return true
-   const match=/^\s*Get-Content\s+(?:(?:-LiteralPath|-Path)\s+)?(?:'([^'$`*?\[\]\r\n]+)'|"([^"$`*?\[\]\r\n]+)"|([A-Za-z]:[\\/][^\s;'"$`|&<>*?\[\]{}()]+))\s*(?:-(?:TotalCount|Head|Tail)\s+\d+)?\s*$/i.exec(part)
-  const path=match&&(match[1]??match[2]??match[3])
-  return !!path&&isAbsolute(path)
- })
+ return readOnlyShell(input.command)
 }
 export function recoveryReadInput(binding:RecoveryBinding,tool:string,input:any):any{
  if(tool==='Bash'){

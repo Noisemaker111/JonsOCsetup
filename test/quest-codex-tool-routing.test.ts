@@ -14,29 +14,39 @@ import {checkoutIndependent,hasCheckout} from '../quest/codex/recovery-workspace
 import {questMCP} from '../quest/mcp-server'
 
 const fixture=()=>{const root=realpathSync.native(mkdtempSync(join(tmpdir(),'quest-host-')));const cwd=join(root,'project');mkdirSync(cwd);return {root,cwd,store:new QuestStore(join(root,'ledger'))}}
-test('flat MCP operations use host session metadata and persist a create/update/get round trip',async()=>{
+/** @core-observed The September 13 fresh hub session's named MCP tools returned NOT_FOUND for a Quest that the managed oc board and installed CLI could read. */
+test('Codex MCP discovers the CLI contract and reopens the same persisted API record',async()=>{
+ const {createQuestService}=await import('../quest/service')
+ const {serveQuestAPI}=await import('../quest/api-server')
+ const {createQuestClient}=await import('../quest/client.mjs')
+ const {questOperations}=await import('../quest/operations.mjs')
  const {root,cwd,store}=fixture()
+ const host={get:async({sessionID}:any)=>({id:sessionID,agent:'quest-giver',location:{directory:cwd}})} as any
+ let dispose=()=>{},endpoint:any
+ const service=createQuestService(store,host,{directory:cwd,onDispose:fn=>{dispose=fn},startRun:async()=>{throw Error('No dispatch')}})
  try{
-  const session_id='native-host-thread'
-  codexHook({session_id,cwd,hook_event_name:'SessionStart'},store)
-  const dispatch=questMCP({store})
+  const created=await service.call('create',{title:'Recover shared access',description:'Reopen on the same board',steps:[{id:'verify',title:'Verify saved progress'}],workflow:{readOnly:true,delivery:'none'}},{sessionID:'ses_giver',id:'create'})
+  endpoint=await serveQuestAPI(store,service,cwd)
+  const client=createQuestClient({endpoint}),sessionStore=new QuestStore(join(root,'hook-journal')),dispatch=questMCP({client,sessionStore})
+  codexHook({session_id:'fixture-thread',cwd,hook_event_name:'SessionStart'},sessionStore)
+  const denied=await dispatch({id:'no-context',method:'tools/call',params:{name:'get',arguments:{id:created.id}}})
+  expect(denied.result.isError).toBe(true)
+  expect(denied.result.content[0].text).toContain('HOOK_REQUIRED')
   const listed=await dispatch({id:1,method:'tools/list'})
-  expect(listed.result.tools.map((t:any)=>t.name)).toEqual(['list','get','create','update','inspect'])
-  expect(JSON.stringify(listed)).not.toContain('_questTicket')
-  const invoke=async(name:string,args:any,meta:any={threadId:session_id})=>{
-   expect(codexHook({session_id,cwd,hook_event_name:'PreToolUse',tool_name:'mcp__quest__'+name,tool_input:args},store)).toEqual({})
-   const r=await dispatch({id:crypto.randomUUID(),method:'tools/call',params:{name,arguments:args,_meta:meta}})
-   return {error:r.result.isError,value:JSON.parse(r.result.content[0].text)}
+  expect(listed.result.tools.map((t:any)=>t.name)).toEqual(Object.keys(questOperations))
+  for(const tool of listed.result.tools)expect(tool.inputSchema).toEqual(questOperations[tool.name].input)
+  const invoke=async(name:string,args:any)=>{
+   const r=await dispatch({id:crypto.randomUUID(),method:'tools/call',params:{name,arguments:args,_meta:{threadId:'fixture-thread'}}})
+   if(r.result.isError)throw Error(r.result.content[0].text)
+   return r.result.structuredContent
   }
-  expect((await invoke('list',{},{})).error).toBe(true)
-  expect((await invoke('create',{create:{title:'wrong'}})).error).toBe(true)
-  const created=await invoke('create',{title:'Recover tool access',description:'Use direct typed operations.',steps:[{id:'verify',title:'Reopen saved progress'}]})
-  expect(created.error).toBeUndefined()
-  expect((await invoke('update',{id:created.value.id,description:'Saved and reopened.'})).error).toBeUndefined()
-  expect(new QuestStore(store.projectRoot).read(created.value.id)?.description).toBe('Saved and reopened.')
-  expect((await invoke('get',{id:created.value.id})).value.title).toBe('Recover tool access')
- }finally{rmSync(root,{recursive:true,force:true})}
-})
+  expect((await invoke('get',{id:created.id})).title).toBe('Recover shared access')
+  await invoke('report',{id:created.id,stepID:'verify',state:'done',note:'Saved through the Codex API transport'})
+  expect((await client.get({id:created.id})).progress.done).toBe(1)
+  expect((await invoke('plan',{id:created.id})).id).toBe(created.id)
+  expect(new QuestStore(store.projectRoot).read(created.id)?.stages[0].note).toBe('Saved through the Codex API transport')
+ }finally{dispose();endpoint?.dispose();rmSync(root,{recursive:true,force:true})}
+},10000)
 test('documentation is independent while arbitrary persistent JavaScript still requires a binding',()=>{
  for(const name of ['search_docs','list_libraries','refresh_version'])expect(checkoutIndependent('mcp__docs__'+name,{})).toBe(true)
  expect(checkoutIndependent('mcp__node_repl__js',{code:'writeFileSync(...)'})).toBe(false)
@@ -62,5 +72,58 @@ test('a persistent-tool conflict prepares a worktree and reports its path withou
   expect(result.hookSpecificOutput.permissionDecisionReason).toContain(workspace)
   expect(projectIdentity(workspace).id).toBe(projectIdentity(cwd).id)
   expect(hook('owner','Bash',{command:'git status'})).toEqual({})
+ }finally{rmSync(root,{recursive:true,force:true})}
+})
+
+/** @core-observed After preparation failed in the real hub chat, relative Get-Content of the failure receipt triggered preparation again; read-only transcript lookup was rewritten into a mutating ticket. */
+test('literal diagnostic reads never become dependency preparation tickets',()=>{
+ const {root,cwd,store}=fixture()
+ try{
+  const git=(...args:string[])=>{const r=spawnSync('git',['-C',cwd,...args],{encoding:'utf8',windowsHide:true});if(r.status!==0)throw Error(r.stderr)}
+  git('init');git('-c','user.name=Test','-c','user.email=test@example.invalid','commit','--allow-empty','-m','initial')
+  const hook=(session_id:string,tool_input:any)=>codexHook({session_id,cwd,hook_event_name:'PreToolUse',tool_name:'Bash',tool_input},store,{aliases:{},needsEnvironment:false})
+  hook('owner',{command:'git status'})
+  // Force this session's recovery through the supported persistent-tool conflict.
+  codexHook({session_id:'second',cwd,hook_event_name:'PreToolUse',tool_name:'mcp__node_repl__js',tool_input:{code:'1'}},store,{aliases:{},needsEnvironment:false})
+  for(const command of ['Get-Content .quest-environment-failed.json','Get-Content MEMORY.md; Get-Content .openeval-tools/resume-comparison.md',"Get-ChildItem -LiteralPath C:/Users/Jk101/.codex/sessions/2026/09/13 -Filter '*session*'",'rg -n cached quest/codex']){
+   expect(checkoutIndependent('Bash',{command})).toBe(true)
+   expect(hook('second',{command}).hookSpecificOutput?.updatedInput?.command??command).toBe(command)
+  }
+  for(const command of ['Get-Content x | Set-Content y','Get-Content $(Remove-Item x)','rg --pre evil x','Get-Content x; Remove-Item y','Get-Content x > out','& Get-Content x','Get-Content x\nRemove-Item y'])expect(checkoutIndependent('Bash',{command})).toBe(false)
+ }finally{rmSync(root,{recursive:true,force:true})}
+})
+
+/** @core-observed Recovery tried copying @msgpackr-extract/msgpackr-extract-darwin-arm64 on Windows before Bun could select platform dependencies. */
+test('private preparation respects locked platform constraints',async()=>{
+ const {lockedPackageApplies}=await import('../quest/codex/recovery-command')
+ expect(lockedPackageApplies(['native@1.0.0','',{os:'darwin',cpu:'arm64'}],'win32','x64')).toBe(false)
+ expect(lockedPackageApplies(['native@1.0.0','',{os:'win32',cpu:'x64'}],'win32','x64')).toBe(true)
+ expect(lockedPackageApplies(['portable@1.0.0','',{}],'win32','x64')).toBe(true)
+ expect(lockedPackageApplies(['native@1.0.0','',{os:['!win32']}],'win32','x64')).toBe(false)
+})
+
+/** @core-observed Full repository preparation found the cached effect prerelease under Bun's hashed suffix; failed preflight receipts then prevented every retry. */
+test('hashed cache lookup retries a known failed preflight and preserves its evidence',async()=>{
+ const {prepareRecoveredEnvironment}=await import('../quest/codex/recovery-command')
+ const {writeFileSync,readFileSync,existsSync}=await import('node:fs')
+ const {root,cwd}=fixture(),cache=join(root,'cache'),receipt=join(cwd,'preparation.json')
+ mkdirSync(cache)
+ const dependencies={'fixture-package':'1.0.0-beta.1'}
+ writeFileSync(join(cwd,'package.json'),JSON.stringify({name:'fixture',dependencies}))
+ writeFileSync(join(cwd,'bun.lock'),JSON.stringify({workspaces:{'':{dependencies}},packages:{'fixture-package':['fixture-package@1.0.0-beta.1','',{},'sha512-'+Buffer.alloc(64).toString('base64')]}}))
+ let executions=0
+ const execute=async()=>{executions++;mkdirSync(join(cwd,'node_modules'));return {exitCode:0,stdout:'',stderr:''}}
+ try{
+  await expect(prepareRecoveredEnvironment(cwd,receipt,execute,cache)).rejects.toThrow('missing exact locked package')
+  expect(executions).toBe(0)
+  const slot=join(cache,'fixture-package@1.0.0-012345abcdef@@@1');mkdirSync(slot)
+  writeFileSync(join(slot,'package.json'),JSON.stringify({name:'fixture-package',version:'1.0.0-beta.1'}))
+  const prepared=await prepareRecoveredEnvironment(cwd,receipt,execute,cache)
+  expect(prepared.state).toBe('ready')
+  expect(executions).toBe(1)
+  expect(readdirSync(cwd).some(n=>n.startsWith('preparation.json.failed-'))).toBe(true)
+  expect(existsSync(join(prepared.cache.directory,'fixture-package@1.0.0-012345abcdef@@@1','package.json'))).toBe(true)
+  await prepareRecoveredEnvironment(cwd,receipt,execute,cache)
+  expect(executions).toBe(1)
  }finally{rmSync(root,{recursive:true,force:true})}
 })
