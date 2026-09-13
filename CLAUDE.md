@@ -16,6 +16,10 @@ regexes and Windows paths inside `python - <<'PY'`. Build such strings with `chr
 Two shells, two syntaxes: the Bash tool is Git Bash and the PowerShell tool is pwsh. Pick one per
 call and do not mix their quoting.
 
+Most instruction files are symbolic links into this checkout, and the Write tool refuses to write
+through one rather than replacing it. Write the link's target — `git status` shows the same change
+either way, and the refusal is the protection: a tool that replaced the path would restore a copy.
+
 Memory: the shared `MEMORY.md` is the one every harness reads and writes. Claude Code's own
 `~/.claude/projects/*/memory/` is private to this harness and does not reach Codex or the Quest
 Giver, so anything another harness needs goes in the shared file.
