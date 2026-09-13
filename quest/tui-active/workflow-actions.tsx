@@ -50,7 +50,7 @@ export function WorkflowActions(props: { context: any; store: QuestStore; quest:
     { id: "giver", key: "g", title: "Continue in chat", reason: props.quest().project ? undefined : "Project ownership unresolved" },
     { id: "create", key: "c", title: "Open your Quest Giver", reason: props.quest().project ? undefined : "Project ownership unresolved" },
     { id: "start", key: "s", title: "Start Quest", reason: startDisabled(props.quest()) },
-    { id: "delivery", key: "d", title: "Choose delivery" },
+    { id: "delivery", key: "y", title: "Choose delivery" },
     { id: "progress", key: "p", title: "Check progress / agent log" },
     { id: "nudge", key: "n", title: "Nudge giver", reason: giverID(props.quest()) ? undefined : "Open your Quest Giver first" },
     { id:"archive", key:"z", title:"Archive Quest", reason:uncertainRuns(props.quest()).length?"Reconcile active or uncertain workers before archiving":undefined },

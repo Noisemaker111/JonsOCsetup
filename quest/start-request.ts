@@ -10,13 +10,16 @@ import { questWorkflow } from './workflow'
 import type { QuestStore } from './store'
 import type { QuestHost } from './runtime'
 import type { QuestContinuation } from './continuation'
+import type { Quest } from './types'
 
 type Request = {
   quest: string; requestID: string; kind?: 'review'; generation?: string; createdAt: string
   state: 'queued' | 'admitting' | 'started' | 'failed' | 'unknown'
+  authorization?: { at: string; action: 'Start saved Quest'; definition: string; giverID?: string }
   result?: unknown; error?: string
 }
 const active = (state: string) => ['planned', 'executing', 'waiting', 'blocked'].includes(state)
+const definition = (quest: Quest) => createHash('sha256').update(JSON.stringify([quest.project, quest.description ?? quest.objective, quest.stages.map(step => [step.id, step.title, step.detail, step.needs]), questWorkflow(quest)])).digest('hex')
 const directory = (store: QuestStore) => join(store.runtime, 'start-requests')
 const path = (store: QuestStore, id: string) => join(directory(store), id + '.json')
 function save(store: QuestStore, row: Request) {
@@ -42,10 +45,22 @@ export function requestQuestStart(store: QuestStore, id: string, generation?: st
     if (run) return { quest: id, state: run.state, runID: run.runID, sessionID: run.openCodeSessionId ?? run.sessionID }
     if (readContinuations(store.runtime).some(row => row.questID === id && !['done', 'stopped'].includes(row.state))) return { quest: id, state: 'running' }
     if (!quest.stages.some(step => step.status === 'pending')) throw new QuestError('NO_ELIGIBLE_STEPS', 'No pending steps; inspect the saved result or blocker')
-    const row: Request = { quest: id, requestID: randomUUID(), generation, createdAt: new Date().toISOString(), state: 'queued' }
+    const createdAt = new Date().toISOString()
+    const row: Request = { quest: id, requestID: randomUUID(), generation, createdAt, state: 'queued', authorization: { at: createdAt, action: 'Start saved Quest', definition: definition(quest) } }
     save(store, row)
     return row
   } finally { lock.release() }
+}
+
+/** A recorded start is authority to execute these saved steps, not permission for unrelated actions. */
+export function questStartAuthorization(store: QuestStore, questID: string, runID: string, giverID: string) {
+  const quest = store.read(questID)
+  if (!quest) return
+  const continuation = readContinuations(store.runtime).find(row => row.questID === questID && row.context?.sessionID === giverID && (row.runID === runID || row.admissions?.some((admission: any) => admission.runID === runID)))
+  if (!continuation) return
+  const row = startRequests(store, questID).find(row => row.requestID === continuation.context.requestID && !row.kind && ['admitting', 'started'].includes(row.state))
+  if (!row?.authorization || row.authorization.giverID !== giverID || row.authorization.definition !== definition(quest)) return
+  return { action: row.authorization.action, at: row.authorization.at, questID, scope: 'Execute the saved Quest steps using its chosen workflow, including necessary project instruction reads and ordinary verification. This does not authorize unrelated access, destructive operations, new spending, publishing or production changes.' }
 }
 
 /** Completing externally held steps returns their saved results for review; it never accepts its own work. */
@@ -85,8 +100,12 @@ export async function consumeQuestStarts(store: QuestStore, host: QuestHost, con
         row.state = 'started'; save(store, row)
         continue
       }
+      if (!row.authorization || row.authorization.definition !== definition(quest)) throw new QuestError('QUEST_CHANGED', 'Quest definition changed after Start; review its saved settings and start again')
+      row.authorization.giverID = giver.sessionID
+      save(store, row)
       const { task, model, maxConcurrent } = questWorkflow(quest)
-      row.result = await continuation.run(row.quest, { task, model, maxConcurrent }, context)
+      const result = await continuation.run(row.quest, { task, model, maxConcurrent }, context)
+      row.result = { continuationID: result.continuation?.id, state: result.continuation?.state, runID: result.continuation?.runID }
       row.state = 'started'
     } catch (error) {
       row.state = error instanceof QuestError ? 'failed' : 'unknown'

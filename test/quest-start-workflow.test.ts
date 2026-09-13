@@ -3,12 +3,13 @@
  * @core-observed On September 13 the external start helper imported quest/cli-api.ts, a master-only file absent from agents, and the external board used a different ledger from oc.
  */
 import {test,expect} from 'bun:test'
-import {mkdtempSync,rmSync} from 'node:fs'
+import {mkdtempSync,rmSync,readFileSync,writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join,resolve} from 'node:path'
 import {openBoard} from '../setup/files/.agents/quest-api.mjs'
 import {QuestStore} from '../quest/store'
-import {requestQuestStart,requestQuestReview,startRequests} from '../quest/start-request'
+import {requestQuestStart,requestQuestReview,startRequests,questStartAuthorization} from '../quest/start-request'
+import {runtimeQueuePath} from '../quest/runtime-queues'
 import {questWorkflow,deliveryInstructions} from '../quest/workflow'
 
 test('the callable board persists workflow choices and one admission across reopening',async()=>{
@@ -20,7 +21,16 @@ test('the callable board persists workflow choices and one admission across reop
   const first=board.start(quest.id),again=(await openBoard(options)).start(quest.id)
   expect(again).toEqual(first)
   expect(startRequests(new QuestStore(ledgerRoot),quest.id)).toHaveLength(1)
+  // A recorded Start, bound by the runtime to this continuation, is distinct from assignment text.
+  const store=new QuestStore(ledgerRoot),requestFile=join(store.runtime,'start-requests',first.requestID+'.json')
+  const request=JSON.parse(readFileSync(requestFile,'utf8'));request.state='started';request.authorization.giverID='giver'
+  writeFileSync(requestFile,JSON.stringify(request))
+  writeFileSync(runtimeQueuePath(store.runtime,'continuations',undefined,'.json'),JSON.stringify([{questID:quest.id,context:{sessionID:'giver',requestID:first.requestID},runID:'owned-run'}]))
+  expect(questStartAuthorization(store,quest.id,'owned-run','giver')?.action).toBe('Start saved Quest')
+  expect(questStartAuthorization(store,quest.id,'other-run','giver')).toBeUndefined()
+  expect(questStartAuthorization(store,quest.id,'owned-run','other-giver')).toBeUndefined()
   board.configure(quest.id,{task:'review',model:'user-provider/user-model#high',delivery:'quest-pr'})
+  expect(questStartAuthorization(store,quest.id,'owned-run','giver')).toBeUndefined()
   const saved=new QuestStore(ledgerRoot).read(quest.id)!
   expect(questWorkflow(saved)).toEqual({task:'review',model:'user-provider/user-model#high',delivery:'quest-pr'})
   expect(deliveryInstructions(saved)).toContain('one pull request')
