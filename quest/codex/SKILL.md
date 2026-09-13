@@ -3,16 +3,16 @@ name: quest
 description: Create, resume and update shared Quests in Codex with plans, results and deliverables.
 ---
 
-Use `quest` to create or resume the user's work. Keep the title, description,
+Use `quest.create`, `quest.list`, `quest.get`, `quest.update` and `quest.inspect` to create or resume the user's work. Keep the title, description,
 plan, status and deliverable accurate. Resume with list/get and read the needed
 sections. Use inspect only when full records or ownership diagnostics are needed.
 
 The installed hooks coordinate checkout ownership. On a conflict, the Windows
 adapter creates or reuses a session-owned worktree and rebinds supported shell
-and patch operations automatically. Read-only file and web tools remain usable.
+and patch operations automatically. Read-only file, web and documentation tools remain usable.
 The logical session directory stays the same; shell execution uses the recovered
 worktree through the installed host's restricted command boundary. Persistent
-MCP tools without a verified binding remain blocked. Do not clear another owner's
+MCP tools without a verified binding receive the prepared workspace path and the supported execution route. The host supplies session context outside tool arguments. Do not clear another owner's
 reservation, bypass the hook, or replay a command whose completion is unknown.
 If recovery reports an integration error, inspect its evidence and preserve both
 checkouts. Changing an ordinary command's working directory is not recovery.

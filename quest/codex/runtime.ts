@@ -57,12 +57,15 @@ function boundRecoveryCommand(store:QuestStore,binding:RecoveryBinding,command:s
 const git=(directory:string,args:string[])=>{const r=spawnSync('git',['-C',directory,...args],{encoding:'utf8',windowsHide:true});if(r.status!==0)throw new Error('Cannot inspect checkout: '+r.stderr);return r.stdout}
 const save=(file:string,value:unknown)=>{const tmp=file+'.'+randomUUID()+'.tmp';writeFileSync(tmp,JSON.stringify(value));renameSync(tmp,file)}
 const runtime=(store:QuestStore)=>{const dir=join(store.runtime,'codex');mkdirSync(dir,{recursive:true});return dir}
-export function consumeTicket(store:QuestStore,ticket:unknown){
- if(typeof ticket!=='string'||! /^[a-f0-9-]{36}$/.test(ticket))throw new QuestError('HOOK_REQUIRED','Enable and trust the Quest plugin hooks, then use a fresh Codex session.')
- const file=join(runtime(store),'ticket-'+ticket+'.json');let row:any
- try{row=JSON.parse(readFileSync(file,'utf8'));unlinkSync(file)}catch{throw new QuestError('HOOK_REQUIRED','Quest host context is missing or already consumed. Retry the original Quest operation.')}
- if(Date.now()-row.at>60_000)throw new QuestError('HOOK_REQUIRED','Quest host context expired; retry the original operation.')
- return row as {directory:string;sessionID:string;at:number}
+/** Codex supplies threadId outside model-controlled tool arguments. */
+export function sessionContext(store:QuestStore,meta:any){
+ const sessionID=meta?.threadId
+ if(typeof sessionID!=='string'||!sessionID)throw new QuestError('HOOK_REQUIRED','Quest requires the configured Codex host session metadata.')
+ let state:Session
+ try{state=JSON.parse(readFileSync(join(runtime(store),key(sessionID)+'.json'),'utf8'))}
+ catch{throw new QuestError('HOOK_REQUIRED','Quest session context is unavailable; enable the configured Quest hooks.')}
+ if(state.sessionID!==sessionID||state.ended)throw new QuestError('HOOK_REQUIRED','Quest session context is inactive.')
+ return {directory:state.directory,sessionID}
 }
 const resultObject=(value:any)=>{if(typeof value==='string'){try{return JSON.parse(value)}catch{return undefined}}return value}
 // Failed dispatches do not receive PostToolUse on this host. Only terminal host
@@ -111,13 +114,13 @@ export function codexHook(input:HookInput,store=new QuestStore(questRoot()),reco
  if(!sameDirectory(state.directory,input.cwd))throw new Error('Session checkout changed; open a fresh session in the intended checkout')
  let directory=state.recovery?.directory??input.cwd
  let context={directory,sessionID:input.session_id,host:'codex'}
- const event=input.hook_event_name,questCall=/^mcp__.+__quest$/.test(input.tool_name??'')
+ const event=input.hook_event_name,questCall=/^mcp__quest__(?:list|get|create|update|inspect)$/.test(input.tool_name??'')
  state.transcript??=input.transcript_path
  if(event==='SessionStart'){state.ended=false;save(file,state);reconcilePriorSessions(store,input.cwd,input.session_id);return {}}
  if(event==='PreToolUse'){
   if(questCall){
-   const ticket=randomUUID();save(join(dir,'ticket-'+ticket+'.json'),{directory:input.cwd,sessionID:input.session_id,at:Date.now()});
-   return {hookSpecificOutput:{hookEventName:event,permissionDecision:'allow',updatedInput:{...input.tool_input,_questTicket:ticket}}}
+   save(file,state)
+   return {}
   }
    if(checkoutIndependent(input.tool_name??'',input.tool_input)){
     if(!state.recovery)return {}
@@ -148,7 +151,6 @@ export function codexHook(input:HookInput,store=new QuestStore(questRoot()),reco
   }}
   let ownership:any=coordination(store,context)({action:'join',title,scopes:['.']})
   if(!ownership.acquired){
-   if(!['Bash','apply_patch'].includes(input.tool_name??''))return {hookSpecificOutput:{hookEventName:event,permissionDecision:'deny',permissionDecisionReason:'This tool cannot be rebound safely while another session owns the checkout. Shell and patch operations recover automatically; the existing owner remains protected.'}}
    // Bootstrap is runtime code, outside the blocked ordinary-tool path. Only
    // create our own worktree; never release or edit another participant.
    state.recovery=recoverWorkspace(store,input.cwd,input.session_id,recoveryOptions)
@@ -171,7 +173,7 @@ export function codexHook(input:HookInput,store=new QuestStore(questRoot()),reco
    if(state.recovery){
     if(input.tool_name==='Bash'){const command=boundRecoveryCommand(store,state.recovery,input.tool_input?.command,recoveryOptions,input.tool_input?.workdir);updatedInput={...input.tool_input,command:command.command};recoveryTicket=command.ticket}
    else if(input.tool_name==='apply_patch')updatedInput={...input.tool_input,command:recoveryPatch(input.tool_input?.command,state.recovery)}
-   else return {hookSpecificOutput:{hookEventName:event,permissionDecision:'deny',permissionDecisionReason:'This persistent tool has no verified worktree binding. Use the recovered shell or patch tools; the original checkout remains protected.'}}
+   else return {hookSpecificOutput:{hookEventName:event,permissionDecision:'deny',permissionDecisionReason:'Task workspace is ready at '+state.recovery.directory+'. This host cannot change the filesystem binding of '+input.tool_name+'. Continue the operation with shell or patch tools in that workspace; their binding is automatic.'}}
   }
    if(state.baseline===undefined){try{if(state.recovery){state.baseline=state.recovery.preparation?.tree??state.recovery.head;state.clean=false}else{state.baseline=git(directory,['rev-parse','HEAD']).trim();state.clean=git(directory,['status','--porcelain']).trim()===''}}catch(error){state.baseline='';state.clean=false;state.snapshotUnavailable=String(error)}}
   if(q)state.questID=q
@@ -183,7 +185,7 @@ export function codexHook(input:HookInput,store=new QuestStore(questRoot()),reco
  if(event==='PostToolUse'){
   if(questCall){
    // Inspecting another Quest must not silently adopt it as this task.
-   if(input.tool_input?.action==='create'){
+   if(input.tool_name==='mcp__quest__create'){
     const response=resultObject(input.tool_response)
     const value=response?.structuredContent??resultObject(response?.content?.find((x:any)=>x.type==='text')?.text)
     if(value?.id)state.questID=value.id
