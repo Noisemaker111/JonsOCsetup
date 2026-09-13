@@ -1,21 +1,20 @@
 import {hostExecution} from './host-observation'
-import {existsSync,readdirSync,readFileSync,mkdirSync,copyFileSync,lstatSync,realpathSync,watch,unlinkSync} from 'node:fs'
-import {join,resolve,isAbsolute,basename,relative} from 'node:path'
-import {createHash} from 'node:crypto'
-import {questAssetsDir} from './artifacts'
+import {existsSync,readdirSync,readFileSync,mkdirSync,watch} from 'node:fs'
+import {join,resolve} from 'node:path'
+import {retireWorkspace} from './workspace-retirement'
 import {QuestWorkspaces} from './workspaces'
 import {readAllQuests} from './index'
 import {inspectWorker} from './worker-inspection'
 import {readContinuations} from './runtime-queues'
-import {pathKey,within,git} from './cleanup-git.mjs'
+import {pathKey,git} from './cleanup-git.mjs'
 import type {QuestStore} from './store'
 import type {Quest} from './types'
 
 const terminal=new Set(['completed','failed','cancelled'])
-const running=new WeakMap<object,Promise<unknown>>()
+const running=new Map<string,Promise<unknown>>()
 /** Archived records are durable cleanup requests, including turn-ins from the board and CLI. */
 export function cleanupQuests(store:QuestStore,host?:any,only?:string):Promise<any> {
- if(host&&running.has(host))return running.get(host)!
+ if(running.has(store.runtime))return running.get(store.runtime)!
  const run=async()=>{
   const manager=new QuestWorkspaces(store.runtime),results:any[]=[]
   for(const entry of readAllQuests(store.projectRoot,{includeArchived:true})){
@@ -46,45 +45,18 @@ export function cleanupQuests(store:QuestStore,host?:any,only?:string):Promise<a
      const coordination=join(store.runtime,'coordination',w.projectID+'.json')
      if(existsSync(coordination)&&JSON.parse(readFileSync(coordination,'utf8')).participants.some((p:any)=>!p.releasedAt&&pathKey(p.checkout)===pathKey(w.path)))reason='An editor still owns this checkout'
     }catch(e){reason=String(e)}
-    const outcome=reason?manager.retain(w.runID,reason):manager.cleanup(w.runID,()=>{
-     if(store.read(q.id)?.state!=='Archived')throw Error('Quest reopened during cleanup')
-     preserveArtifacts(store,q,w.path)
-    })
+    const outcome=reason?manager.retain(w.runID,reason):await retireWorkspace({runtime:store.runtime,projectRoot:store.projectRoot,questID:q.id,runID:w.runID})
     results.push({quest:q.title,...outcome})
    }
   }
   return results
  }
- const promise=run().finally(()=>{if(host)running.delete(host)})
- if(host)running.set(host,promise)
+ const promise=run().finally(()=>{running.delete(store.runtime)})
+ running.set(store.runtime,promise)
  return promise
 }
 export function cleanupStatus(store:QuestStore,q:Quest){const manager=new QuestWorkspaces(store.runtime);return q.sessions.flatMap(s=>{const id=s.runID??s.callID;if(!/^[a-z0-9-]{1,80}$/.test(id))return [];const w=manager.get(id);return w?[{runID:id,removed:w.removed===true,...w.cleanup}]:[]})}
 
-function preserveArtifacts(store:QuestStore,q:Quest,workspace:string){
- let changed=false
- const copies:Array<{source:string;digest:string}>=[]
- const artifacts=q.evidence.artifacts.map(a=>{
-  if(!a.path)return a
-  const assetRoot=questAssetsDir(store.projectRoot,q.id)
-  if(a.path.replaceAll('\\','/').startsWith('.opencode/quests-assets/'))return a
-  const source=isAbsolute(a.path)?a.path:resolve(workspace,a.path)
-  if(!within(workspace,source))return a
-  if(!existsSync(source)||!lstatSync(source).isFile()||!within(realpathSync(workspace),realpathSync(source)))throw Error('Artifact missing, linked or not a regular file: '+a.name)
-  const data=readFileSync(source),digest=createHash('sha256').update(data).digest('hex')
-  mkdirSync(assetRoot,{recursive:true})
-  const destination=join(assetRoot,digest+'-'+basename(source))
-  if(!existsSync(destination))copyFileSync(source,destination)
-  if(createHash('sha256').update(readFileSync(destination)).digest('hex')!==digest)throw Error('Artifact copy verification failed')
-  copies.push({source,digest});changed=true;return {...a,path:destination,digest}
- })
- if(changed){const current=store.read(q.id);if(!current||current.revision!==q.revision)throw Error('Quest changed while preserving artifacts; retry cleanup');store.apply(q.id,'patched',{evidence:{...q.evidence,artifacts}},'quest:cleanup-artifacts',{expectedRevision:q.revision});q.evidence.artifacts=artifacts;q.revision=store.read(q.id)!.revision}
- for(const {source,digest} of copies){
-  if(git(workspace,['ls-files','--',relative(workspace,source)]))continue
-  if(createHash('sha256').update(readFileSync(source)).digest('hex')!==digest)throw Error('Artifact changed after preservation')
-  unlinkSync(source)
- }
-}
 const watching=new WeakMap<object,()=>void>()
 /** Filesystem/host events, never a cleanup polling interval or cron. */
 export function installQuestCleanup(store:QuestStore,host:object){
