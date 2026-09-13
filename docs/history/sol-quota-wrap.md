@@ -1,3 +1,5 @@
+> Historical record from the earlier setup. Model defaults, prices, account limits, paths, and assignments below are not current instructions. Use [model selection](../account-aware-routing.md) and the user's live settings.
+
 # Sol wrap: dead Fable desk review + visible CLIProxy quota
 
 You are GPT-5.6 Sol at xhigh (not fast, not max unless you need it). Allbot launched this after Claude Fable 5.1 died mid-review on a CLIProxy 429. Two jobs. Stay inside this git repo (`Noisemaker111/opencode-config` at `/home/debian/.config/opencode`). Do not git push. Do not clone other repos. Do not touch appforgutters, jgengine, or upstream OpenCode. Secrets stay out of git.

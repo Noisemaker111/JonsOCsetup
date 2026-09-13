@@ -1,3 +1,5 @@
+> Historical record from the earlier setup. Model defaults, prices, account limits, paths, and assignments below are not current instructions. Use [model selection](../account-aware-routing.md) and the user's live settings.
+
 # OpenCode Go catalog (live)
 
 Pulled 2026-09-02 9:48pm ET. Source of truth for *what Go has right now*. The lineup changes; re-fetch `https://opencode.ai/zen/go/v1/models` and [docs/go](https://opencode.ai/docs/go/) before assuming a name still exists.

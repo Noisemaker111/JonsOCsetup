@@ -1,3 +1,5 @@
+> Historical record: this is a dated investigation or implementation receipt, not current operating instructions. Its pending work, model choices, commands, and verification counts describe that run. Use the [current documentation](README.md).
+
 # Single user Quest Giver and worker visibility
 
 Follow-up to dev PR #8 (the board/runtime repair), implemented in the clean `single-user-quest-giver` worktree from merged dev. The original dirty checkout and original keyboard worker worktree remain untouched.

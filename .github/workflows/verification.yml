@@ -1,7 +1,7 @@
 name: Verification
 on:
   pull_request:
-    branches: [agents, master]
+    branches: [agents, main]
   push:
     branches: [agents]
 permissions:
@@ -19,7 +19,7 @@ jobs:
       - run: bun run check:repo
       - run: node --check scripts/runtime-channel.mjs
   release-notes:
-    if: github.base_ref == 'master'
+    if: github.base_ref == 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

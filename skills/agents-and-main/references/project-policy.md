@@ -9,7 +9,7 @@ once to the repository-root `AGENTS.md`, creating that file if absent. Keep the
 project's existing mission and unrelated instructions. The example assumes agents
 integration is already authorized; otherwise record the actual approval boundary.
 
-> Follow the agents-and-main workflow in [DEVELOPMENT.md](DEVELOPMENT.md).
+> Follow the agents-and-main workflow in `DEVELOPMENT.md`.
 > Use `sb agents` / `sb main` only in a checkout you own; do agent work in isolated
 > worktrees. Authorized agents integrate into `agents` after verification and CI.
 > Only the human merges `main`; prepare releases only when the user requests them.
@@ -34,8 +34,8 @@ after saving and check that no old instruction contradicts the authorized workfl
 | Release candidate pinning, automatic patch notes and release CI | |
 | Previous artifact, rollback command and data compatibility limits | |
 
-For a web application, a typical mapping is `dev` to an internal environment with its own backend/data and `main` to the customer environment. Choose real provider resources before enabling deployment triggers. Feature flags can control exposure within an environment, but do not provide data isolation.
+For a web application, a typical mapping is `agents` to an internal environment with its own backend/data and `main` to the customer environment. Choose real provider resources before enabling deployment triggers. Feature flags can control exposure within an environment, but do not provide data isolation.
 
 For local source checkouts, adopt the shared `sb agents` / `sb main` command from this skill. Git retains the selected branch. Agents use owned worktrees and preserve active sessions. A branch switch changes disk files; running processes and mutable runtime state need their own explicit lifecycle when applicable.
 
-Define automatic dev integration narrowly enough to enforce: eligible actor or trusted PR source, dev as base, required checks at the reviewed head, and excluded actions requiring separate approval. If branch protection or automation is unavailable on the host or plan, document the limitation and use an authorized coordinator to enforce the checks; do not claim server enforcement exists.
+Define automatic dev integration narrowly enough to enforce: eligible actor or trusted PR source, `agents` as base, required checks at the reviewed head, and excluded actions requiring separate approval. If branch protection or automation is unavailable on the host or plan, document the limitation and use an authorized coordinator to enforce the checks; do not claim server enforcement exists.
