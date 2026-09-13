@@ -227,7 +227,7 @@
     {
       "source": "skills/windows-shell/SKILL.md",
       "target": ".agents/skills/windows-shell/SKILL.md",
-      "sha256": "3ad7d5befd4ba9f2b0c316e364175004f88e9cd497f756bac24b4e9187237073",
+      "sha256": "1a3a939324ea1f9abee1469700ccba277b1a8955d832a64cfe5e1f4ec23c0b7d",
       "importedFrom": ".agents/skills/windows-shell/SKILL.md"
     },
     {

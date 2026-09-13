@@ -120,6 +120,15 @@ So read a range or a search hit. Read a file whole only when you are about to
 rewrite it. If you want it again after a compaction, that is what the session
 ledger is for.
 
+Do not try to shave the boilerplate instead. Import blocks are the visible part --
+2,490 import lines reached context in that session, ~35k tokens, 4.7% of this tree --
+but stripping them buys nothing, because `rg -n` charges its line-number prefixes
+back at about the same rate. On `scripts/capture-setup.mjs`: 6,357 bytes whole,
+6,255 with the imports filtered out, 1,134 for the one function the question was
+about. Read by symbol and the preamble never arrives. For the same reason, do not
+restructure code to read cheaply -- a shared prelude module or preloaded globals
+trade a visible constant for indirection every later reader has to resolve.
+
 The rest is runner noise, and it is mechanical to remove. Test output was 83k
 tokens across 74 results, 18% of its lines individual `(pass)` lines with long
 behavioural names that say nothing when the run is green. Installs contributed
