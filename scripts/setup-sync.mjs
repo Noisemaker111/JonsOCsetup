@@ -24,12 +24,22 @@ const changed = [...now.keys()].filter(t => was.has(t) && was.get(t) !== now.get
 // new file is something a person should look at before it is published, not something a script
 // pushes on their behalf. The point of this command is that looking takes one step instead of ten.
 const dirty = git(['status', '--porcelain', '--', 'setup', 'skills', 'docs']).split('\n').filter(Boolean)
+
+// Link health belongs in the same breath as drift, because a broken link is how drift comes back: a
+// tool that replaces a file instead of editing it leaves a copy with identical bytes, so nothing
+// looks wrong until the two have diverged. `unlinked` above zero means re-run `setup:link`.
+const links = JSON.parse(execFileSync('node', [join(root, 'scripts/link-setup.mjs')], {
+  cwd: root, encoding: 'utf8', windowsHide: true,
+}))
+
 console.log(JSON.stringify({
   tracked: after.entries.length,
   dependencies: after.dependencies.length,
   added,
   removed,
   changed,
+  linked: links.alreadyLinked,
+  unlinked: links.wouldLink,
   workingTree: dirty.length,
   next: dirty.length
     ? 'Review the diff, then commit setup/manifest.json with the source bytes in the same change.'

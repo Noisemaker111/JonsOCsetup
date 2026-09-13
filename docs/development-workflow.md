@@ -147,7 +147,8 @@ request and merges it the moment the run goes green. Nothing polls a run, nothin
 waits for a person, and a pull request opened against a red branch lands by
 itself once the branch recovers. Repository settings must keep `allow_auto_merge`
 on for the queue to exist; without it the same command merges immediately when
-the checks already passed and fails outright when they have not.
+the checks already passed and fails outright when they have not. Some harnesses
+additionally refuse a direct merge outright -- see their own instruction file.
 
 The dev host database, Quests, UI state, orchestration and telemetry live under
 `.channels/state/dev`; stable retains its original stores. Broker accounts and

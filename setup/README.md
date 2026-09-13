@@ -6,6 +6,10 @@ Upstream skills that are their own checkouts are pinned under `dependencies` by 
 
 A file that is only installed is a file that gets corrected repeatedly and lost: the dev-workflow skill was reworded away from "dev release" twice before the wording ever reached here. `test/setup-manifest.test.ts` fails when an entry's recorded hash stops matching its source, and `setup:plan` reports an installed file that has drifted from the tree — run it before assuming the two agree.
 
+The instruction files do not rely on that at all, because they are not copies. `~/.codex/AGENTS.md`, `~/.claude/CLAUDE.md`, the hub's `AGENTS.md`, `CLAUDE.md` and `MEMORY.md`, and the shared skills are symbolic links into a checkout of this repository kept on `agents` — `C:/Users/Jk101/Projects/JonsOCsetup`, also reachable as `opencode-hub/setup`. Editing one through the path a harness reads edits the tracked file, so `git status` sees it immediately and committing is the only step left. There is nothing to synchronise and nothing to remember.
+
+`setup:link` reports and creates those links; it refuses to replace an installed file whose content has moved ahead of the tree, so an unpublished edit is captured rather than overwritten. Files a harness rewrites itself stay copies — `.codex/config.toml`, `.codex/rules/default.rules` and `.claude/settings.json` are written by their own applications, and a write that replaces a path rather than its contents destroys a link and silently restores a copy. `setup:sync` reports `unlinked` above zero when that has happened to a file that should be linked, and `setup:plan` counts links separately and never writes over one.
+
 - `bun run setup:sync` re-captures this machine and names what was added, changed or removed. Run it after touching any instruction, skill or config file anywhere on the machine; it stages nothing and pushes nothing, because this tree is public and a newly captured file is something to look at before publishing.
 - `bun run setup:plan` verifies source hashes and previews installation.
 - `bun run setup:install` applies missing or previously managed files, refusing independent local edits.
