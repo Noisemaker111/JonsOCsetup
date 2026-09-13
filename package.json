@@ -26,6 +26,7 @@
     "runtime:channel": "node scripts/runtime-channel.mjs",
     "setup:plan": "node scripts/install-setup.mjs",
     "setup:install": "node scripts/install-setup.mjs --apply",
+    "setup:sync": "node scripts/setup-sync.mjs",
     "runtime:drive": "bun scripts/drive-opencode.ts",
     "check:core": "node scripts/core-suite.mjs",
     "check:repo": "node scripts/repo-hygiene.mjs",

@@ -6,6 +6,7 @@ Upstream skills that are their own checkouts are pinned under `dependencies` by 
 
 A file that is only installed is a file that gets corrected repeatedly and lost: the dev-workflow skill was reworded away from "dev release" twice before the wording ever reached here. `test/setup-manifest.test.ts` fails when an entry's recorded hash stops matching its source, and `setup:plan` reports an installed file that has drifted from the tree — run it before assuming the two agree.
 
+- `bun run setup:sync` re-captures this machine and names what was added, changed or removed. Run it after touching any instruction, skill or config file anywhere on the machine; it stages nothing and pushes nothing, because this tree is public and a newly captured file is something to look at before publishing.
 - `bun run setup:plan` verifies source hashes and previews installation.
 - `bun run setup:install` applies missing or previously managed files, refusing independent local edits.
 - `node scripts/install-setup.mjs --root <empty-home> --apply` restores into an isolated home without executing installed scripts or plugins.

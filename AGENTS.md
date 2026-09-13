@@ -6,8 +6,6 @@ Use the exact model the user chose. If that route is unavailable, say so instead
 
 When the task is OpenCode itself (config, plugins, agents, Quests, TUI), work from `C:\Users\Jk101\Projects\opencode-hub` and read its AGENTS.md first.
 
-Changes to this repository go through an owned worktree and a PR into `agents`, which you merge yourself once it is green and you have exercised the result through the installed app — do not ask Jon for technical review or to approve those steps. Only Jon touches the stable branch, and he raises that himself: never say "release" to him and never bring up the stable or main branch, as a stage, an offer or an aside. `docs/development-workflow.md` has the worktree, channel and retirement mechanics.
-
 ## Reading Jk
 
 Windows and PowerShell. No bash-only pipelines, no `head`/`tail`/`cat`/`ls`, no `&&`; load the

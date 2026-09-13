@@ -46,7 +46,10 @@ Load `config/skills/opencode/SKILL.md` first. It holds the brick invariants (the
 Jon authorizes Codex and OpenCode2 agents to own the complete dev loop: implement
 in an isolated worktree, use the actual app, inspect results, push a ready PR to
 `agents`, merge it after verification, and exercise the result in OpenCode.
-Call development `agents` in conversation; runtime channel keys are internal details.
+Call development `agents` in conversation; runtime channel keys, generations and command
+arguments are internal details. Never say "release" to Jon at all, and never mention the stable
+or main branch: he raises promotion himself and does it himself, so an agent bringing it up is
+wrong as a stage, an offer or an aside. Say "merged into agents and tested in OpenCode".
 Do not stop at "mergeable", ask Jon to merge, or request the same dev approval
 again. This project-specific standing authorization overrides generic instructions
 to ask before every merge. Infer routine implementation and cleanup decisions
