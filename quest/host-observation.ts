@@ -1,5 +1,5 @@
 /** Live observations belong to the connected session client, never a process-wide singleton. */
-type State = { connected: boolean; sessions: Map<string, { active: boolean; at: string }>; permission?: any }
+type State = { connected: boolean; sessions: Map<string, { active: boolean; at: string }>; permission?: any; toolWaits?:Map<string,Set<AbortController>> }
 const KEY = Symbol.for('opencode-config.quest.host-observations')
 const registry = globalThis as typeof globalThis & { [KEY]?: WeakMap<object, State> }
 const hosts = registry[KEY] ??= new WeakMap<object, State>()
@@ -16,11 +16,20 @@ export function connectHostObservation(host: object, permission?: any) {
 }
 export function disconnectHostObservation(host: object) {
  const state = hosts.get(host)
- if (state) { state.connected = false; state.sessions.clear() }
+ if (state) { state.connected = false; state.sessions.clear();for(const waits of state.toolWaits?.values()??[])for(const wait of waits)wait.abort(new Error('Host connection lost while waiting for workspace access')) }
+}
+/** The native tool context has no AbortSignal; reuse its owning host's lifecycle events. */
+export function workspaceWaitSignal(host:object,sessionID:string) {
+ const state=hosts.get(host)
+ if(!state?.connected)throw Error('Cannot wait for workspace access without a connected host; retry after the host reconnects')
+ const controller=new AbortController(),waits=(state.toolWaits??=new Map()).get(sessionID)??new Set<AbortController>()
+ state.toolWaits.set(sessionID,waits);waits.add(controller)
+ return {signal:controller.signal,dispose(){waits.delete(controller);if(!waits.size)state.toolWaits?.delete(sessionID)}}
 }
 export function recordHostObservation(host: object, event: any) {
  const state = hosts.get(host), id = event?.data?.sessionID
  if (!state?.connected || !id) return
+  if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(event.type)||event.type==='session.status'&&event.data.status?.type==='idle')for(const wait of state.toolWaits?.get(id)??[])wait.abort(new Error('Worker execution ended while waiting for workspace access'))
  if (event.type === 'session.status') {
   const status = event.data.status?.type
   if (status === 'running' || status === 'idle') state.sessions.set(id, { active: status === 'running', at: new Date().toISOString() })
