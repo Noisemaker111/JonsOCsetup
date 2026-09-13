@@ -317,6 +317,7 @@ export default define({
       ["tools", () => installQuestTools(ctx, api)],
       ["shared-workspace-guard", () => installSharedWorkspaceGuard(ctx,api.store)],
       ["worker-instruction-reads", () => installWorkerInstructionReads(ctx,api.store)],
+      ["shell-guidance", async () => (await import('./shell-guidance')).installShellGuidance(ctx)],
     ] as const) {
       try { await install() } catch (error) {
         console.error(`[quests] ${name} disabled:`, error)

@@ -1,10 +1,11 @@
 # OpenCode hub
 
-You are looking at the entire OpenCode ecosystem on this machine: the personal config that every OpenCode session loads, the session database and logs, runtime state, the Quest ledger, the installed host binary and checkouts of the upstream source. Every folder here is a junction to the real location, so an edit through the hub edits the real file.
+You are looking at the OpenCode ecosystem on this machine. `source/` is the current JonsOCsetup repository. `config/` retains the installed runtime and historical checkout for inspection. Plain `oc` prepares committed `agents` code without switching that historical checkout.
 
 | Folder | Real path | What it is |
 |---|---|---|
-| `config/` | `~/.config/opencode` | **The only place we edit.** Git repo. Plugins, agents, skills, models, Quests, TUI chrome, gates. |
+| `source/` | `~/Projects/JonsOCsetup` | Current source on `agents`. Make changes in an owned worktree inside this repository. |
+| `config/` | `~/.config/opencode` | Installed runtime registry, snapshots and historical checkout. Inspect here; do not implement changes here. |
 | `data/` | `~/.local/share/opencode` | Host data: sessions and messages in `opencode.db` (sqlite), `log/`, `tool-output/`, `auth.json`. Read to debug. Never hand-edit. |
 | `state/` | `~/.local/state/opencode` | State our plugins write: usage cache, orchestration ledger, `plugin-health.json`, requests. Evidence, not source. |
 | `quests/` | `~/.opencode` | Quest ledger and archives shared across projects. Not a project and not a worker workspace. |
@@ -17,28 +18,28 @@ Sibling experiments `~/.config/opencode-*` (claude-harness, scope-*) are separat
 
 ## Rules
 
-- Work in `config/`. Everything else is evidence or reference. If a fix seems to need a change in `upstream/` or `host/`, it belongs in a plugin under `config/`, or it is not ours to make.
-- `config/AGENTS.md` is injected into every OpenCode session in every project. It stays a few lines of personal policy. Anything about how OpenCode itself is built belongs here, in a skill, in an agent prompt or in `config/docs/`.
-- Launch sessions at this hub root so this file loads. The host realpaths the cwd and walks up to `~`; a session started inside `config/` resolves to `~/.config/opencode` and never passes through here. PowerShell shortcuts: `oh` cds here, `ohc` opens Codex, `ohcc` opens Claude Code. `oc` opens OpenCode itself and launches at this root by default, so this file loads; `oc <branch>` runs that branch's code instead, `oc --here` uses the current directory.
+- Work from `source/` in an owned worktree. Its `AGENTS.md`, package scripts and current code are authoritative. Preserve dirty historical checkouts; never reset them to repair source selection. A plugin fix belongs in this source repository. Host changes follow the user’s upstream contribution authorization.
+- `source/AGENTS.md` is injected into every OpenCode session in every project. It stays a few lines of personal policy. Anything about how OpenCode itself is built belongs here, in a skill, in an agent prompt or in `source/docs/`.
+- Launch conversations at this hub root so this file loads. Shell implementation work belongs in the owned JonsOCsetup worktree; do not switch a shared checkout. PowerShell shortcuts: `oh` cds here, `ohc` opens Codex, `ohcc` opens Claude Code. `oc` opens OpenCode here by default; `oc <branch>` runs that branch's code and `oc --here` uses the current directory.
 - Verify every change by inspecting project logic and driving the actual product through the same controls the user uses; repeat the operation and reopen its saved result. Keep only a small core suite that directly exercises consequential production invariants. Core/build/type checks supplement actual product use. Before completion, search every source and instruction for replaced behavior and remove superseded code, registrations and obsolete fallbacks. This pre-user project has no backward-compatibility requirement. Preserve real data and active sessions.
 
 ## Extending OpenCode
 
-Load `config/skills/opencode/SKILL.md` first. It holds the brick invariants (the ways a plugin silently stops loading), the promotion command and the gates. For TUI work also load `config/skills/opencode-tui/SKILL.md` and the `opentui` skill. Where each kind of change lives:
+Load `source/skills/opencode/SKILL.md` first. It holds the brick invariants (the ways a plugin silently stops loading), the promotion command and the gates. For TUI work also load `source/skills/opencode-tui/SKILL.md` and the `opentui` skill. Where each kind of change lives:
 
-- **New screen or TUI chrome**: component in the owner's `tui-active/*.tsx` (`config/usage/`, `config/quest/`), a shim at `config/tui-bootstrap/<name>/tui.tsx`, the directory listed in `config/cli.json` `plugins`. Mount through `Plugin.define({ id, setup })` and `context.ui.slot`; keys through `keymap.layer()` from a mounted component; screens through `ui.router.navigate({ type: "plugin" })`.
-- **New agent**: `config/agent/<name>.md` with frontmatter (`description`, `mode`, `model`, `permission`) and a short prompt. `quest-giver.md` is the pattern.
-- **New server plugin, tool or hook**: `<owner>/server.ts` under `config/`, registered in `config/plugin-set.json` (`serverEntrypoints`, `entrypointOwners`), loaded by `config/plugin-bootstrap` through the active generation. Hooks in use: `context` (push `systemPart(text)` objects, never raw strings) and `http.request`; pre-tool interception is the host's `tool.execute.before` event, see `upstream/packages/plugin`. Expose concrete typed tools; Code Mode composes them, so no generic do-anything tools.
-- **Custom models, providers, routing**: provider blocks in `config/opencode.jsonc` (declare `limit: { context, output }` for providers the catalog does not know), the `config/models/` plugin, `config/cliproxyapi/` for the proxy, `config/skills/model-routing` for policy.
-- **New workflow**: a skill at `config/skills/<name>/SKILL.md` whose description says when it applies, or Quest steps (`config/quest/`, `config/skills/workspace-flow`). Harnesses that drive other coding CLIs live in `config/harnesses/`.
-- **Things to remember**: one line in `config/AGENTS.md` only if it must hold in every project. Otherwise this file, or the skill that owns the topic.
-- **Integrate and activate**: follow `config/docs/development-workflow.md` for the managed channel, its acceptance evidence, and the actual selected source. Low-level `plugin-deploy.ts` builds a local generation; it does not publish mirrors or prove that a running terminal loaded it.
+- **New screen or TUI chrome**: component in the owner's `tui-active/*.tsx` (`source/usage/`, `source/quest/`), a shim at `source/tui-bootstrap/<name>/tui.tsx`, the directory listed in `source/cli.json` `plugins`. Mount through `Plugin.define({ id, setup })` and `context.ui.slot`; keys through `keymap.layer()` from a mounted component; screens through `ui.router.navigate({ type: "plugin" })`.
+- **New agent**: `source/agent/<name>.md` with frontmatter (`description`, `mode`, `model`, `permission`) and a short prompt. `quest-giver.md` is the pattern.
+- **New server plugin, tool or hook**: `<owner>/server.ts` under `source/`, registered in `source/plugin-set.json` (`serverEntrypoints`, `entrypointOwners`), loaded by `source/plugin-bootstrap` through the active generation. Hooks in use: `context` (push `systemPart(text)` objects, never raw strings) and `http.request`; pre-tool interception is the host's `tool.execute.before` event, see `upstream/packages/plugin`. Expose concrete typed tools; Code Mode composes them, so no generic do-anything tools.
+- **Custom models, providers, routing**: provider blocks in `source/opencode.jsonc` (declare `limit: { context, output }` for providers the catalog does not know), the `source/models/` plugin, `source/cliproxyapi/` for the proxy, `source/skills/model-routing` for policy.
+- **New workflow**: a skill at `source/skills/<name>/SKILL.md` whose description says when it applies, or Quest steps (`source/quest/`, `source/skills/workspace-flow`). Harnesses that drive other coding CLIs live in `source/harnesses/`.
+- **Things to remember**: one line in `source/AGENTS.md` only if it must hold in every project. Otherwise this file, or the skill that owns the topic.
+- **Integrate and activate**: follow `source/docs/development-workflow.md` for the managed channel, its acceptance evidence, and the actual selected source. Low-level `plugin-deploy.ts` builds a local generation; it does not publish mirrors or prove that a running terminal loaded it.
 
 ## Debugging a session
 
-- Messages and sessions: `data/opencode.db`. Host log: `data/log/`. Raw tool output: `data/tool-output/`.
+- Managed `oc` sessions: `config/.channels/state/dev/host.db`; its Quests: `config/.channels/state/dev/quests/.opencode/quests/`. `data/opencode.db` and `quests/` contain historical standalone sessions and work, not the current channel board. Preserve both histories.
 - Plugin load or activation failures: `state/plugin-health.json`, `config/run/runtime/`, `config/plugin-activation.json` evidence block.
-- Quest runs and workers: `quests/quests/`, `state/orchestration.jsonl`, `config/docs/worker-recovery.md`.
+- Quest runs and workers: `quests/quests/`, `state/orchestration.jsonl`, `source/docs/worker-recovery.md`.
 - How the host actually behaves: read `upstream/packages/core/src` and `upstream/packages/plugin`, then confirm against `host/` since the installed beta can lag the branch.
 
 ## OpenCode2 dev ownership
@@ -107,13 +108,12 @@ back or finish it:
 `claim` exits 3 without taking anything while another agent holds that step, and `--json` is on
 every command. `quest-draft.mjs` still files, as an alias for `quest.mjs file`.
 
-Inside OpenCode a Quest also dispatches workers. From Claude or Codex it is a shared board: the
-same ledger, so whoever picks the work up can see what was asked and what is already underway.
+`quest start <id>` saves a durable start request on the same configured board as `oc`. The connected OpenCode adapter dispatches the saved steps without a giver model turn. If OpenCode is closed, the request remains queued until it opens. Repeating start returns the existing admission. Save task, optional exact model, concurrency and delivery with the Quest workflow; the id-only start reads them. An explicit `OPENCODE_QUEST_ROOT` keeps isolated checks and intentional alternate boards separate.
 
 ## Say whether you traced it or inferred it
 
 A cause is only **traced** when you have followed it to the line that does it — the function, its
-caller, the symbol grepped in `upstream/` or `config/`. Anything else is **inferred**: a story that
+caller, the symbol grepped in `upstream/` or `source/`. Anything else is **inferred**: a story that
 fits what you observed. Both are useful. They are not interchangeable, and to Jon they read
 identically unless you say which.
 

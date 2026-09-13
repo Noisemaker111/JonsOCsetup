@@ -8,8 +8,7 @@ When the task is OpenCode itself (config, plugins, agents, Quests, TUI), work fr
 
 ## Reading Jk
 
-Windows and PowerShell. No bash-only pipelines, no `head`/`tail`/`cat`/`ls`, no `&&`; load the
-`windows-shell` skill for the detail.
+Windows and PowerShell. Use the actual tool’s shell syntax, forward-slash paths and `rg`. Run package scripts in the package directory and check the intended script ran. Load `windows-shell` only for a shell problem that needs its troubleshooting detail.
 
 `fake`, `dummy` and `test` name the **content**, never the path: "do some fake stuff and use it" and
 "make a fake task" mean throwaway data through the real system. `minimal shim`, `thin` and `simple`

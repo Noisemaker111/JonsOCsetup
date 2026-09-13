@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { QuestStore } from "./store"
 import { readAllQuests } from "./index"
+import { parseWorkflow, questWorkflow, type QuestWorkflow } from "./workflow"
 import { questView } from "./contract"
 import { stagesFromSteps, nextQuestStep } from "./steps"
 import { normalizeArtifact } from "./artifacts"
@@ -16,8 +17,8 @@ export class QuestError extends Error {
   constructor(public code: string, message: string, public retryable = false, public runID?: string) { super(message) }
 }
 export type QuestContext = { project: ProjectIdentity; /** Internal host-derived location; never tool input. */ directory?: string; /** Verified user-giver origin, separate from the selected worker project. */ giverDirectory?: string; sessionID: string; requestID: string }
-export type CreateQuest = { title: string; description: string; steps: { title: string; detail?:string; needs?: string[]; id?: string; commandID?: string }[]; reward?: string }
-export type UpdateQuest = { title?: string; description?: string; reward?: string; steps?: { id: string; state: QuestStageStatus; title?: string; detail?: string; needs?: string[]; note?: string }[]; artifacts?: { name: string; path?: string; uri?: string; label?: string }[]; archive?: { reason?: string; accepted: boolean } | null }
+export type CreateQuest = { workflow?: QuestWorkflow; title: string; description: string; steps: { title: string; detail?:string; needs?: string[]; id?: string; commandID?: string }[]; reward?: string }
+export type UpdateQuest = { workflow?: QuestWorkflow; title?: string; description?: string; reward?: string; steps?: { id: string; state: QuestStageStatus; title?: string; detail?: string; needs?: string[]; note?: string }[]; artifacts?: { name: string; path?: string; uri?: string; label?: string }[]; archive?: { reason?: string; accepted: boolean } | null }
 /** `task` is what kind of work this dispatch is: coding, review, planning or utility. It is the
  *  only thing that can name a class the dispatch does not enforce, and it decides how much
  *  published accuracy the route may trade for a cheaper reasoning effort. Omitting it is safe --
@@ -64,11 +65,12 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
     },
     get(id: string) { return questView(getOwned(id)) },
     create(input: CreateQuest) {
-      keys(input, ["title", "description", "steps", "reward"])
+      keys(input, ["title", "description", "steps", "reward", "workflow"])
       text(input.title, "Title"); text(input.description, "Description")
       if (!Array.isArray(input.steps) || !input.steps.length || input.steps.length > 30) throw new QuestError("INVALID_INPUT", "Provide 1–30 steps")
       for (const step of input.steps) { keys(step, ["title", "detail", "needs", "id", "commandID"]); text(step.title, "Step title"); if(step.detail!==undefined&&typeof step.detail!=="string")throw new QuestError("INVALID_INPUT","Step detail must be text"); if (step.commandID !== undefined) text(step.commandID, "Configured command id") }
       const explicitIDs=input.steps.flatMap(s=>s.id?[s.id]:[]);if(new Set(explicitIDs).size!==explicitIDs.length)throw new QuestError("INVALID_INPUT","Duplicate step IDs")
+      const workflow = input.workflow === undefined ? {} : parseWorkflow(input.workflow)
       const stages = stagesFromSteps(input.steps)
       validateGraph(stages)
       if (input.reward !== undefined && typeof input.reward !== "string") throw new QuestError("INVALID_INPUT", "Reward must be text")
@@ -88,11 +90,11 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
       // duplicates the work and hides the run that has to be inspected, so it is refused here
       // rather than discouraged in a prompt.
       if (duplicate) throw new QuestError("DUPLICATE_QUEST", `Quest ${duplicate.id} already holds this request for this project and is unresolved (${duplicate.state}: ${duplicate.stages.map(s => s.id + "=" + s.status).join(", ") || "no steps"}). No second Quest was created. Retry the dispatch with action=run on ${duplicate.id}, inspect its runs with get inspect.section=runs, or change that Quest with update. Archive or finish it before opening a different Quest for the same work.`)
-      const q = store.create({ id, title: input.title, objective: input.description, description: input.description, reward: input.reward ?? "", stages, contractVersion: 2, project: context.project, integrationOwner: context.sessionID, requestFingerprint: fingerprint })
+      const q = store.create({ id, title: input.title, objective: input.description, description: input.description, reward: input.reward ?? "", extensions: { workflow }, stages, contractVersion: 2, project: context.project, integrationOwner: context.sessionID, requestFingerprint: fingerprint })
       return questView(q)
     },
     update(id: string, input: UpdateQuest) {
-      keys(input, ["title", "description", "reward", "steps", "artifacts", "archive"])
+      keys(input, ["title", "description", "reward", "steps", "artifacts", "archive", "workflow"])
       const q = getOwned(id)
       // Admission alone left the record renameable: driven against the create-only guard, the giver
       // took the refusal, created a readable Quest, then patched it back to the refused wording.
@@ -100,6 +102,7 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
       const rewritten = namingProblems({ title: input.title, objective: input.description, steps: input.steps })
       if (rewritten.length) throw new QuestError("UNREADABLE_QUEST", "Nothing was saved. " + rewritten.join(" ") + " Retry the update with wording the Quest can be read by.")
       const patch: Record<string, unknown> = {}
+      if (input.workflow !== undefined) patch.extensions = { ...q.extensions, workflow: parseWorkflow(input.workflow) }
       for (const key of ["title", "description", "reward"] as const) if (input[key] !== undefined) {
         if (typeof input[key] !== "string" || (key !== "reward" && !input[key]!.trim())) throw new QuestError("INVALID_INPUT", key + " must be text")
         patch[key] = input[key]
@@ -155,6 +158,8 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
       let q: Quest, stepIDs: string[]
       try {
         q = getOwned(id)
+        const workflow = questWorkflow(q)
+        input = { ...input, model: input.model ?? workflow.model, task: input.task ?? workflow.task }
         if (q.state === "Archived") throw new QuestError("ARCHIVED", "Reopen the Quest before starting work")
         const prior = q.sessions.find(s => s.runID === runID)
         if (prior) {

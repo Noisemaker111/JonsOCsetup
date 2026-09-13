@@ -91,6 +91,19 @@ try {
       emit(quest, lines)
       break
     }
+    case "start": {
+      if (positional.length !== 2) throw new BoardError("usage: quest start <id>", "usage")
+      const result = board.start(need(positional[1], "quest start <id>"))
+      emit(result, [`${result.state} ${result.quest}`])
+      break
+    }
+    case "configure": {
+      const [, id, settings] = positional
+      need(id && settings, 'quest configure <id> <workflow-json>')
+      const result = board.configure(id, JSON.parse(settings))
+      emit(result, [JSON.stringify(result.workflow)])
+      break
+    }
     case "claim": {
       const [, id, ref] = positional
       need(id && ref, "quest claim <id> <step> [--as <agent>] [--note <text>] [--lease <minutes>] [--force]")
@@ -156,6 +169,8 @@ function usage() {
     "",
     '  file "<outcome>" "<what was asked>" [step]...   file it (deduped on the request); do this as intent is stated',
     "  plan <id> <step>...                             set the steps [--append]",
+    "  start <id>                                    run saved steps in OpenCode; safe to repeat",
+    "  configure <id> <workflow-json>                 save task, model, concurrency and delivery",
     "  list [--mine] [--open] [--blocked]              the board [--project <path|.>] [--all] [--limit n]",
     "  read <id> [--full]                              one quest and its steps",
     "  claim <id> <step> [--note <text>]               take a step; exits 3 if held [--lease <min>] [--force]",

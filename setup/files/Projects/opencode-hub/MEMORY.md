@@ -27,6 +27,8 @@ the rest lives". Correct a stale line in place, delete a wrong one. User instruc
 - Merging a green PR into `agents` is the agent's call, not his. He raises promotion himself, so never
   say "release" to him and never bring up the stable or main branch.
 
+- Quest Giver, Quests and their extensions are the product; OpenCode2 is the platform. Product calls take the saved Quest id and derive the work, project and choices from its record. Keep host transport behind the adapter.
+
 ## The world outside this repository
 
 - `nimbus_quill` (Fable) reports `usedPoints: 0` with no reset across every observation ever taken —
@@ -35,9 +37,9 @@ the rest lives". Correct a stale line in place, delete a wrong one. User instruc
   this model", so a provider's own limits say nothing about whether a model will serve.
 - A Codex tool call costs about 320k input tokens whichever way it prints, because the conversation is
   replayed to the model and again to the approvals reviewer. 790 calls once cost 247M tokens to gather
-  1M tokens of information. Optimise the number of calls, never their output size. Codex also cannot
-  build a sandbox token with the home directory as the working directory, which forces every command to
-  escalate and doubles that cost again — start those sessions in a project directory.
+  1M tokens of information. Re-measure before applying those figures to another session. The native
+  Windows helper repair removed the observed home-directory token failure; the directory itself is
+  not forbidden.
 - Dispatch, not execution, dominates every tool that writes: a write-class call spends seconds being
   dispatched against tens of milliseconds running. Fewer, larger calls are the only thing that moves
   it; a faster disk changes nothing. Re-derive the figures before quoting them — they drift as the

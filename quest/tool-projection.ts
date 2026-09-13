@@ -1,4 +1,5 @@
 import { compactQuestSummary } from './context'
+import { questWorkflow } from './workflow'
 import type { Quest, QuestSession } from './types'
 
 const active = (run: QuestSession) => ['planned', 'executing', 'waiting', 'blocked'].includes(run.state)
@@ -19,7 +20,7 @@ export function toolSummary(q: Quest) {
 export function toolDetail(q: Quest, continuations: any[] = []) {
   const queued = continuations.filter(c => !['done', 'stopped'].includes(c.state))
   return {
-    ...toolSummary(q), description: q.description || q.objective, reward: q.reward,
+    ...toolSummary(q), description: q.description || q.objective, reward: q.reward, workflow: questWorkflow(q),
     steps: q.stages.map(step => {
       const runs = q.sessions.filter(run => run.deliverables.includes(step.id))
       const owners = runs.filter(active)

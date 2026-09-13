@@ -4,7 +4,7 @@
   "entries": [
     {
       "target": "Projects/opencode-hub/AGENTS.md",
-      "sha256": "056cddb307c1a68cbe2fde69a8aac193cfdc5ffe005f5d7d7fbb28ad20db01c5"
+      "sha256": "6ddedb5ff5853336367446ed2c9c9aa8eb19ba420205eb8128219ab72e5f4a0b"
     },
     {
       "target": "Projects/opencode-hub/CLAUDE.md",
@@ -12,7 +12,7 @@
     },
     {
       "target": "Projects/opencode-hub/MEMORY.md",
-      "sha256": "1991c27dea8e53f0a6266bb589a0725680a8ab9860a7be9625680f3b0e940038"
+      "sha256": "5115eb98b26941ebc2729c98fbda6b6d245100f466de4351678af8627cddef32"
     },
     {
       "target": ".agents/matt-pocock.md",
@@ -33,7 +33,7 @@
     },
     {
       "target": ".agents/quest.mjs",
-      "sha256": "2bfdd942b8c374d185b6a4d3e95bc17050a1e5ac4b69f76661eda9d6fa1d125a"
+      "sha256": "becd09235ae3f8fab40aec104ab890aa10e6a9bca7e3f7538c31ececac0b0e6f"
     },
     {
       "target": ".agents/quest-draft.mjs",
@@ -41,7 +41,7 @@
     },
     {
       "target": ".agents/quest-api.mjs",
-      "sha256": "3a07d2024560e49acb4881a2330a0f480024f57948e0701bf7000d5b84848e51"
+      "sha256": "9d2af0df500982eb742b5ca9fa6b64880cd4b5f8ceb675026f471fbd71f0ac45"
     },
     {
       "target": ".codex/AGENTS.md",
@@ -162,7 +162,7 @@
     {
       "source": "skills/windows-shell/SKILL.md",
       "target": ".agents/skills/windows-shell/SKILL.md",
-      "sha256": "0e0449b05504d39ab2e18169c33a6cf136622db1c56f33ba66d06845b79294fe"
+      "sha256": "1f702bde7bc6800455bb0b04c562929f15bb339ca27ff6d857d90082ed37b290"
     },
     {
       "target": ".agents/skills-disabled/2026-09-07-trim/agents/browser-task-recovery/agents/openai.yaml",

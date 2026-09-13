@@ -5,7 +5,9 @@ import { TextAttributes } from "@opentui/core"
 import type { Quest } from "../types"
 import type { QuestStore } from "../store"
 import { redact } from "../privacy"
-import { nextQuestStep } from "../steps"
+import { questWorkflow, type QuestWorkflow } from "../workflow"
+import { requestQuestStart } from "../start-request"
+import { devQueueGeneration } from "../runtime-queues"
 import { uncertainRuns, createGiver, giverID, nudgeGiver, runDetails, startDisabled, talkToGiver, turnInDisabled, workflowAPI } from "../tui-workflow"
 import { C, activate, openWorkerSession } from "./quest-board"
 
@@ -47,7 +49,8 @@ export function WorkflowActions(props: { context: any; store: QuestStore; quest:
   const actions = () => [
     { id: "giver", key: "g", title: "Continue in chat", reason: props.quest().project ? undefined : "Project ownership unresolved" },
     { id: "create", key: "c", title: "Open your Quest Giver", reason: props.quest().project ? undefined : "Project ownership unresolved" },
-    { id: "start", key: "s", title: "Start worker session", reason: startDisabled(props.quest()) },
+    { id: "start", key: "s", title: "Start Quest", reason: startDisabled(props.quest()) },
+    { id: "delivery", key: "d", title: "Choose delivery" },
     { id: "progress", key: "p", title: "Check progress / agent log" },
     { id: "nudge", key: "n", title: "Nudge giver", reason: giverID(props.quest()) ? undefined : "Open your Quest Giver first" },
     { id:"archive", key:"z", title:"Archive Quest", reason:uncertainRuns(props.quest()).length?"Reconcile active or uncertain workers before archiving":undefined },
@@ -66,12 +69,19 @@ export function WorkflowActions(props: { context: any; store: QuestStore; quest:
       if (id === "nudge") await nudgeGiver(props.context, q)
       if (id === "start") {
         const reason = startDisabled(q); if (reason) throw new Error(reason)
-        const model = nextQuestStep(q)?.commandID ? "" : await props.context.ui.dialog.prompt({ title: "Start worker session", placeholder: "Exact provider/model#reasoning; blank uses configured policy" })
-        if (model === undefined || model === null) return
-        if (typeof model !== "string") throw new Error("Host returned an unsupported route input; no worker was started")
-        const api = await workflowAPI(props.context, props.store, q)
-        const run = await api.run(q.id, typeof model === "string" && model.trim() ? { model: model.trim() } : {})
+        await workflowAPI(props.context, props.store, q)
+        const run = requestQuestStart(props.store, q.id, devQueueGeneration())
         setMessage(`Work ${run.state}. Check the agent log for live details.`)
+      }
+      if (id === "delivery") {
+        const workflow = questWorkflow(q)
+        const delivery = await props.context.ui.dialog.select({ title: "Quest delivery", current: workflow.delivery ?? "project", options: [
+          { value: "project", title: "Follow project conventions" },
+          { value: "quest-pr", title: "One pull request for this Quest" },
+          { value: "step-pr", title: "One pull request per step" },
+          { value: "none", title: "Result only, no pull request" },
+        ] }) as QuestWorkflow['delivery'] | undefined
+        if (delivery) (await workflowAPI(props.context, props.store, q)).update(q.id, { workflow: { ...workflow, delivery } })
       }
       if (id === "archive") {
         if(await props.context.ui.dialog.confirm({title:"Archive Quest",message:"Archive without accepting completion? All work and history are retained.",label:"Archive"})===true)(await workflowAPI(props.context,props.store,q)).update(q.id,{archive:{accepted:false,reason:"User archived from Quest board"}})
@@ -86,7 +96,7 @@ export function WorkflowActions(props: { context: any; store: QuestStore; quest:
     } catch (error) { setMessage(error instanceof Error ? error.message : String(error)) }
     finally { setBusy(false) }
   }
-  const primary = () => actions().find(a => a.id === (props.quest().archive || !turnInDisabled(props.quest()) ? "turn" : "giver"))!
+  const primary = () => actions().find(a => a.id === (props.quest().archive || !turnInDisabled(props.quest()) ? "turn" : !startDisabled(props.quest()) ? "start" : "giver"))!
   const more = async () => {
     const choices = actions().filter(a => a.id !== primary().id && (!props.quest().archive || a.id === "progress" || a.id === "giver" && giverID(props.quest())))
     const picked = await props.context.ui.dialog.select({ title:"Quest actions", options:choices.map(a=>({value:a.id,title:a.title,description:a.reason})) })
