@@ -31,40 +31,65 @@ on Windows unless explicitly stated otherwise.
   select a script.
 - Do not use backslash-heavy relative paths in Git or pnpm arguments.
 - Do not use `git ls-tree` to inspect commit history or changed files.
-- Do not poll with a sub-30-second `yield_time_ms`; wait inside the cell instead.
+- Do not start work that outruns the cell and then wait for it; cells stop at
+  about 30 seconds. Redirect it to a log and read the log in the next cell that
+  does real work.
 - Do not spend a tool call writing a line you already hold in the conversation.
 - Do not read a whole file to find one symbol; search first.
+- Do not set a `max_output_tokens` so tight that the read truncates; a truncated
+  read is usually read again, and the retry costs far more than the tokens saved.
 
 ## Turn economy
 
-A tool call is never free and its cost is not its output. Every call replays the
-whole conversation to the model and again to the approvals reviewer, so on this
-machine one call costs roughly 320k input tokens regardless of whether it prints
-four lines or four hundred. Measured on the 2026-09-12 OpenCode session: 790
-calls, 247M tokens, and 1.0M tokens of information actually gathered. Optimise
-the number of calls, not the size of their output.
+A tool call is never free, and its cost is only partly its output. Every call
+replays the whole conversation to the model and again to the approvals reviewer,
+so on this machine one call costs roughly 333k input tokens regardless of whether
+it prints four lines or four hundred. Measured on the 2026-09-12 OpenCode
+session: 1,310 tool calls, 436M input tokens — 190M on the main thread and 246M
+on the `auto_review` guardian — carrying 2.7M tokens of tool output.
 
-Three rules follow from that.
+Output has a second, slower price. Context in that session sawtoothed from 28k to
+244k eleven times, averaging 143k per call; each call added about 1,900 tokens
+permanently, and every one of those is re-sent to the ~57 later calls in the same
+compaction window. So a token of output costs roughly a hundred token-replays
+downstream. Optimise the number of calls first, and what each call leaves behind
+second.
 
-Wait inside the cell, never across calls. `await new Promise(r=>setTimeout(r,3000))`
-in a loop until the thing you are waiting for is true costs nothing; a `wait`
-with `yield_time_ms: 1000` costs a full turn per second waited. Set
-`yield_time_ms` to the real duration of the work, or use the first-line pragma
-`// @exec: {"yield_time_ms": 120000, "max_output_tokens": 4000}`. If a harness
-forces you to poll because it has no way to block until a condition holds, that
-harness has a missing feature; fix the harness rather than paying the poll.
+Four rules follow from that.
 
-Batch everything one decision needs. One `Promise.allSettled` over several
-`exec_command` calls costs one turn. The same commands issued one per turn cost
-one turn each and tell you nothing extra. Group reads, the write that follows
-them, and the check that confirms it into a single cell whenever the later steps
-do not depend on reading the earlier output.
+Never wait across calls, and never start work that outruns the cell. Cells stop
+at about 30 seconds: 81 of that session's cells hit that ceiling and 78 were
+immediately followed by a poll run, 157 polls in all, 127 of them waiting a
+single second — roughly 52M tokens to wait 687 seconds. Launch long work with its
+output redirected to a log, let the cell end, and read the log as the first
+statement of the next cell that does real work. A check that carries other work is
+free; a call whose only purpose is waiting is not.
 
-Search before reading. `rg -n '<symbol>' -C5` over a tree costs less than
-`Get-Content` on one file and usually answers the question outright. Read a file
-whole only after a search has shown you need all of it, and never re-read a file
-this session already read — if you keep needing it after a compaction, write the
-twenty lines that matter into the project's AGENTS.md or MEMORY.md instead.
+Batch everything one decision needs, with `Promise.allSettled`. One cell over
+several `exec_command` calls costs one turn; the same commands one per turn cost
+one turn each and tell you nothing extra. Use `allSettled` rather than bare
+sequential `await`s: a cell that throws part-way discards everything the earlier
+statements already earned, which is how one aborted cell re-ran two identical web
+searches on 2026-09-12.
+
+Size `max_output_tokens` to the job, and treat truncation as the expensive
+outcome. 209 of that session's calls (17.6%) truncated, and in 80% of them the
+same file was read again within three calls — each token withheld bought a fresh
+~333k call. Simulated against the real traffic, an 8000-token budget on reads
+would have avoided ~143 of those retries (~48M tokens) for ~14M in extra replay.
+Use roughly 800–1200 for a probe — a status check, a grep, a `gh pr view`, where
+the median output is under 750 tokens anyway — and roughly 8000 for a file you are
+about to change. Above about 12000, do not raise the budget: narrow the command,
+or redirect the output to a file and read the slice you need, so it never enters
+context at all.
+
+Search before reading, and write down what you learned. `rg -n '<symbol>' -C5`
+over a tree costs less than `Get-Content` on one file and usually answers the
+question outright. Never re-read a file this session already read: keep one
+session ledger, append each finding's conclusion to it, and read that ledger once
+after a compaction. In that session `verify-single-giver-installed.ts` was read 23
+times, `MEMORY.md` 14 and `dev.json` 13, entirely because eleven compactions kept
+erasing what had already been established.
 
 ## Verified PowerShell snippets
 

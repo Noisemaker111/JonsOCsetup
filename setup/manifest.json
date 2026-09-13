@@ -65,13 +65,13 @@
     {
       "source": "setup/files/.codex/AGENTS.md",
       "target": ".codex/AGENTS.md",
-      "sha256": "11180b5ce2cf7152a7e8bc9c622cc29ce77fa43d03ffb780087dd09f3e6bc04b",
+      "sha256": "4d3371d04bbd167e4f5874a2ba52cc98b1f4407d6fa6a54aa71ab641dbc73a84",
       "importedFrom": ".codex/AGENTS.md"
     },
     {
       "source": "setup/files/.codex/config.toml",
       "target": ".codex/config.toml",
-      "sha256": "5f5881822ffed0cdd4df86fa0edda50fd4d9f8d48d337f069244f94bedb377fb",
+      "sha256": "2fc88e5733fec216290a30f3c5d29e5398f4094364aad5149c491a42a4ad3254",
       "importedFrom": ".codex/config.toml"
     },
     {
@@ -227,7 +227,7 @@
     {
       "source": "skills/windows-shell/SKILL.md",
       "target": ".agents/skills/windows-shell/SKILL.md",
-      "sha256": "dc6855fa2ead554588928b468accc021667c2ffd59ccf462f2abd87432a23bd8",
+      "sha256": "3b2f6880ea2039e601f7e197370725cf28e413029a83d5b0205c74f2783272ad",
       "importedFrom": ".agents/skills/windows-shell/SKILL.md"
     },
     {
