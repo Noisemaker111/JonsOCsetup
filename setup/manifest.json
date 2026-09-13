@@ -5,7 +5,7 @@
     {
       "source": "setup/files/Projects/opencode-hub/AGENTS.md",
       "target": "Projects/opencode-hub/AGENTS.md",
-      "sha256": "6525f73e232f126cc706f399deb0b68d5b9b895fb7a1a4d5fa4b42536dc528ef",
+      "sha256": "e32a84554fecaf9c9814a8b8769d0f919fc1efd918398fbffd658526bedb25be",
       "importedFrom": "Projects/opencode-hub/AGENTS.md"
     },
     {
@@ -17,7 +17,7 @@
     {
       "source": "setup/files/Projects/opencode-hub/MEMORY.md",
       "target": "Projects/opencode-hub/MEMORY.md",
-      "sha256": "f9bf749c590369c19173216aa82fec766870c0e73f97e0dde415f1786069cca1",
+      "sha256": "726965813864d65c7dac7ef10f388887a6fd321c9f842006aabe3b82fe0b3c75",
       "importedFrom": "Projects/opencode-hub/MEMORY.md"
     },
     {
@@ -77,7 +77,7 @@
     {
       "source": "setup/files/.claude/CLAUDE.md",
       "target": ".claude/CLAUDE.md",
-      "sha256": "fd00063e9e0d08f4a3f911e7e1793d1a4dbfc89136e5a7ce29e54ca5afd49cc4",
+      "sha256": "6b6eb5d00fca52ae3e5746dcd981aa7bb1b141ad3b38d2a694df5cd3c3c5d1e8",
       "importedFrom": ".claude/CLAUDE.md"
     },
     {
