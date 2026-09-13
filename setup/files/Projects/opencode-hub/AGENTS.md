@@ -1,11 +1,11 @@
 # OpenCode hub
 
-You are looking at the OpenCode ecosystem on this machine. `source/` is the current JonsOCsetup repository. `config/` retains the installed runtime and historical checkout for inspection. Plain `oc` prepares committed `agents` code without switching that historical checkout.
+You are looking at the OpenCode ecosystem on this machine. `source/` is the current JonsOCsetup repository and the source of truth. `config/` is installed configuration and runtime storage, not a source checkout. Plain `oc` prepares committed `agents` code from `source/`.
 
 | Folder | Real path | What it is |
 |---|---|---|
 | `source/` | `~/Projects/JonsOCsetup` | Current source on `agents`. Make changes in an owned worktree inside this repository. |
-| `config/` | `~/.config/opencode` | Installed runtime registry, snapshots and historical checkout. Inspect here; do not implement changes here. |
+| `config/` | `~/.config/opencode` | Installed configuration, runtime registry and snapshots. Inspect here; edit the maintained source in JonsOCsetup. |
 | `data/` | `~/.local/share/opencode` | Host data: sessions and messages in `opencode.db` (sqlite), `log/`, `tool-output/`, `auth.json`. Read to debug. Never hand-edit. |
 | `state/` | `~/.local/state/opencode` | State our plugins write: usage cache, orchestration ledger, `plugin-health.json`, requests. Evidence, not source. |
 | `quests/` | `~/.opencode` | Historical standalone Quest ledger. Managed `oc` and the shared API use `config/.channels/state/dev/quests`; preserve both histories. |
@@ -14,7 +14,7 @@ You are looking at the OpenCode ecosystem on this machine. `source/` is the curr
 | `upstream-v1/` | `~/Projects/opencode1` (branch dev) | v1 source, comparison only. Same rule. |
 | `agents-shared/` | `~/.agents` | Skills shared by Codex and OpenCode, plus `matt-pocock.md` on skill selection. |
 
-Sibling experiments `~/.config/opencode-*` (claude-harness, scope-*) are separate repos with their own AGENTS.md; they are not linked here and are not the live config.
+OpenCode configuration (`opencode.jsonc`, `cli.json`), agents, skills and plugins are maintained directly in JonsOCsetup. `setup/files/` captures other installed settings; it is not a complete mirror of `.config/opencode`. Keep new development worktrees inside JonsOCsetup. Historical checkout dependencies may remain under the installed folder, but their archived Git metadata does not make the installed folder an editing source. Do not initialize Git there again.
 
 ## Rules
 
