@@ -14,9 +14,13 @@ export async function discoverQuestAPI({ registry = process.env.QUEST_API_REGIST
   try { files = readdirSync(registry).filter(name => name.endsWith('.json')) }
   catch { throw new QuestAPIError('UNAVAILABLE', 'Open the Quest Giver in oc before using the Quest API.') }
   const unavailable = []
+  let outdated = 0
   const candidates = await Promise.all(files.map(async name => {
     try {
       const endpoint = JSON.parse(readFileSync(join(registry, name), 'utf8'))
+      if (endpoint.version !== 2) { outdated++; return }
+      if (!Number.isSafeInteger(endpoint.pid) || endpoint.pid <= 0) return
+      try { process.kill(endpoint.pid, 0) } catch (error) { if (error.code === 'ESRCH') return; throw error }
       if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(endpoint.url) || typeof endpoint.token !== 'string') return
       const response = await fetch(endpoint.url + '/health', { headers: { authorization: 'Bearer ' + endpoint.token }, signal })
       const health = response.ok && await response.json()
@@ -27,7 +31,7 @@ export async function discoverQuestAPI({ registry = process.env.QUEST_API_REGIST
     }
   }))
   const live = candidates.filter(Boolean)
-  if (live.length !== 1) throw new QuestAPIError('UNAVAILABLE', live.length ? 'Several Quest Givers are serving this registry; select the intended registry explicitly.' : 'No ready Quest Giver responded. Open oc and try again.' + (unavailable.length ? ' Discovery: ' + [...new Set(unavailable)].join('; ') : ''))
+  if (live.length !== 1) throw new QuestAPIError('UNAVAILABLE', live.length ? 'Several Quest Givers are serving this registry; select the intended registry explicitly.' : 'No ready Quest Giver responded. Open oc and try again.' + (outdated ? ' Older discovery records exist; reopen oc with the current agents code.' : '') + (unavailable.length ? ' Discovery: ' + [...new Set(unavailable)].join('; ') : ''))
   return live[0]
 }
 

@@ -52,16 +52,20 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
     return q
   }
   return {
-    list(query: { allProjects?: boolean; archived?: boolean; offset?: number; limit?: number } = {}) {
-      keys(query, ["allProjects", "archived", "offset", "limit"])
+    list(query: { text?: string; state?: string; projectID?: string; allProjects?: boolean; archived?: boolean; offset?: number; limit?: number } = {}) {
+      keys(query, ["text", "state", "projectID", "allProjects", "archived", "offset", "limit"])
       const offset = query.offset ?? 0, limit = query.limit ?? 25
       if (!Number.isInteger(offset) || offset < 0 || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new QuestError("INVALID_INPUT", "Invalid pagination")
       const entries = readAllQuests(store.projectRoot, { includeArchived: true })
+      const terms = (query.text === undefined ? '' : text(query.text, 'Search text')).toLocaleLowerCase().split(/\s+/).filter(Boolean)
       const diagnostics = entries.filter(x=>!x.quest).map(x=>"Unreadable Quest record: "+x.errors.join("; "))
       const rows = entries.flatMap(x => x.quest ? [x.quest] : [])
-        .filter(q => (query.allProjects === true || q.project?.id === context.project.id) && (query.archived === true ? q.state === "Archived" : q.state !== "Archived"))
+        .filter(q => (query.allProjects === true || q.project?.id === context.project.id)
+          && (!query.projectID || q.project?.id === query.projectID)
+          && (query.state ? q.state === query.state : query.archived === true ? q.state === "Archived" : q.state !== "Archived")
+          && terms.every(term => [q.title, q.description ?? q.objective, ...q.stages.map(step => step.title)].join('\n').toLocaleLowerCase().includes(term)))
         .sort((a,b) => b.updatedAt.localeCompare(a.updatedAt) || b.id.localeCompare(a.id))
-      return { diagnostics, items: rows.slice(offset, offset + limit).map(questView), nextOffset: offset + limit < rows.length ? offset + limit : null }
+      return { diagnostics, items: rows.slice(offset, offset + limit).map(questView), total: rows.length, nextOffset: offset + limit < rows.length ? offset + limit : null }
     },
     get(id: string) { return questView(getOwned(id)) },
     create(input: CreateQuest) {

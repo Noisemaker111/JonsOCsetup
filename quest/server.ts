@@ -4,7 +4,6 @@ import {connectHostObservation,disconnectHostObservation,recordHostObservation,r
 import {installWorkerCapabilities} from './worker-capabilities'
 import {installUserGiverContext} from './user-giver'
 import {guidanceTool,outcomeTool,workSupplyTool} from "./adaptive-tools"
-import {nativeWorkspaceTool} from "./native-workspace-tool"
 import {installSharedWorkspaceGuard} from "./shared-guard"
 /**
  * The quests server plugin: explicit durable work, tracked to completion.
@@ -192,9 +191,9 @@ export async function installQuestTools(ctx: { tool?: { transform?: Function }; 
   if(!ctx.session||!ctx.location||!ctx.mcp)throw Error('Quest API requires the installed OpenCode session and MCP plugin interfaces')
   const service=createQuestService(api.store,ctx.session,{directory:ctx.location.directory,onDispose:fn=>{dispose=fn}})
   const endpoint=await serveQuestAPI(api.store,service,ctx.location.directory)
-  const tools=[nativeWorkspaceTool(api.store,ctx.session),guidanceTool(api.store,ctx.session),outcomeTool(api.store,ctx.session),workSupplyTool(api.store,ctx.session)]
+  const tools=[guidanceTool(api.store,ctx.session),outcomeTool(api.store,ctx.session),workSupplyTool(api.store,ctx.session)]
   try{
-    await ctx.mcp.transform((draft:any)=>draft.set('quests',{type:'remote',url:endpoint.url+'/mcp/session',headers:{authorization:'Bearer '+endpoint.token},oauth:false,codemode:true}))
+    await ctx.mcp.transform((draft:any)=>draft.set('quests',{type:'remote',url:endpoint.mcpURL,headers:{authorization:'Bearer '+endpoint.token},oauth:false,codemode:true}))
     await transform((draft: { add: (tool: unknown) => void }) => {for(const tool of tools)draft.add(tool)})
   }catch(error){endpoint.dispose();dispose?.();throw error}
   return ()=>{endpoint.dispose();dispose?.()}

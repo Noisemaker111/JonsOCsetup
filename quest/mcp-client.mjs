@@ -6,7 +6,7 @@ import { questOperations } from './operations.mjs'
 /** Standard MCP transport for other harnesses; all work remains in the connected Quest service. */
 export async function serveQuestStdio(client) {
   const server = new Server({ name: 'quests', version: '1.0.0' }, { capabilities: { tools: {} } })
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: Object.entries(questOperations).map(([name, op]) => ({ name, description: op.description, inputSchema: op.input, outputSchema: op.output })) }))
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: Object.entries(questOperations).map(([name, op]) => ({ name, description: op.description, inputSchema: op.input, outputSchema: op.output, annotations: op.annotations })) }))
   server.setRequestHandler(CallToolRequestSchema, async request => {
     try {
       if (!Object.hasOwn(questOperations, request.params.name)) throw Error('Unknown Quest operation')

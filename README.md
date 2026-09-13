@@ -19,6 +19,8 @@ Use `/quests` for the Quest board, `/usage` for usage, `/sessions` for conversat
 
 `oc` normally opens the latest merged `agents` code. `oc <branch>` opens a specific branch; `oc --here` uses the current directory. See [launch options](docs/plain-opencode-launch.md).
 
+The same Quest operations are available through `quest` and discovered MCP tools. Save the workflow once and run `quest start <id>`. See [Quest API](docs/quest-api.md) for installation and commands.
+
 ## Install
 
 This is a personal Windows configuration, not a bundled OpenCode2 installer. Install the OpenCode2 host, Git, Bun, and Node separately. Clone the `agents` branch, run `bun install --frozen-lockfile` in the checkout, and review the personal instructions and provider settings before applying them to your machine.

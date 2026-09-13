@@ -5,18 +5,28 @@ import { questOperations } from './operations.mjs'
 import { createQuestClient } from './client.mjs'
 
 const flag = key => '--' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase())
+const kind = schema => schema.enum ? schema.enum.map(value => JSON.stringify(value)).join(' | ') : schema.anyOf ? schema.anyOf.map(kind).join(' | ') : schema.type ?? 'JSON'
+function shape(schema, prefix = '') {
+  if (schema.items) return shape(schema.items, prefix + '[]')
+  return Object.entries(schema.properties ?? {}).flatMap(([key, field]) => {
+    const path = prefix ? prefix + '.' + key : key
+    return ['    ' + path + ': ' + kind(field) + (schema.required?.includes(key) ? ' (required)' : '') + (field.description ? ' — ' + field.description : ''), ...shape(field, path)]
+  })
+}
 export function questHelp(method) {
   if (!method) return ['quest <operation> [arguments]', '', ...Object.entries(questOperations).map(([name, op]) => `  ${name} ${op.positional.map(key => '<' + key + '>').join(' ')}\n    ${op.description}`), '', '  mcp\n    Serve the same operations over MCP stdio.', '', 'Use quest <operation> --help for arguments. Results are JSON.'].join('\n')
   const op = questOperations[method]
   if (!op) throw Error('Unknown Quest operation: ' + method)
-  return [`quest ${method} ${op.positional.map(key => '<' + key + '>').join(' ')}`, op.description, '', ...Object.entries(op.input.properties).filter(([key]) => !op.positional.includes(key)).map(([key, schema]) => `  ${flag(key)} <${schema.type ?? 'JSON'}>${op.input.required.includes(key) ? ' (required)' : ''}${schema.description ? '\n    ' + schema.description : ''}`)].join('\n')
+  return [`quest ${method} ${op.positional.map(key => '<' + key + '>').join(' ')}`, op.description, '', ...Object.entries(op.input.properties).flatMap(([key, schema]) => [`  ${op.positional.includes(key) ? key : flag(key)} <${kind(schema)}>${op.input.required.includes(key) ? ' (required)' : ''}${schema.description ? '\n    ' + schema.description : ''}`, ...shape(schema, key)]), '', '  --input-json  Read argument JSON from stdin; flags may add other fields.', '  --help --json  Print the complete shared operation contract.'].join('\n')
 }
 
-export function parseQuestArguments(args) {
+export function parseQuestArguments(args, initial = {}) {
   const [method, ...rest] = args
   const op = questOperations[method]
   if (!op) throw Error('Unknown Quest operation: ' + method)
-  const input = {}, flags = new Map(Object.keys(op.input.properties).map(key => [flag(key), key]))
+  if (!initial || typeof initial !== 'object' || Array.isArray(initial)) throw Error('Input must be a JSON object')
+  for (const key of Object.keys(initial)) if (!Object.hasOwn(op.input.properties, key)) throw Error('Unknown input field: ' + key)
+  const input = { ...initial }, flags = new Map(Object.keys(op.input.properties).map(key => [flag(key), key]))
   let position = 0
   for (let i = 0; i < rest.length; i++) {
     const item = rest[i]
@@ -32,14 +42,23 @@ export function parseQuestArguments(args) {
 }
 
 export async function runQuestCLI(args, client = createQuestClient()) {
+  if (args[0] === 'mcp' && (args.includes('--help') || args.includes('-h'))) return 'quest mcp\nServe the generated Quest operations over MCP stdio.'
   if (args[0] === 'mcp') {
     const { serveQuestStdio } = await import('./mcp-client.mjs')
     await serveQuestStdio(client)
     return
   }
   if (!args.length || ['help', '--help', '-h'].includes(args[0])) return questHelp(args[1])
-  if (args.includes('--help') || args.includes('-h')) return questHelp(args[0])
-  const { method, input } = parseQuestArguments(args)
+  if (args.includes('--help') || args.includes('-h')) return args.includes('--json') ? JSON.stringify(questOperations[args[0]]) : questHelp(args[0])
+  let initial = {}
+  if (args.includes('--input-json')) {
+    if (process.stdin.isTTY) throw Error('Pipe a JSON object to --input-json')
+    const chunks = []
+    for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk))
+    initial = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+    args = args.filter(arg => arg !== '--input-json')
+  }
+  const { method, input } = parseQuestArguments(args, initial)
   return JSON.stringify(await client[method](input))
 }
 

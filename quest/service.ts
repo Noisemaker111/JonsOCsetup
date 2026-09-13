@@ -7,7 +7,7 @@ import {cleanupQuests,cleanupStatus,installQuestCleanup} from "./cleanup"
 import {bindUserGiver,userGiverID,giverContext,adoptQuestGiver,verifyGiverBinding} from './user-giver'
 import { reconcileWorkers, inspectWorker } from "./worker-inspection"
 import {configureLearning,collectWorkflowOutcomes} from "./outcome-tracking"
-import {workspaceSettings,setWorkspaceMode} from "./workspace-settings"
+import {workspaceSettings} from "./workspace-settings"
 import { QuestContinuation } from './continuation'
 import { readAllQuests } from './index'
 import { configuredDispatchPolicyFile } from "../models/dispatch-planner"
@@ -20,7 +20,7 @@ import { questDispatch } from "./dispatch"
 import { QuestWorkspaces } from "./workspaces"
 import { questChanges } from "./change-view"
 import type { QuestHost } from "./runtime"
-import {toolSummary,toolDetail,toolSection} from './tool-projection'
+import {toolSummary,toolDetail,toolSection,toolStatus,toolPlan} from './tool-projection'
 import {activeRuns,awaitQuestChange,observedState,pollDecision,runSummary,unchangedRefusal,waitSteering,DEFAULT_WAIT_SECONDS,MAX_WAIT_SECONDS,type SeenRequest} from './wait'
 /**
  * One session's memory of what a given request already told it.
@@ -30,6 +30,8 @@ import {activeRuns,awaitQuestChange,observedState,pollDecision,runSummary,unchan
  * oldest entry costs at most one extra get.
  */
 const SEEN_LIMIT=500
+const validator=new AjvJsonSchemaValidator()
+const validators=new Map(Object.entries(questOperations).map(([name,op])=>[name,validator.getValidator(op.input)]))
 const rememberKey=(sessionID:string,questID:string,inspect:any,runID?:string)=>sessionID+'|'+questID+'|'+(runID??'')+'|'+(inspect?.section?`${inspect.section}:${inspect.offset??0}:${inspect.limit??8000}`:'detail')
 export function createQuestService(store:QuestStore,host:QuestHost,options:{policyFile?:string;settingsFile?:string;startRun?:StartRun;directory?:string;onDispose?:(dispose:()=>void)=>void}={}) {
  const {start,returns}=questDispatch(store,host,options)
@@ -62,8 +64,6 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
  const workspaces=new QuestWorkspaces(store.runtime)
  const seen=new Map<string,SeenRequest>()
  const remember=(key:string,fingerprint:string,waited=false)=>{seen.delete(key);seen.set(key,{fingerprint,waited});if(seen.size>SEEN_LIMIT)seen.delete(seen.keys().next().value as string)}
- const validator=new AjvJsonSchemaValidator()
- const validators=new Map(Object.entries(questOperations).map(([name,op])=>[name,validator.getValidator(op.input)]))
  return {call:async(method:string,args:unknown,context:any)=>{
   const validate=validators.get(method)
   if(!validate)throw new QuestError('INVALID_OPERATION','Unknown Quest operation: '+method)
@@ -79,10 +79,10 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
   const session=await host.get({sessionID:context.sessionID}),directory=(session?.data??session)?.location?.directory
    const memberships=readAllQuests(store.projectRoot,{includeArchived:true}).flatMap(row=>row.quest?row.quest.sessions.filter(s=>s.openCodeSessionId===context.sessionID||s.sessionID===context.sessionID).map(s=>({questID:row.quest!.id,stepIDs:['planned','executing','waiting'].includes(s.state)?s.deliverables.filter(id=>row.quest!.sessions.findLast(other=>other.deliverables.includes(id))===s):[]})):[])
    const isWorker=memberships.length>0
-   if(isWorker&&(input.action==='run'||input.action==='start'||input.action==='create'||input.update?.cancelContinuation===true||input.update?.workspaceMode!==undefined))throw new QuestError('WORKER_DELEGATION_DENIED','Workers update assigned work; only givers create Quests or dispatch workers')
+   if(isWorker&&(input.action==='run'||input.action==='start'||input.action==='create'||input.update?.cancelContinuation===true))throw new QuestError('WORKER_DELEGATION_DENIED','Workers update assigned work; only givers create Quests or dispatch workers')
    if(isWorker&&input.action==='update'){
     const allowed=new Set(memberships.filter(m=>m.questID===input.id).flatMap(m=>m.stepIDs))
-    if(!allowed.size||Object.keys(input.update??{}).some(k=>k!=='steps')||input.update?.steps?.some((s:any)=>!allowed.has(s.id)||Object.keys(s).some(k=>!['id','state','note'].includes(k))||typeof s.note==='string'&&s.note.length>8000))throw new QuestError('WORKER_ASSIGNMENT_DENIED','No Quest changes were saved. Workers may report only current assigned step states using update:{steps:[{id:<assigned step>,state:<state>,note:<evidence>}]}. Remove artifacts, reward, detail and all other keys; put artifact paths in note. Retry the corrected update, then get the Quest to verify it. The giver attaches global artifacts/reward and changes definitions.')
+    if(!allowed.size||Object.keys(input.update??{}).some(k=>k!=='steps')||input.update?.steps?.some((s:any)=>!allowed.has(s.id)||Object.keys(s).some(k=>!['id','state','note'].includes(k))))throw new QuestError('WORKER_ASSIGNMENT_DENIED','No Quest changes were saved. Workers may report only current assigned step states using report with id, stepID, state and note. Remove artifacts, reward, detail and all other keys; put artifact paths in note. Retry the corrected update, then get the Quest to verify it. The giver attaches global artifacts/reward and changes definitions.')
    }
   if(!isWorker&&(session?.data??session)?.agent==='quest-giver'&&!userGiverID(store))await bindUserGiver(store,host,context.sessionID)
   if(!isWorker&&userGiverID(store)&&userGiverID(store)!==context.sessionID&&['create','update','run','start'].includes(input.action))throw new QuestError('SINGLE_GIVER_REQUIRED','Continue in your one Quest Giver: '+userGiverID(store))
@@ -94,10 +94,11 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
    if((input.run?.maxConcurrent??1)>1&&workspaceSettings(options.settingsFile).workspaceMode!=='worktree')throw new QuestError('WORKSPACE_MODE_REQUIRED','Parallel continuation requires isolated worktrees')
    configureLearning(store,trusted,input.id,input.run?.taskTags,input.run?.maxConcurrent??1)
   }
-  if(input.action==="update"&&input.update?.workspaceMode!==undefined){if(Object.keys(input.update).length!==1)throw new QuestError("INVALID_INPUT","Change workspaceMode separately from Quest content updates");if(input.id)questsAPI(store,trusted,start).get(input.id);const result=setWorkspaceMode(input.update.workspaceMode,options.settingsFile);if(!input.id)return {output:{workspaceSettings:result},content:JSON.stringify({workspaceSettings:result})};input={...input,update:{...input.update}};delete input.update.workspaceMode}
   if(input.action==='run'&&input.run?.continue===true){const result=await continuation.run(input.id,{readOnly:input.run.readOnly,task:input.run.task,model:input.run.model,stepIDs:input.run.stepIDs,files:input.run.files,maxConcurrent:input.run.maxConcurrent,stepModels:input.run.stepModels},trusted);return result}
   if(input.action==='update'&&input.update?.cancelContinuation===true){continuation.cancel(input.id,trusted);input={...input,update:{...input.update}};delete input.update.cancelContinuation}
   const api=questsAPI(store,trusted,start)
+  const listView=input.query?.view
+  if(input.query)delete input.query.view
   let result:any
    switch(input.action){case "list":result=api.list({...(trusted.giverDirectory?{allProjects:true}:{}),...input.query});break;case "get":result=api.get(input.id);break;case "create":result=api.create(input.create);if(trusted.giverDirectory){const q=store.read(result.id)!;store.apply(q.id,'patched',{extensions:{...q.extensions,giverSourceDirectory:trusted.directory}},'quest:user-giver-source')}break;case "update":result=api.update(input.id,input.update);await cleanupQuests(store,host,input.id);break;case "run":result=await api.run(input.id,input.run?{readOnly:input.run.readOnly,task:input.run.task,model:input.run.model,stepIDs:input.run.stepIDs,files:input.run.files}:undefined);break;default:throw new QuestError("INVALID_OPERATION","Use list, get, create, update, run or wait")}
    /**
@@ -109,7 +110,7 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
     * their own get verifies an update they just saved, so it always has something new to read.
     */
    let waited:any
-   if(input.action==='get'&&input.id&&(waitRequest||!isWorker)){
+   if(input.action==='get'&&input.id&&(waitRequest||!isWorker)&&!['status','plan','inspect'].includes(method)){
     const runID=waitRequest?.runID
     const key=rememberKey(context.sessionID,input.id,input.inspect,runID)
     const before=store.read(input.id)
@@ -134,10 +135,9 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
      remember(key,observedState(after,runID),blocking&&!outcome.changed)
     }
    }
-   if(input.action==='list')result={diagnostics:result.diagnostics.slice(0,10),items:result.items.map((item:any)=>toolSummary(store.read(item.id)!)),nextOffset:result.nextOffset,detail:'Use one get per relevant Quest for its description, steps, readiness, latest outcomes and continuation. Inspect only missing historical evidence.'}
+   if(input.action==='list')result={diagnostics:result.diagnostics.slice(0,10),items:result.items.map((item:any)=>listView==='plan'?toolPlan(store.read(item.id)!,continuation.status(item.id)):toolSummary(store.read(item.id)!)),total:result.total,nextOffset:result.nextOffset}
    if(['get','update'].includes(input.action)){
     const q=store.read(input.id)!
-    if(input.inspect?.section==='cleanup')await cleanupQuests(store,host,input.id)
     if(input.inspect){
      const section=input.inspect.section
      const values:Record<string,()=>unknown>={cleanup:()=>cleanupStatus(store,q),description:()=>q.description,reward:()=>q.reward,steps:()=>q.stages,runs:()=>q.sessions,artifacts:()=>q.evidence,changes:()=>questChanges(q,workspaces),continuation:()=>continuation.status(q.id)}
@@ -145,7 +145,10 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
      const page=toolSection(values[section](),section,input.inspect.offset,input.inspect.limit)
      if(section==='runs'&&Array.isArray(page.data))page.data=await Promise.all(page.data.map(async(run:any)=>({...run,observation:['planned','executing','waiting','blocked'].includes(run.state)?await inspectWorker(host,run):undefined})))
      result={id:q.id,project:q.project,...page}
-    }else result=toolDetail(q,continuation.status(q.id))
+    }else if(method==='status'||method==='archive'||method==='reopen')result=toolStatus(q)
+    else if(method==='plan')result=toolPlan(q,continuation.status(q.id))
+    else if(method==='report')result={...toolSummary(q),steps:q.stages.filter(s=>s.id===(args as any).stepID).map(s=>({id:s.id,state:s.status,note:s.note}))}
+    else result=toolDetail(q,continuation.status(q.id))
    }
    if(waited)result={...result,waited}
    collectWorkflowOutcomes(store)
