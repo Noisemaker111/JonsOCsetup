@@ -8,6 +8,7 @@ import { redact } from "../privacy"
 import { questWorkflow, type QuestWorkflow } from "../workflow"
 import { requestQuestStart } from "../start-request"
 import { devQueueGeneration } from "../runtime-queues"
+import { chooseQuestRouting } from './workflow-settings'
 import { uncertainRuns, createGiver, giverID, nudgeGiver, runDetails, startDisabled, talkToGiver, turnInDisabled, workflowAPI } from "../tui-workflow"
 import { C, activate, openWorkerSession } from "./quest-board"
 
@@ -50,7 +51,8 @@ export function WorkflowActions(props: { context: any; store: QuestStore; quest:
     { id: "giver", key: "g", title: "Continue in chat", reason: props.quest().project ? undefined : "Project ownership unresolved" },
     { id: "create", key: "c", title: "Open your Quest Giver", reason: props.quest().project ? undefined : "Project ownership unresolved" },
     { id: "start", key: "s", title: "Start Quest", reason: startDisabled(props.quest()) },
-    { id: "delivery", key: "y", title: "Choose delivery" },
+    { id: "delivery", title: "Choose delivery" },
+    { id: "routing", title: "Choose worker routing" },
     { id: "progress", key: "p", title: "Check progress / agent log" },
     { id: "nudge", key: "n", title: "Nudge giver", reason: giverID(props.quest()) ? undefined : "Open your Quest Giver first" },
     { id:"archive", key:"z", title:"Archive Quest", reason:uncertainRuns(props.quest()).length?"Reconcile active or uncertain workers before archiving":undefined },
@@ -67,6 +69,7 @@ export function WorkflowActions(props: { context: any; store: QuestStore; quest:
       if (id === "create") await createGiver(props.context, props.store, q)
       if (id === "progress") { props.refresh(); await inspectProgress(props.context, q) }
       if (id === "nudge") await nudgeGiver(props.context, q)
+      if (id === "routing") await chooseQuestRouting(props.context, props.store, q)
       if (id === "start") {
         const reason = startDisabled(q); if (reason) throw new Error(reason)
         await workflowAPI(props.context, props.store, q)
@@ -103,7 +106,7 @@ export function WorkflowActions(props: { context: any; store: QuestStore; quest:
     if(picked) await perform(picked)
   }
   props.context?.keymap?.layer?.(() => ({ mode:"global", commands:[
-    ...actions().map(a=>({id:"quests.action."+a.id,title:a.title,group:"Quests",bind:a.key,run:()=>void perform(a.id)})),
+    ...actions().filter(a=>a.key).map(a=>({id:"quests.action."+a.id,title:a.title,group:"Quests",bind:a.key,run:()=>void perform(a.id)})),
     {id:"quests.action.more",title:"More Quest actions",bind:"m",run:()=>void more()},
   ] }))
   return <box flexDirection="column" flexShrink={0}>
