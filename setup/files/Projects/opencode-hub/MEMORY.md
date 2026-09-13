@@ -12,6 +12,8 @@ delete a wrong one, keep the evidence. User instructions outrank memory.
 - When he points out a missed behaviour, say why it was missed and fix the cause before doing the
   task. Doing the task alone leaves the cause in place.
 - Never make him type a command or a path to operate or diagnose OpenCode2.
+- Measure text in characters and say characters. Bytes are not what he asked about and the two
+  differ the moment a dash or a quote is not ASCII.
 - Luna medium is prohibited for every role, selection, verification, fallback and resume — no
   lower-effort workaround, no alias for unsupported max. Astra medium is independently authorized.
   `access-policy.json` owns enforcement.
