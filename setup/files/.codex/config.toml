@@ -1,5 +1,5 @@
 model = "gpt-6-astra"
-model_reasoning_effort = "high"
+model_reasoning_effort = "low"
 
 # Context replayed per call is ~90% of this machine's token spend: the 2026-09-12 OpenCode session
 # sawtoothed from 28k to 244k eleven times across 1,310 calls, averaging 143k. Compacting at 140k
@@ -242,6 +242,9 @@ trust_level = "trusted"
 [projects.'c:\users\jk101\projects\command-model\work\rename-merged-verification\csv-delegated-bd83d5ff\workspace']
 trust_level = "trusted"
 
+[projects.'c:\users\jk101\projects\jonsocsetup']
+trust_level = "trusted"
+
 [shell_environment_policy.set]
 NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S = "0e084770cbad695203c2e3af7c00ac042e39892b86f84e629899f18968135073"
 
@@ -254,13 +257,13 @@ hide_rate_limit_model_nudge = true
 [hooks.state]
 
 [hooks.state."opencode-quests@personal:hooks/hooks.json:pre_tool_use:0:0"]
-trusted_hash = "sha256:2c28780a6a4bfa2118dc334e33c68be6292a1e7bdcfee5dbea683b3d881d88de"
+trusted_hash = "sha256:94303ddf8ccdc01ba24d0f1676e645ffff19298a16ef4bb60b6fb6e89fd445ab"
 
 [hooks.state."opencode-quests@personal:hooks/hooks.json:post_tool_use:0:0"]
-trusted_hash = "sha256:0d3b36d3ef1756e4f9a543e925fcb37381640489cabb424c167825e9220d2147"
+trusted_hash = "sha256:1aaac00c58e0218adfed217250929d417a217bec5ecc3275f9fed805d0341238"
 
 [hooks.state."opencode-quests@personal:hooks/hooks.json:session_start:0:0"]
-trusted_hash = "sha256:a5d112aa0f6eae249b9098ef7978b90b6599dbe395e2787f6d4c91885c98273d"
+trusted_hash = "sha256:bcadad432a33cab28cdb97aab35f57bcfd59adbcea90a7e527f75b63efab8c59"
 
 [hooks.state."opencode-quests@personal:hooks/hooks.json:session_end:0:0"]
-trusted_hash = "sha256:a037c811b0644fdbd2d744ae5a00b6a8a6a003a2404dac1054cb3712787784d0"
+trusted_hash = "sha256:3626a808a3bfbccd2e94d81a98ecce5610bf9bda2ec9a899a101ea4196438d5c"
