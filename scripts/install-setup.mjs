@@ -13,8 +13,9 @@ function inside(base,path){const r=relative(base,path);if(r==='..'||r.startsWith
 function targetPath(path){const target=resolve(root,path);inside(root,target);let parent=target;while(!existsSync(parent))parent=dirname(parent);inside(realpathSync(root),realpathSync(parent));return target}
 if(!existsSync(root)){if(!apply)throw Error('Preview root must exist');mkdirSync(root,{recursive:true})}
 const plan=manifest.entries.map(entry=>{
- const from=resolve(source,entry.source);inside(realpathSync(source),realpathSync(from));const sha256=hash(from)
- if(sha256!==entry.sha256)throw Error('Manifest/source drift: '+entry.source)
+ const entrySource=entry.source??'setup/files/'+entry.target
+ const from=resolve(source,entrySource);inside(realpathSync(source),realpathSync(from));const sha256=hash(from)
+ if(sha256!==entry.sha256)throw Error('Manifest/source drift: '+entrySource)
  const target=targetPath(entry.target),current=existsSync(target)?hash(target):null,old=prior.files.find(f=>f.target===entry.target)
  // A target that is a link to this very source needs no installing and must never be written: the
  // write below replaces the path rather than its contents, which would turn the link back into the
