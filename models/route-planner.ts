@@ -96,6 +96,8 @@ export type RoutingRequest = {
   cashCurrency?: string
   /** Explicit user policy: no fixed subscription worker cap; quota and ownership still apply. */
   subscriptionConcurrency?: "unlimited" | "calibrated"
+  /** Permit subscription attempts when usage telemetry is missing; never invent available quota. */
+  missingSubscriptionUsage?: "wait" | "attempt"
   reserveFraction: number
   cashBudget?: { id:string; currency:string; limit:number; spent:number; startsAt:string; endsAt:string; reserved?:number }
   /** Restricts the exact route; never authorizes a silent replacement or extra spending. */
@@ -154,6 +156,7 @@ const positive = (n: number) => finite(n) && n > 0
 const date = (s: string) => typeof s === "string" ? Date.parse(s) : NaN
 
 function validateRequest(r: RoutingRequest) {
+  if (r.missingSubscriptionUsage !== undefined && !["wait", "attempt"].includes(r.missingSubscriptionUsage)) throw new Error("Invalid missing subscription usage policy")
   if (r.economyPriceTolerance !== undefined && (!nonnegative(r.economyPriceTolerance) || r.economyPriceTolerance > 1)) throw new Error("Invalid economical price tolerance")
   if (r.qualitySelection !== undefined && !["near-best", "floor"].includes(r.qualitySelection)) throw new Error("Invalid quality selection")
   if (r.subscriptionConcurrency !== undefined && !["unlimited", "calibrated"].includes(r.subscriptionConcurrency)) throw new Error("Invalid subscription concurrency policy")
@@ -211,6 +214,8 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
     if (route.outcomeIssue?.task === req.task) reasons.push("Measured outcomes unavailable: " + route.outcomeIssue.reason)
     const account = accounts.find(a => a.id === route.accountID)
     const windows = account ? applicableQuotaWindows(account, route) : []
+    const attemptWithoutUsage = account?.billing === "subscription" && req.missingSubscriptionUsage === "attempt"
+    const usageUnknown = !!account && (account.capacity === "unknown" || !windows.length || !finite(date(account.observedAt)) || now - date(account.observedAt) >= req.maxUsageAgeSeconds * 1000)
     if (![route.id, route.accountID, route.providerID, route.modelID, route.harness, route.reasoning, route.serviceTier].every(x => typeof x === "string" && x.trim())) reasons.push("incomplete exact route identity")
     if (req.allowedRouteIDs && !req.allowedRouteIDs.includes(route.id)) reasons.push("route is not allowed by user policy")
     if(req.cashBudget){const b=req.cashBudget,c=route.cashReservation;if(now<date(b.startsAt)||now>=date(b.endsAt))reasons.push("cash budget is outside its authorized time range");if(!c||c.currency!==b.currency||!nonnegative(c.upperBound))reasons.push("route has no matching cash reservation bound");else if(c.upperBound>b.limit-b.spent-(b.reserved??0))reasons.push("insufficient unreserved cash budget")}
@@ -223,10 +228,10 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
       if (account.dispatchHold) reasons.push(account.dispatchHold)
       if (chosen && account.billing === "metered" && !req.cashBudget) reasons.push("configured metered choice requires a cash budget")
       if (!account.authenticated) reasons.push("account is not authenticated")
-      if (account.capacity !== "available") reasons.push("account capacity is " + account.capacity)
+      if (account.capacity !== "available" && !(attemptWithoutUsage && account.capacity === "unknown")) reasons.push("account capacity is " + account.capacity)
       const age = now - date(account.observedAt)
-      if (!finite(age) || age < 0 || age >= req.maxUsageAgeSeconds * 1000) reasons.push("usage observation is stale or invalid")
-      if (account.billing === "subscription" && !windows.length) reasons.push("subscription windows are unknown")
+      if (age < 0 || (!attemptWithoutUsage && (!finite(age) || age >= req.maxUsageAgeSeconds * 1000))) reasons.push("usage observation is stale or invalid")
+      if (account.billing === "subscription" && !windows.length && !attemptWithoutUsage) reasons.push("subscription windows are unknown")
       if (new Set(account.windows.map(w => w.id)).size !== account.windows.length) reasons.push("duplicate quota window")
     }
     // Newest matching measurement only. An older favorable result cannot mask a regression.
@@ -278,6 +283,12 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
       for (const window of windows) {
         const burn = route.quotaPerTask[window.id]
         const reset = date(window.resetAt)
+        // Missing/reset telemetry can permit an attempt, but a known exhausted window still vetoes it.
+        if (attemptWithoutUsage && (!finite(window.remaining) || !finite(reset) || reset <= now)) {
+          if (finite(window.remaining) && window.remaining <= 0 && (!finite(reset) || reset > now)) reasons.push("insufficient unreserved quota in " + window.id)
+          if (finite(window.remaining) && window.remaining < 0 || !nonnegative(window.reserved)) reasons.push("invalid quota in " + window.id)
+          continue
+        }
         if ((!positive(burn) && (!chosen || burn !== undefined)) || !nonnegative(window.remaining) || !nonnegative(window.reserved) ||
             !finite(reset) || reset <= now ||
             (window.nextCapacity !== undefined && !positive(window.nextCapacity)) ||
@@ -325,13 +336,14 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
       successRate: evidence ? successRate : null,
       millisecondsPerSuccess: evidence ? evidence.totalMilliseconds / evidence.passed : null,
       cashPerSuccess: evidence ? (evidence.totalCash === null ? null : evidence.totalCash / evidence.passed) : null,
-      expiryOpportunity: !evidence || (chosen && unknownConsumption) ? null : expiryOpportunity, limitingWindow,
+      expiryOpportunity: usageUnknown || !evidence || (chosen && unknownConsumption) ? null : expiryOpportunity, limitingWindow,
       benchmarkPassAt1, benchmarkProvenance: benchmarkPassAt1 === null ? undefined : prior!.provenance,
       intelligence: benchmarkPassAt1 === null ? null : prior!.intelligence ?? null,
       requestPerformance: route.requestPerformance ?? null,
       economics: route.economics && nonnegative(route.economics.amount) && route.economics.currency === (req.cashCurrency ?? "USD") && route.economics.source?.trim() && finite(date(route.economics.observedAt)) && now >= date(route.economics.observedAt) && now - date(route.economics.observedAt) <= req.maxEvidenceAgeDays * 86400000 ? route.economics : null,
       evidenceSource: evidence ? evidence.source : benchmarkNote || "configured choice; outcomes and consumption uncalibrated",
-      note: unknownConsumption
+      note: attemptWithoutUsage && usageUnknown ? "Usage telemetry unavailable; user policy permits a subscription attempt. Capacity and task consumption remain unknown; provider limits still apply."
+        : unknownConsumption
         ? (unlimitedSubscriptionConcurrency(account!, req) ? "consumption uncalibrated; user policy permits concurrent subscription workers without a fixed account cap. Fresh quota is required; unknown consumption is not a capacity guarantee."
           : pacedSubscriptionAdmission(account!, req.now) ? "consumption uncalibrated; explicit scoped pacing permits up to " + account!.pacing!.desiredConcurrency + " concurrent managed workers. Quota movement, not session count, controls pacing."
           : "consumption uncalibrated; one worker on this account, refresh after completion. Quota reserves are admission thresholds, not a task consumption guarantee.")

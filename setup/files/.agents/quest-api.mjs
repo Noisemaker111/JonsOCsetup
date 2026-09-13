@@ -113,7 +113,10 @@ export async function openBoard(options = {}) {
   const { findStep, questProgress } = await load("quest/steps.ts")
   const { questLane } = await load("quest/board.ts")
   const { projectIdentity } = await load("quest/project.ts")
-  const api = createQuestAgentAPI()
+  const ledgerRoot = options.ledgerRoot ?? process.env.OPENCODE_QUEST_ROOT ?? join(homedir(), ".config", "opencode", ".channels", "state", "dev", "quests")
+  const api = createQuestAgentAPI(ledgerRoot)
+  const { requestQuestStart, requestQuestReview, startRequests } = await load("quest/start-request.ts")
+  const { parseWorkflow } = await load("quest/workflow.ts")
 
   const me = String(options.agent ?? process.env.QUEST_AGENT ?? detectHarness()).trim()
   const harness = detectHarness()
@@ -128,7 +131,7 @@ export async function openBoard(options = {}) {
     return {
       id: quest.id, title: quest.title, state: quest.state, lane: questLane(quest), objective: quest.objective,
       progress: { done: progress.done, total: progress.total }, nextAction: quest.nextAction,
-      project: quest.project?.root, updatedAt: quest.updatedAt,
+      project: quest.project?.root, updatedAt: quest.updatedAt, workflow: quest.extensions.workflow ?? {}, starts: startRequests(api.store, quest.id),
       steps: quest.stages.map((stage, index) => stepJson(quest, stage, index)),
     }
   }
@@ -173,19 +176,33 @@ export async function openBoard(options = {}) {
      * have both — the method silently won, and a caller reading the field got a function.
      */
     releaseRoot: root,
+    ledgerRoot,
     /** The name that will appear on anything this board claims. */
     agent: me,
 
     /** File intent. Deduped on the request itself, so re-filing the same thing is safe. */
-    file({ title, intent, steps = [], project } = {}) {
+    file({ title, intent, steps = [], project, workflow = {} } = {}) {
       if (!title || !intent) throw new BoardError("file needs a title and the intent behind it", "usage")
       const identity = (() => {
         try { return projectIdentity(project ?? process.env.QUEST_PROJECT ?? process.cwd()) } catch { return undefined }
       })()
       const { outcome, quest } = retrying(() => api.admitIntake({
-        title, objective: intent, description: intent, project: identity, ...(steps.length ? { steps } : {}),
+        title, objective: intent, description: intent, contractVersion: 2, project: identity, extensions: { workflow: parseWorkflow(workflow) }, ...(steps.length ? { steps } : {}),
       }))
       return { outcome, quest: questJson(quest) }
+    },
+
+    /** Start all saved pending steps without another model turn or caller-supplied worker identity. */
+    // A host-independent request belongs to the connected giver, not the helper's source snapshot.
+    start(id) { return requestQuestStart(api.store, id) },
+
+    /** Replace saved workflow choices; omitting a model restores automatic routing. */
+    configure(id, workflow) {
+      const settings = parseWorkflow(workflow)
+      return questJson(retrying(() => {
+        const quest = questOrFail(id)
+        return api.store.apply(id, "patched", { extensions: { ...quest.extensions, workflow: settings } }, source, { expectedRevision: quest.revision })
+      }))
     },
 
     /** Set the steps. Existing ids keep their status and proofs; `append` adds rather than replaces. */
@@ -293,6 +310,7 @@ export async function openBoard(options = {}) {
       retrying(() => api.step(quest.id, step.id, "done", note || `finished by ${me}`))
       if (holder) retrying(() => api.store.apply(quest.id, "session-state", { callID: callIDFor(step.id), state: "completed", evidence: note || `step ${step.id} done`, result: "completed" }, source))
       const after = api.get(quest.id), progress = questProgress(after)
+      requestQuestReview(api.store, id)
       return { quest: after.id, step: step.id, agent: me, progress: { done: progress.done, total: progress.total }, nextAction: after.nextAction }
     },
 
@@ -318,7 +336,12 @@ export async function openBoard(options = {}) {
       const quest = questOrFail(id), step = stepOrFail(quest, ref)
       const why = reason || `released by ${me}`
       const record = quest.sessions.find((session) => session.callID === callIDFor(step.id))
-      if (!record) return { quest: quest.id, step: step.id, outcome: "free" }
+      if (!record) {
+        const native = quest.sessions.find(s => ACTIVE.has(s.state) && s.deliverables.includes(step.id))
+        if (native) throw new BoardError("This step has an active worker; inspect its run before releasing it", "held")
+        if (step.status === "working") retrying(() => api.step(quest.id, step.id, "pending", why))
+        return { quest: quest.id, step: step.id, outcome: "free" }
+      }
       if (holderOf(quest, step.id)) requireHold(quest, step, force, "release it")
       retrying(() => api.store.apply(quest.id, "session-removed", { callID: callIDFor(step.id), summary: why }, source))
       if (step.status === "working") retrying(() => api.store.apply(quest.id, "stage-state", { stageID: step.id, status: "pending", evidence: why }, source))

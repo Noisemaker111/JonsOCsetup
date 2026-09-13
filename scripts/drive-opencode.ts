@@ -54,7 +54,7 @@ if(session!==undefined&&!/^ses_[A-Za-z0-9_-]+$/.test(session))throw Error('--ses
  */
 const identity=driveIdentity({attaching:!!session,model:option('--model'),agent:option('--agent'),chose:name=>process.argv.includes(name)})
 const child=spawn('node',[join(root,'scripts/opencode-runtime.mjs'),'--config-root',root,'--json',...(process.argv.includes('--auto')?['--auto']:[]),'--cwd',cwd,...identity,...(session?['--session',session]:[]),'--cols',String(cols),'--rows',String(rows)],{cwd:root,env,windowsHide:true,stdio:['pipe','pipe','pipe']})
-const send=(data:string|Buffer)=>child.stdin.write(JSON.stringify({type:'write',data:Buffer.from(data as any).toString('base64')})+'\n')
+const send=(data:string|Buffer)=>{lastOutput=Date.now();return child.stdin.write(JSON.stringify({type:'write',data:Buffer.from(data as any).toString('base64')})+'\n')}
 terminal.onData=data=>send(Buffer.from(data).toString())
 let buffer='',seen=0,busy=false,done=false,stopping=false,lastOutput=Date.now()
 const events:any[]=[]

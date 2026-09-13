@@ -1,4 +1,4 @@
-import {realpathSync,statSync} from 'node:fs'
+import {readFileSync,realpathSync,statSync} from 'node:fs'
 import {basename,dirname,isAbsolute,join,resolve} from 'node:path'
 import {homedir} from 'node:os'
 import {readAllQuests} from './index'
@@ -7,10 +7,23 @@ import {assertWorkerIdentity} from './worker-identity'
 import {workerSessionID} from './worker-permissions'
 import type {QuestStore} from './store'
 const same=(a:string,b:string)=>process.platform==='win32'?a.toLowerCase()===b.toLowerCase():a===b
+type SharedInstruction={installed:string;source:string}
+const sharedInstructions=():SharedInstruction[]=>{
+ const root=process.env.OPENCODE_CONFIG_DIR??resolve(import.meta.dir,'..')
+ return [
+  {installed:join(homedir(),'.agents','user-verification.md'),source:join(root,'docs','user-verification.md')},
+  {installed:join(homedir(),'.agents','matt-pocock.md'),source:join(root,'setup','files','.agents','matt-pocock.md')},
+ ]
+}
 /** Only actual root instruction files, never a directory listing or a symlink escaping that root. */
-export function instructionReadPath(path:unknown,directory:string,roots:string[],giverDirectory?:string):string|undefined {
+export function instructionReadPath(path:unknown,directory:string,roots:string[],giverDirectory?:string,shared:SharedInstruction[]=sharedInstructions()):string|undefined {
  if(typeof path!=='string')return
  const target=resolve(directory,path==='~'?homedir():path.startsWith('~/')||path.startsWith('~\\')?join(homedir(),path.slice(2)):path)
+ // Installed personal instructions can be links outside the checkout. Match the exact path
+ // and trusted bundled contents, never an arbitrary file referenced by repository text.
+ for(const entry of shared)if(same(target,resolve(entry.installed)))try{
+  if(statSync(target).isFile()&&readFileSync(target).equals(readFileSync(entry.source)))return target
+ }catch{}
  if(!['AGENTS.md','MEMORY.md'].includes(basename(target)))return
  try{
   if(!statSync(target).isFile())return

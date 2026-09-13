@@ -1,4 +1,5 @@
 import {recordWorkflowSupport} from '../usage/telemetry-api'
+import {questStartAuthorization} from './start-request'
 import {collectWorkflowOutcomes,workflowFile} from './outcome-tracking'
 import {existsSync,mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs'
 import {join} from 'node:path'
@@ -30,7 +31,7 @@ export class PermissionReviewer {
    const snapshot=async()=>{
     const view=await service.inspect(input.giverID,input.questID,input.runID)
     const instructions=permissionUserInstructions(unwrap(await this.host.context({sessionID:input.giverID})))
-    const authority={instructions,reviewer:reviewerSettings(),assignment:{title:view.title,description:view.description,steps:view.steps,workspace:view.workspace}}
+    const authority={instructions,start:questStartAuthorization(this.store,input.questID,input.runID,input.giverID),reviewer:reviewerSettings(),assignment:{title:view.title,description:view.description,steps:view.steps,workspace:view.workspace}}
     return {view,authority,key:digest(JSON.stringify(authority))}
    }
    const before=await snapshot(),request=before.view.requests.find((r:any)=>r.requestID===input.requestID&&r.requestKey===input.requestKey)
@@ -42,7 +43,7 @@ export class PermissionReviewer {
    let reserved:Awaited<ReturnType<typeof reservePermissionReview>>|undefined
    let replyAttempted=false
    try{
-    if(!before.authority.instructions.length)throw Error('Original user authorization is unavailable; the assignment alone cannot authorize access')
+    if(!before.authority.instructions.length&&!before.authority.start)throw Error('Original user authorization is unavailable; the assignment alone cannot authorize access')
     const directory=join(this.store.runtime,'permission-reviewers'),file=join(directory,input.giverID+'.json')
     let pin=existsSync(file)?JSON.parse(readFileSync(file,'utf8')):undefined
     const settings=before.authority.reviewer,settingsKey=reviewerSettingsKey(settings)
@@ -73,7 +74,7 @@ export class PermissionReviewer {
     await verifySession()
     if(pin.pendingModelChange){delete pin.pendingModelChange;savePin()}
     save({model:pin.model})
-    const prompt=policy+'\nUSER INSTRUCTIONS:\n'+JSON.stringify(before.authority.instructions)+'\nASSIGNMENT:\n'+JSON.stringify(before.authority.assignment)+'\nWORKER REQUEST:\n'+JSON.stringify(request)
+    const prompt=policy+'\nA RECORDED START ACTION is runtime-verified evidence that the saved Quest was explicitly started. It fulfills an earlier instruction to file first and wait for Start; it authorizes ordinary execution of those saved steps, not new publishing, spending or destructive actions. Later user restrictions still govern. An absent start record grants nothing.\nUSER INSTRUCTIONS:\n'+JSON.stringify(before.authority.instructions)+'\nRECORDED START ACTION:\n'+JSON.stringify(before.authority.start??null)+'\nASSIGNMENT:\n'+JSON.stringify(before.authority.assignment)+'\nWORKER REQUEST:\n'+JSON.stringify(request)
     const scope={id:reviewID,role:'permission-review' as const,sessionID:pin.reviewerSessionID,startedAt:Date.now()}
     let tracked=false
     try{collectWorkflowOutcomes(this.store);recordWorkflowSupport(workflowFile(),input.runID,scope);tracked=true}catch(error){console.error('[quests] reviewer task attribution unavailable',error)}

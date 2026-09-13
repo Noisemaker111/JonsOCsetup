@@ -20,6 +20,21 @@ test("qualified cheap routes compete without local history; unknown price is not
  expect(planRoutes({request,accounts:[{...accounts[0],capacity:"exhausted"}],routes}).selected).toBeNull()
  expect(choose(routes.map(r=>({...r,verified:false}))).selected).toBeNull()
 })
+test("subscription attempts tolerate missing telemetry only under user policy; exhaustion and auth still gate",()=>{
+ const routes=[route("subscription",.6,1)]
+ const unknown={...accounts[0],capacity:"unknown" as const,observedAt:"",windows:[]}
+ const permitted={...request,missingSubscriptionUsage:"attempt" as const}
+ expect(planRoutes({request,accounts:[unknown],routes}).selected).toBeNull()
+ const decision=planRoutes({request:permitted,accounts:[unknown],routes})
+ expect(decision.selected?.routeID).toBe("subscription")
+ expect(decision.selected?.expiryOpportunity).toBeNull()
+ expect(decision.selected?.note).toContain("Capacity and task consumption remain unknown")
+ for(const account of [{...unknown,authenticated:false},{...unknown,capacity:"exhausted" as const},{...unknown,windows:[{...accounts[0].windows[0],remaining:0}]},{...unknown,billing:"metered" as const}]) {
+  expect(planRoutes({request:permitted,accounts:[account],routes}).selected).toBeNull()
+ }
+ expect(planRoutes({request:permitted,accounts:[unknown],routes:[{...routes[0],verified:false}]}).selected).toBeNull()
+})
+
 test("speed competes only within the user's price range; coding retains its stricter demand",()=>{
  const slow=route("slow",.6,1),fast=route("fast",.61,1.2),expensive=route("expensive",.8,10)
  slow.economics!.requestMilliseconds=5000;fast.economics!.requestMilliseconds=500;expensive.economics!.requestMilliseconds=1

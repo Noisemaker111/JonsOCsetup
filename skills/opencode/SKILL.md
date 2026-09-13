@@ -1,6 +1,6 @@
 ---
 name: opencode
-description: Use when working on the OpenCode config repo (~/.config/opencode) — plugins, TUI chrome, harnesses, quota/failover, Quests, or promoting a generation. Holds the brick invariants and the deploy gate.
+description: Use when working on the OpenCode config repo (~/Projects/JonsOCsetup) — plugins, TUI chrome, harnesses, quota/failover, Quests, or promoting a generation. Holds the brick invariants and the deploy gate.
 ---
 
 # OpenCode config / plugin work
@@ -12,7 +12,7 @@ Internals for this repo only. Global rules stay in `AGENTS.md`; the ecosystem ma
 Follow `docs/development-workflow.md` for every OpenCode2 change. The user has
 authorized the agent to own coherent commits, ready PRs targeting agents, verified
 merges into agents, and dev activation. Do not ask the user to perform technical
-review or approve each dev merge. Stable master promotion and mirror publishing
+review or approve each dev merge. Stable main promotion and mirror publishing
 remain separate explicit actions. Exercise the real flow twice and inspect
 captures and saved outcomes; synthetic providers are not acceptance evidence.
 
