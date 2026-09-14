@@ -10,8 +10,8 @@
  * Waits are on observed state -- the quest ledger and the session database -- never on a sleep.
  */
 import { spawn, spawnSync } from "node:child_process"
-import { existsSync, readFileSync, appendFileSync, readdirSync, rmSync, statSync } from "node:fs"
-import { join, resolve } from "node:path"
+import { existsSync, readFileSync, appendFileSync, readdirSync, rmSync, statSync, mkdirSync, openSync, closeSync, writeFileSync } from "node:fs"
+import { join, resolve, dirname } from "node:path"
 import { Database } from "bun:sqlite"
 import { driveSession, conditionMet, finishedBaseline, knownRuns, inFlightWorkers, type QuestRecord } from "./drive-isolation"
 
@@ -34,7 +34,7 @@ if (flag("--help") || (!option("--ask") && !flag("--test-change"))) {
   --deny-permissions   Do not auto-approve permission prompts; capture and fail instead.
   --allow-expensive    Permit a route over $1/Mtok input; only for checks about that model.
   --worker-grace <s>   How long to hold the host open for workers this run started. Default 1800.
-  --no-worker-grace    Stop as soon as the wait ends, stranding any worker still running.
+  --no-worker-grace    Return without waiting for workers; preserve their host and controls.
   --live               Drive the real ledger and session database instead of a sandbox. Use this
                        when another harness wants the Quest Giver to do actual work, not a check.
                        Attaches to the registered Quest Giver session, because a new one cannot
@@ -123,21 +123,24 @@ const send = (value: unknown) => appendFileSync(commands, JSON.stringify(value) 
 // impose on one it opens: forwarding it rewrote the registered giver's lane. Only a --model the
 // caller typed reaches an attached session.
 const chosenModel = option("--model")
+// The driver must not depend on this harness's pipes or process lifetime. Its command file
+// remains usable after the caller returns, including when a worker exceeds the grace period.
+mkdirSync(dirname(out), { recursive: true })
+const driverLogFile = out + ".driver.log"
+const driverLogFD = openSync(driverLogFile, "a")
 const child = spawn("bun", [join(release, "scripts", "drive-opencode.ts"), "--config-root", release, "--cwd", cwd,
   ...(attach ? (chosenModel ? ["--model", chosenModel] : []) : ["--model", model]),
   "--out", out, "--cols", "200", "--rows", "60",
-  ...(live ? ["--live"] : []), ...(attach ? ["--session", attach] : [])], { cwd: release, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
+  ...(live ? ["--live"] : []), ...(attach ? ["--session", attach] : [])], { cwd: release, detached: true, windowsHide: true, stdio: ["ignore", driverLogFD, driverLogFD] })
+closeSync(driverLogFD)
 let childExit: number | undefined
-const driverLog: string[] = []
 child.on("exit", code => { childExit = code ?? 0 })
-child.stdout.on("data", d => driverLog.push(String(d)))
-child.stderr.on("data", d => driverLog.push(String(d)))
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 async function until<T>(what: string, check: () => T | undefined | false, ms: number): Promise<T> {
   const deadline = Date.now() + ms
   for (;;) {
-    if (childExit !== undefined) throw new Error(`Driver exited (${childExit}) waiting for ${what}: ${driverLog.join("").slice(-800)}`)
+    if (childExit !== undefined) throw new Error(`Driver exited (${childExit}) waiting for ${what}: ${readFileSync(driverLogFile, "utf8")}`)
     const value = check()
     if (value) return value as T
     if (Date.now() > deadline) throw new Error(`Timed out waiting for ${what}`)
@@ -326,12 +329,25 @@ if (!flag("--no-worker-grace")) {
     await sleep(10000)
   }
 }
+// Recheck even when --no-worker-grace skipped the wait. A timeout is a reason to return
+// control, never permission to terminate work. A live host belongs to the user's session.
+stranded = inFlightWorkers({ quests: records(), known: runsBefore })
+const preserve = live || !done || stranded.length > 0
 report.workersStillRunning = stranded
+report.host = { preserved: preserve && childExit === undefined, driverPID: child.pid, commands, log: driverLogFile }
+if (preserve) {
+  child.unref()
+} else if (childExit === undefined) {
+  // Close an idle, successful isolated session through the product's own command.
+  send({ action: "key", name: "escape" })
+  send({ action: "paste", text: "/exit" })
+  send({ action: "key", name: "return" })
+  await until("driver shutdown", () => childExit !== undefined, 60000).catch(() => child.unref())
+  report.host = { preserved: childExit === undefined, driverPID: child.pid, commands, log: driverLogFile }
+}
+writeFileSync(join(out, "report.json"), JSON.stringify(report, null, 2))
 
-send({ action: "stop" })
-await until("driver shutdown", () => childExit !== undefined, 60000).catch(() => undefined)
-
-if (flag("--test-change") && !flag("--keep")) {
+if (!preserve && childExit !== undefined && flag("--test-change") && !flag("--keep")) {
   // The edit was real and lives in a real worker worktree, so retiring those worktrees is what
   // makes the run leave nothing behind. Only worktrees this run's quests recorded are touched.
   const removed: string[] = []
@@ -345,7 +361,7 @@ if (flag("--test-change") && !flag("--keep")) {
 }
 // Evidence is the only record of what the run actually did, so it survives unless this was a
 // test change that succeeded and is meant to leave nothing behind.
-if (flag("--test-change") && !flag("--keep") && done) rmSync(out, { recursive: true, force: true })
+if (!preserve && childExit !== undefined && flag("--test-change") && !flag("--keep") && done) rmSync(out, { recursive: true, force: true })
 
 console.log(JSON.stringify(report, null, 2))
 if (!done) process.exit(1)
