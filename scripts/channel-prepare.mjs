@@ -215,7 +215,9 @@ export function findPrepared(commit, registry = registryRoot, repository) {
   for (const root of matches) {
     try {
       const release = read(join(root, 'channel-release.json'))
-      if (release.channel !== 'dev' || release.commit !== commit) continue
+      // A pre-lease release cannot participate in a new launch while retirement is deciding its
+      // historical process evidence. Current pointers still protect one already in use.
+      if (release.channel !== 'dev' || release.commit !== commit || release.cleanupProtocol !== 1) continue
       const pointer = read(join(root, 'plugin-activation.json'))
       if (pointer.evidence?.ok !== true || pointer.evidence.sourceCommit !== commit) continue
       if (!existsSync(join(root, 'generations', pointer.activeGeneration, 'plugin-set.json'))) continue
