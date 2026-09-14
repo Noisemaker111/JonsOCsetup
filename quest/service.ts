@@ -131,7 +131,7 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
    }
    if(waited)result={...result,waited}
    collectWorkflowOutcomes(store)
-   if(input.action==='update'&&!isWorker)requestQuestReview(store,input.id,devQueueGeneration())
+   if(input.action==='update'&&!isWorker&&context.external===true)requestQuestReview(store,input.id,devQueueGeneration())
    return JSON.parse(JSON.stringify(result))
  }}
 }
