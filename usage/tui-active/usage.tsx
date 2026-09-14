@@ -1,5 +1,4 @@
 import { extensionInventoryText } from "../../scripts/extension-inventory.mjs"
-import { UsageEvidencePanel } from "./usage-evidence"
 import { sessionTokenLine } from "../session-count"
 import { activeSessionID, requestManagedRestart } from "../../scripts/runtime-contract.mjs"
 /** @jsxImportSource @opentui/solid */
@@ -514,16 +513,75 @@ export function ConversationTelemetry(props: { context: any }) {
 }
 
 export function UsageDialog(props: { context: any }) {
+  const [view, setView] = createSignal<UsageView | undefined>(readCachedUsageView())
+  const [updating, setUpdating] = createSignal(true)
   const colors = themeColors(props.context)
-  return <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1} flexDirection="column" width="100%" backgroundColor={props.context.theme?.current?.background ?? props.context.theme?.background}>
-    <box flexDirection="row" justifyContent="space-between">
-      <text fg={colors.text} attributes={TextAttributes.BOLD}>Subscription usage</text>
-      <text fg={colors.muted} onMouseUp={() => props.context.ui.dialog.clear()}>Esc</text>
+  onMount(() => {
+    const repaint = setInterval(() => {
+      const next = readCachedUsageView()
+      if (next) setView(next)
+    }, 1000)
+    const poll = setInterval(() => { void refreshUsageView().then(setView).catch(() => {}) }, USAGE_STALE_MS)
+    onCleanup(() => { clearInterval(repaint); clearInterval(poll) })
+    void refreshUsageView().then(
+      (next) => {
+        setView(next)
+        setUpdating(false)
+      },
+      (err) => {
+        if (!view()) {
+          setView({
+            updated: "",
+            age: "unknown",
+            stale: true,
+            collectFailed: true,
+            blocks: [],
+            error: `Failed: ${String(err)}`,
+          })
+        }
+        setUpdating(false)
+      },
+    )
+  })
+  const ageText = () => {
+    const v = view()
+    if (!v || !v.age || v.age === "unknown") return ""
+    return formatSubtitle(v.age, v.stale)
+  }
+  return (
+    <box paddingLeft={2} paddingRight={2} gap={0} paddingBottom={1} minWidth={DIALOG_INNER} flexShrink={0}>
+      <box flexDirection="row" justifyContent="space-between" flexWrap="no-wrap" flexShrink={0} minWidth={DIALOG_INNER}>
+        <text fg={colors.text} attributes={TextAttributes.BOLD} wrapMode="none" truncate flexShrink={0}>
+          Subscription usage
+        </text>
+        <box flexDirection="row" gap={1} flexWrap="no-wrap" flexShrink={0}>
+          <Show when={ageText()}>
+            <text fg={view()?.stale ? colors.warn : colors.muted} wrapMode="none" truncate flexShrink={0}>
+              {ageText()}
+            </text>
+          </Show>
+          <Show when={updating()}>
+            <text fg={colors.muted} wrapMode="none" truncate flexShrink={0}>
+              · updating…
+            </text>
+          </Show>
+          <text fg={colors.muted} wrapMode="none" truncate flexShrink={0} onMouseUp={() => props.context.ui.dialog.clear()}>
+            esc
+          </text>
+        </box>
+      </box>
+      <ContextGauge context={props.context} />
+      <scrollbox
+        height={contentHeight(usageLines(view()), props.context)}
+        minWidth={TABLE_WIDTH}
+        scrollbarOptions={{ visible: usageLines(view()) > contentHeight(usageLines(view()), props.context) }}
+      >
+        <Show when={view()} fallback={<UsageSkeleton colors={colors} />}>
+          <UsageTable context={props.context} view={view()!} />
+        </Show>
+      </scrollbox>
     </box>
-    <scrollbox height={contentHeight(40, props.context)} scrollbarOptions={{ visible: true }}>
-      <UsageEvidencePanel context={props.context} />
-    </scrollbox>
-  </box>
+  )
 }
 
 // The last measured request context is separate from cumulative conversation usage.
