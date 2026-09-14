@@ -3,12 +3,23 @@
  * @core-observed On 2026-09-13 a native follow-up in the hidden generic worker session made the composer switch it to quest-giver and that role's model; the identity guard stopped inference after forty minutes of investigation.
  */
 import {test,expect} from 'bun:test'
-import {assertWorkerIdentity} from '../quest/worker-identity'
+import {assertWorkerIdentity,assertWorkerRequestIdentity} from '../quest/worker-identity'
 const run:any={runtime:'native',agentRole:'proxy-sol',providerID:'cliproxyapi',modelID:'gpt-5.6-sol',reasoningEffort:'xhigh'}
 const actual={agent:'proxy-sol',model:{providerID:'cliproxyapi',id:'gpt-5.6-sol',variant:'xhigh'}}
 test('worker subsequent turns retain exactly the authorized agent, provider, model and reasoning',()=>{
  expect(()=>assertWorkerIdentity(run,actual)).not.toThrow()
  for(const changed of [{...actual,agent:'quest-giver'},{...actual,model:{...actual.model,id:'gpt-5.6-luna'}},{...actual,model:{...actual.model,variant:'medium'}},{...actual,model:{...actual.model,providerID:'openai'}},{}])expect(()=>assertWorkerIdentity(run,changed)).toThrow('No inference was sent')
+})
+
+test('host compaction retains both the assigned worker identity and its exact outbound model',()=>{
+ const request={...actual,agent:'compaction'}
+ expect(()=>assertWorkerRequestIdentity(run,request,actual)).not.toThrow()
+ for(const session of [undefined,{}, {...actual,agent:'quest-giver'},{...actual,model:{...actual.model,variant:'medium'}}])
+  expect(()=>assertWorkerRequestIdentity(run,request,session)).toThrow('No inference was sent')
+ for(const model of [{...actual.model,providerID:'other'},{...actual.model,id:'other'},{...actual.model,variant:'medium'}])
+  expect(()=>assertWorkerRequestIdentity(run,{...request,model},actual)).toThrow('No inference was sent')
+ expect(()=>assertWorkerRequestIdentity(run,{...actual,agent:'quest-giver'},actual)).toThrow('No inference was sent')
+ expect(()=>assertWorkerIdentity(run,request)).toThrow('No inference was sent')
 })
 
 import {connectHostObservation,disconnectHostObservation,recordHostObservation,hostExecution,hostPermissions} from '../quest/host-observation'
