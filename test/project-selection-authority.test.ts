@@ -13,6 +13,8 @@ import {RouterMemory} from '../project-router/memory'
 import {verifyTarget,resolveTargets} from '../project-router/resolution'
 import {installProjectRouter} from '../project-router/server'
 import {DiscoveryHost} from '../project-router/host'
+import {QuestContinuation} from '../quest/continuation'
+import {questsAPI} from '../quest/api'
 const sessionID='ses_selectioncheck'
 const fixture=()=>{
  const root=mkdtempSync(join(tmpdir(),'selection-authority-')),prior=process.env.OPENCODE_QUEST_ROOT
@@ -23,6 +25,26 @@ const fixture=()=>{
  const data=new Map<string,any>(),storage={get:async(k:string)=>data.get(k),set:async(k:string,v:any)=>{data.set(k,v)}}
  return {root,a,b,store,session,data,storage,close:()=>{if(prior===undefined)delete process.env.OPENCODE_QUEST_ROOT;else process.env.OPENCODE_QUEST_ROOT=prior;rmSync(root,{recursive:true,force:true})}}
 }
+test('registered prompt hook preserves goals for automatic notices and pauses on user steering',async()=>{
+ const f=fixture();let dispose:(()=>void)|undefined
+ try{
+  const project=verifyTarget(f.root),runID='notice-worker'
+  const context={sessionID,requestID:'goal-start',directory:f.root,project} as any
+  const {id}=questsAPI(f.store,context,async()=>({sessionID})).create({title:'Keep pursuing the assigned work',description:'Preserve the goal while handling automatic notices',steps:[{id:'work',title:'Complete assigned work'}]})
+  f.store.apply(id,'session-claimed',{callID:runID,runID,sessionID,role:'worker',deliverables:['work']},'test')
+  f.store.apply(id,'session-state',{callID:runID,state:'executing'},'test')
+  const continuation=new QuestContinuation(f.store,async()=>({sessionID}) as any,{goalMode:true})
+  continuation.startWorkerGoal(id,['work'],context,'configured/model#effort')
+  let prompt:Function|undefined
+  dispose=await installProjectRouter({storage:f.storage,tool:{transform:async()=>{}},session:{get:async()=>f.session,create:async()=>{},prompt:async()=>{},hook:async(name:string,fn:Function)=>{if(name==='prompt')prompt=fn}}},new DiscoveryHost('unused',async()=>{throw Error('No discovery needed')}))
+  for(const flag of ['questWorkerReturn','questWorkerPermission','questReview','projectRouterGoal','projectRouterReturn']){
+   await prompt!({sessionID,metadata:{[flag]:true}})
+   expect(continuation.goalStatus(sessionID)[0].state).toBe('running')
+  }
+  await prompt!({sessionID,metadata:{questWorkerPermission:false}})
+  expect(continuation.goalStatus(sessionID)[0].state).toBe('stopped')
+ }finally{dispose?.();f.close()}
+})
 test('legacy selection migrates once and a new router reads the same authority as Quest creation',async()=>{
  const f=fixture()
  try{
