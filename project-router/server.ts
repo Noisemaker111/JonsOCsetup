@@ -122,7 +122,13 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
   await ctx.tool.transform((editor: any) => { for (const operation of operations) editor.add({ ...operation, output: { type: 'object', additionalProperties: true }, execute: async (input: any, context: any) => {
     if (!context?.sessionID || !(context.id ?? context.callID)) throw new RouterError('HOST_CONTEXT_REQUIRED', 'Trusted host session and tool call identity required')
     await ctx.session.get({ sessionID: context.sessionID })
-    try { const result = await operation.execute(input, context); const output = Array.isArray(result) ? { items: result } : result; return { output, content: JSON.stringify(output) } }
+    try {
+      const result = await operation.execute(input, context)
+      // The host validates structured output as JSON, including nested optional fields.
+      // Return the same JSON value shown in content instead of raw undefined properties.
+      const content = JSON.stringify(Array.isArray(result) ? { items: result } : result)
+      return { output: JSON.parse(content), content }
+    }
     catch (error) { const output = { code: (error as any)?.code ?? 'ROUTER_FAILED', message: redact(error instanceof Error ? error.message : 'Router failed'), action: 'Inspect this bounded result; do not retry unknown launches or substitute routes' }; return { output, content: JSON.stringify(output) } }
   } }) })
   /**
