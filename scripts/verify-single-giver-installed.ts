@@ -17,11 +17,11 @@ import {dispatchPlanInput} from '../models/dispatch-planner'
 import {planRoutes} from '../models/route-planner'
 const root=resolve(process.argv[2]),reservations=resolve(process.argv[3]),output=process.argv[4]?resolve(process.argv[4]):join(root,'.visual-e2e','installed-single-giver-'+Date.now())
 const policy=JSON.parse(readFileSync(join(root,'models/dispatch-policy.json'),'utf8'))
-// Verification uses the same automatic task policy as real work; list order is not a model choice.
-const plan=await dispatchPlanInput({policyFile:join(root,'models/dispatch-policy.json'),task:'utility'})
+// An explicit verification choice uses normal admission; otherwise use automatic task policy.
+const plan=await dispatchPlanInput({policyFile:join(root,'models/dispatch-policy.json'),task:'utility',model:process.env.OPENCODE_VERIFY_WORKER_MODEL})
 const decision=planRoutes(plan)
 const route=plan.routes.find(r=>r.id===decision.selected?.routeID)
-if(!route)throw Error('No eligible automatic verification route: '+JSON.stringify(decision.excluded))
+if(!route)throw Error('No eligible verification route: '+JSON.stringify(decision.excluded))
 const holds=()=>policy.billing[route.accountID]==='subscription'&&policy.request.subscriptionConcurrency==='unlimited'?[]:JSON.parse(readFileSync(reservations,'utf8')).reservations.filter((r:any)=>r.accountID===route.accountID&&r.exclusive&&['active','unknown'].includes(r.state))
 if(holds().length)throw Error('Existing uncertain account ownership blocks this successful dispatch check; inspect it first')
 const workerModel=route.providerID+'/'+route.modelID+'#'+route.reasoning
