@@ -89,3 +89,5 @@ task-based routing.
 - Jon wants new-session handoffs to be only `Resume Quest <id>`. Save the workspace, current progress, remaining work, constraints and evidence references in the Quest before handing off; the receiving session resolves them from the ID. Do not make Jon carry paths or a second set of instructions. If saving fails, disclose that the Quest is not current instead of claiming the ID alone is ready.
 
 - A deliberate /model selection supersedes the launch default, including after /new. Verify ordinary request intake through native /new, /model and submission; explicit Quest-start checks alone do not establish this flow works.
+
+- Keep OpenCode implementation in JonsOCsetup/.worktrees/<task> and durable verification evidence in JonsOCsetup/.evidence/<task>. Do not start new work in the legacy home-level dev-workflow-evidence directory. Preserve historical evidence links when relocating it.
