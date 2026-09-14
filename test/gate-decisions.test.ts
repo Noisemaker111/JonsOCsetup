@@ -9,6 +9,7 @@ import {
   boundSession,
   detailSelected,
   latestBoundSession,
+  latestRunSavedResult,
   nudgeReply,
   questSettled,
   runQuestPair,
@@ -37,6 +38,12 @@ test("completion needs the matching settled reservation, not elapsed or title ev
   expect(sessionSettled(session, [{ runID: "run-1", state: "active" }])).toBe(false)
   expect(sessionSettled(session, [{ runID: "run-1", state: "settled" }])).toBe(true)
   expect(questSettled({ id: "q", sessions: [{ state: "planned" }, session] }, [{ runID: "run-1", state: "settled" }])).toBe(true)
+  const newerActive = { sessionID: "ses_new", runID: "run-2", state: "executing", attempt: 2, updatedAt: "2026-09-14T10:02:00.000Z", deliverables: ["inspect"] }
+  const staleSuccess = { ...session, attempt: 1, updatedAt: "2026-09-14T10:01:00.000Z", deliverables: ["inspect"], result: "Host reported execution succeeded" }
+  const quest = { id: "q", stages: [{ id: "inspect", status: "done", note: "INSTALLED_QUEST_WORKER_VERIFIED" }], sessions: [staleSuccess, newerActive] }
+  expect(latestBoundSession(quest)?.runID).toBe("run-2")
+  expect(questSettled(quest, [{ runID: "run-1", state: "settled" }])).toBe(false)
+  expect(latestRunSavedResult(quest, "INSTALLED_QUEST_WORKER_VERIFIED")).toBe(false)
 })
 
 test("frame and transcript decisions distinguish the board, detail and native worker views", () => {
@@ -52,14 +59,23 @@ test("frame and transcript decisions distinguish the board, detail and native wo
 
 test("return decisions require ordered completed assistant evidence", () => {
   const title = "Installed single giver project 1"
-  const notice = { type: "user", text: `Automatic Quest worker update for ${title}` }
+  const notice = { type: "user", text: `Automatic Quest worker update for ${title}`, metadata: { questWorkerReturn: true, questID: "q", runID: "run-1" } }
   const assistant = { type: "assistant", finish: "stop", time: { completed: 1 } }
   expect(automaticReturn([assistant, notice], title).received).toBe(false)
   expect(automaticReturn([notice, { type: "assistant", finish: "length", time: { completed: 1 } }], title).received).toBe(false)
-  expect(automaticReturn([notice, assistant], title).received).toBe(true)
+  expect(automaticReturn([notice, assistant], title, { questID: "q", runID: "run-1" }).received).toBe(true)
+  expect(automaticReturn([notice, assistant], title, { questID: "q", runID: "run-1", marker: "INSTALLED_QUEST_WORKER_VERIFIED" }).received).toBe(false)
+  expect(automaticReturn([{ ...notice, text: `${notice.text}\nINSTALLED_QUEST_WORKER_VERIFIED` }, assistant], title, { questID: "q", runID: "run-1", marker: "INSTALLED_QUEST_WORKER_VERIFIED" }).received).toBe(true)
+  expect(automaticReturn([notice, { type: "user", text: "A manual prompt" }, assistant], title, { questID: "q", runID: "run-1" }).received).toBe(false)
+  expect(automaticReturn([notice, assistant], title, { questID: "q", runID: "run-old" }).received).toBe(false)
   expect(nudgeReply([
     { type: "user", text: "Reply exactly NATIVE_BOARD_NUDGE_CONFIRMED" },
     { type: "assistant", finish: "stop", time: { completed: 1 }, content: [{ type: "text", text: "NATIVE_BOARD_NUDGE_CONFIRMED" }] },
   ], "NATIVE_BOARD_NUDGE_CONFIRMED")).toBe(true)
   expect(nudgeReply([{ type: "user", text: "NATIVE_BOARD_NUDGE_CONFIRMED" }], "NATIVE_BOARD_NUDGE_CONFIRMED")).toBe(false)
+  expect(nudgeReply([
+    { type: "user", text: "NATIVE_BOARD_NUDGE_CONFIRMED" },
+    { type: "user", text: "another prompt" },
+    { type: "assistant", finish: "stop", time: { completed: 1 }, content: [{ type: "text", text: "NATIVE_BOARD_NUDGE_CONFIRMED" }] },
+  ], "NATIVE_BOARD_NUDGE_CONFIRMED")).toBe(false)
 })

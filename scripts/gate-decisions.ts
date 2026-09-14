@@ -16,13 +16,33 @@
  */
 
 /** A session record as the gate reads it, including the v1 id aliases the store still returns. */
-export type GateSession = { sessionID?: string; openCodeSessionId?: string; state?: string; runID?: string }
+export type GateSession = {
+  sessionID?: string
+  openCodeSessionId?: string
+  state?: string
+  runID?: string
+  callID?: string
+  attempt?: number
+  updatedAt?: string
+  result?: string
+  evidence?: string[]
+  deliverables?: string[]
+}
+/** A saved Quest step as the gate reads it. */
+export type GateStage = { id: string; status?: string; note?: string }
 /** A Quest as the gate reads it from the store. */
-export type GateQuest = { id: string; title?: string; createdAt?: string; sessions?: GateSession[] }
+export type GateQuest = { id: string; title?: string; createdAt?: string; sessions?: GateSession[]; stages?: GateStage[] }
 /** An account reservation row. */
 export type GateReservation = { runID?: string; state?: string }
 /** A session message parsed from the host database. */
-export type GateMessage = { type?: string; text?: string; finish?: string; time?: { completed?: unknown } | null; content?: unknown }
+export type GateMessage = {
+  type?: string
+  text?: string
+  finish?: string
+  time?: { completed?: unknown } | null
+  content?: unknown
+  metadata?: { questWorkerReturn?: boolean; questID?: string; runID?: string }
+}
 
 /**
  * Bound means the host recorded a session id. A planned or refused record has
@@ -41,7 +61,15 @@ export function boundSessions(quest?: GateQuest): GateSession[] {
 
 /** The newest host-bound worker attempt for a Quest, ignoring planned/refused records. */
 export function latestBoundSession(quest?: GateQuest): GateSession | undefined {
-  return boundSessions(quest).at(-1)
+  return boundSessions(quest).reduce<GateSession | undefined>((latest, session) => {
+    if (!latest) return session
+    const attempt = session.attempt ?? 0
+    const latestAttempt = latest.attempt ?? 0
+    if (attempt !== latestAttempt) return attempt > latestAttempt ? session : latest
+    const updatedAt = session.updatedAt ?? ""
+    const latestUpdatedAt = latest.updatedAt ?? ""
+    return updatedAt >= latestUpdatedAt ? session : latest
+  }, undefined)
 }
 
 /**
@@ -78,9 +106,17 @@ export function sessionSettled(session: GateSession | undefined, reservations: G
   return session?.state === "completed" && !!session.runID && reservations.some(row => row.runID === session.runID && row.state === "settled")
 }
 
-/** A Quest is settled when any host-bound worker attempt completed and released its reservation. */
+/** A Quest is settled only when its latest bound worker attempt completed and released its reservation. */
 export function questSettled(quest: GateQuest | undefined, reservations: GateReservation[]): boolean {
-  return boundSessions(quest).some(session => sessionSettled(session, reservations))
+  return sessionSettled(latestBoundSession(quest), reservations)
+}
+
+/** The saved worker result must belong to the latest bound attempt, not an older successful run. */
+export function latestRunSavedResult(quest: GateQuest | undefined, marker: string): boolean {
+  const run = latestBoundSession(quest)
+  if (!run || run.state !== "completed" || !run.runID || !run.result) return false
+  return (quest?.stages ?? []).some(stage => run.deliverables?.includes(stage.id)
+    && stage.status === "done" && stage.note?.includes(marker))
 }
 
 /** The real board is up: its search affordance is drawn. */
@@ -122,21 +158,36 @@ export function stepsVisible(text: string, title: string): boolean {
  * by an assistant turn that completed. Returns where each was found so a timeout can
  * say whether the notice never arrived or arrived without a response.
  */
-export function automaticReturn(messages: GateMessage[], title: string, notice = "Automatic Quest worker update"): {
+export function automaticReturn(messages: GateMessage[], title: string, expected: { questID?: string; runID?: string; marker?: string } = {}, notice = "Automatic Quest worker update"): {
   received: boolean
   noticeAt: number
   responseAt: number
 } {
   const serialized = messages.map(message => JSON.stringify(message))
-  const noticeAt = messages.findIndex((message, index) => message.type === "user" && serialized[index].includes(notice) && serialized[index].includes(title))
+  const noticeAt = messages.findIndex((message, index) => message.type === "user"
+    && message.metadata?.questWorkerReturn === true
+    && (!expected.questID || message.metadata.questID === expected.questID)
+    && (!expected.runID || message.metadata.runID === expected.runID)
+    && serialized[index].includes(notice) && serialized[index].includes(title)
+    && (!expected.marker || serialized[index].includes(expected.marker)))
   if (noticeAt < 0) return { received: false, noticeAt, responseAt: -1 }
-  const responseAt = messages.findIndex((message, index) => index > noticeAt && message.type === "assistant" && !!message.time?.completed && message.finish === "stop")
-  return { received: responseAt >= 0, noticeAt, responseAt }
+  for (let index = noticeAt + 1; index < messages.length; index++) {
+    const message = messages[index]
+    if (message.type === "user") return { received: false, noticeAt, responseAt: -1 }
+    if (message.type === "assistant" && !!message.time?.completed && message.finish === "stop") return { received: true, noticeAt, responseAt: index }
+  }
+  return { received: false, noticeAt, responseAt: -1 }
 }
 
 /** The giver's nudge reply: a user turn carrying the marker, then a completed assistant text repeating it. */
 export function nudgeReply(messages: GateMessage[], marker: string): boolean {
   const at = messages.findLastIndex(message => message.type === "user" && message.text?.includes(marker))
-  return at >= 0 && messages.slice(at + 1).some(message => message.type === "assistant" && !!message.time?.completed && message.finish === "stop"
-    && (message.content as Array<{ type?: string; text?: string }> | undefined)?.some(part => part.type === "text" && part.text?.includes(marker)) === true)
+  if (at < 0) return false
+  for (const message of messages.slice(at + 1)) {
+    if (message.type === "user") return false
+    if (message.type === "assistant" && !!message.time?.completed && message.finish === "stop") {
+      return (message.content as Array<{ type?: string; text?: string }> | undefined)?.some(part => part.type === "text" && part.text?.includes(marker)) === true
+    }
+  }
+  return false
 }
