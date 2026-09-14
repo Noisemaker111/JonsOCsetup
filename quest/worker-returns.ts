@@ -33,7 +33,7 @@ export class QuestWorkerReturns {
     if(!terminal&&(!['executing','waiting','blocked'].includes(run.state)||run.harness||run.runtime==='claude-code'))continue
     const parent=await this.host.get({sessionID:row.context.sessionID}),session=parent?.data??parent
     try{verifyGiverBinding(this.store,row.context,session)}catch(error){row.error=String(error);this.save(row);continue}
-    if(session?.agent!==row.agent||JSON.stringify(session?.model)!==JSON.stringify(row.model)){row.error='Giver model or agent changed; return retained for inspection';this.save(row);continue}
+     if(JSON.stringify(session?.model)!==JSON.stringify(row.model)){row.error='Giver model changed; return retained for inspection';this.save(row);continue}
     if(!terminal){
      const sessionID=workerSessionID(run);if(!sessionID)continue
      const response=await hostPermissions(this.host,sessionID),pending=response?.data??response

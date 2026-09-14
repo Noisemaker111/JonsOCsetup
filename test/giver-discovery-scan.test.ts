@@ -48,6 +48,12 @@ test("a recorded owner that is not a giver is passed over, not raised, so the bo
     rows[real].agent = "build"
     expect((await ensureUserGiver(store, host)).id).toBe(real)
 
+    // If the registry is unavailable, the recorded owner is still the conversation identity; the
+    // mutable composer selection must not make discovery create a second giver.
+    const registry = join(store.runtime, "user-giver.json")
+    rmSync(registry)
+    expect((await ensureUserGiver(store, host)).id).toBe(real)
+
     // What it must not survive: that conversation turning out to be an execution worker.
     quest(store, "01j000000000000000000000a4", "Something dispatched into the giver session", real, real)
     expect(ensureUserGiver(store, host)).rejects.toThrow("never an execution worker")
