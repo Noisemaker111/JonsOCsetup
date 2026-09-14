@@ -136,6 +136,16 @@ version you already knew was wrong.
 Bullets, not paragraphs. No tables. One line per point, with the tradeoff on the line itself. Never
 a hidden objective or a menu of options he has to choose from.
 
+**For a Quest report, replace prose bullets with one fixed stack: `STATE | NAME | NEXT`.** Put one
+Quest on each line with those three fields in that order. `STATE` is exactly one of `RUNNING`,
+`QUEUED`, `NEEDS YOU`, or `DONE`. Order the stack `NEEDS YOU`, `RUNNING`, `QUEUED`, then one `DONE`
+line giving the completed count. Every Quest has a concrete `NEXT` because no Quest may sit without
+one. End the report with exactly one `NEXT` line stating the giver's next action. Use no emoji,
+bullet prose, history, reasons, or evidence, and report nothing else unless Jon asks. Never fold an
+action item into a sentence; keep the tradeoff on the same line as its point. Use this form wherever
+Jon reads Quest lists, including handoffs and completion summaries; it does not change machine
+return payloads.
+
 **A report ends a turn; it never interrupts one.** If you can name the next action, take it. Writing
 "what I am doing next" and stopping is the failure this section used to cause: a tidy summary was
 available, so the turn ended, and Jon had to say "continue" to get work that was already decided.
