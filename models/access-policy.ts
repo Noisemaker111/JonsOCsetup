@@ -64,9 +64,9 @@ export function requestedAgentRoute(agent?:string,source=process.env.OPENCODE_CO
     const config=JSON.parse(source)
     if(selection){
       const launch=JSON.parse(selection)
-      // A resume without --model keeps the conversation's saved choice. The configured
-      // default describes new conversations, not a replacement requested for this one.
-      if(typeof launch.sessionID==='string'&&(launch.sessionID!==sessionID||launch.explicitModel!==true))return
+      // A launch default is not an explicit choice: the composer may change it before
+      // creating a conversation. An explicit launch choice belongs only to its target.
+      if(launch.explicitModel!==true||(typeof launch.sessionID==='string'&&launch.sessionID!==sessionID))return
     }
     // Only the visible launch agent was selected by opencode-runtime. A worker's generic
     // config is a template: Quest dispatch binds its own exact provider/model/effort.

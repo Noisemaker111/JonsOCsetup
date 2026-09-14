@@ -82,6 +82,8 @@ test("a refused request and a substituted model both reach the conversation, not
       expect(requestedAgentRoute('quest-giver',launch,'ses_resumed')).toBe('opencode-go/deepseek-v4.1-flash#high')
       process.env.OPENCODE_LAUNCH_SELECTION=JSON.stringify({agent:'quest-giver',sessionID:'ses_resumed',explicitModel:false})
       expect(requestedAgentRoute('quest-giver',launch,'ses_new')).toBeUndefined()
+      process.env.OPENCODE_LAUNCH_SELECTION=JSON.stringify({explicitModel:false})
+      expect(requestedAgentRoute('quest-giver',launch,'ses_first')).toBeUndefined()
     }finally{if(priorSelection===undefined)delete process.env.OPENCODE_LAUNCH_SELECTION;else process.env.OPENCODE_LAUNCH_SELECTION=priorSelection}
 
     // The host draws a session's title and summary models from the session's own provider, so a
