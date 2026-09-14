@@ -15,7 +15,9 @@ test("a refused request and a substituted model both reach the conversation, not
     synthetic: async (input: any) => { posted.push(input) },
   }
   const restore = process.env.OPENCODE_CONFIG_CONTENT
+  const restoreSelection = process.env.OPENCODE_LAUNCH_SELECTION
   process.env.OPENCODE_CONFIG_CONTENT = launch
+  delete process.env.OPENCODE_LAUNCH_SELECTION
   try {
     await installAccessGuard({ session, event:{subscribe:async()=>({async *[Symbol.asyncIterator](){yield {type:'session.model.selected',data:{sessionID:'ses_manual',model:{providerID:'openai',id:'gpt-5.6-sol'}}}}})} })
     await Bun.sleep(5)
@@ -95,6 +97,8 @@ test("a refused request and a substituted model both reach the conversation, not
   } finally {
     if (restore === undefined) delete process.env.OPENCODE_CONFIG_CONTENT
     else process.env.OPENCODE_CONFIG_CONTENT = restore
+    if (restoreSelection === undefined) delete process.env.OPENCODE_LAUNCH_SELECTION
+    else process.env.OPENCODE_LAUNCH_SELECTION = restoreSelection
   }
 })
 
