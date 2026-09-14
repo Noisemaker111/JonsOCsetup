@@ -77,16 +77,16 @@ export function selectUserGiverProject(store:QuestStore,sessionID:string,targets
   return selection
  }finally{lock.release()}
 }
-export function giverContext(store:QuestStore,session:any,requestID:string,questID?:string,creating=false):QuestContext {
+export function giverContext(store:QuestStore,session:any,requestID:string,questID?:string,creating=false,turnID?:string):QuestContext {
  const registered=readUserGiver(store.runtime),origin=physicalDirectory(session.location.directory)
- if(!registered||registered.sessionID!==session.id)return {sessionID:session.id,requestID,directory:origin,project:projectIdentity(origin)}
+ if(!registered||registered.sessionID!==session.id)return {sessionID:session.id,requestID,turnID,directory:origin,project:projectIdentity(origin)}
  rootConversation(store,session)
  const q=questID?store.read(questID):undefined,selected=registered.selection?.targets??[]
  if(!q&&creating&&registered.selection?.pending)throw new QuestError('PROJECT_SELECTION_REQUIRED','No Quest was created. '+registered.selection.pending+' Select one explicit project with project_select before creating work.')
  if(!q&&creating&&selected.length>1)throw new QuestError('PROJECT_SELECTION_REQUIRED','Select one project for this Quest; all Quests stay with the same giver')
  const directory=q?physicalDirectory((q.extensions.giverSourceDirectory as string)??q.project!.root):selected[0]?.directory??origin
  const project=projectIdentity(directory);if(q?.project&&project.id!==q.project.id)throw new QuestError('PROJECT_MISMATCH','The recorded Quest source no longer belongs to its project')
- return {sessionID:session.id,requestID,project,directory,giverDirectory:origin}
+ return {sessionID:session.id,requestID,turnID,project,directory,giverDirectory:origin}
 }
 export function verifyGiverBinding(store:QuestStore,context:QuestContext,session:any){
  if(!context.giverDirectory)return verifySourceBinding(context,session?.location?.directory)

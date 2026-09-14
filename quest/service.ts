@@ -22,8 +22,25 @@ import { questChanges } from "./change-view"
 import type { QuestHost } from "./runtime"
 import {toolSummary,toolDetail,toolSection,toolStatus,toolPlan} from './tool-projection'
 import {activeRuns,awaitQuestChange,observedState,runSummary,waitSteering,DEFAULT_WAIT_SECONDS,MAX_WAIT_SECONDS} from './wait'
+import {giverInstruction} from './giver-instruction'
 const validator=new AjvJsonSchemaValidator()
 const validators=new Map(Object.entries(questOperations).map(([name,op])=>[name,validator.getValidator(op.input)]))
+const unwrap=(value:any)=>value?.data??value
+async function originatingUserTurn(store:QuestStore,host:QuestHost,sessionID:string,messageID:unknown):Promise<string>{
+ if(typeof host.context!=='function')throw new QuestError('GIVER_TURN_REQUIRED','No Quest was created. The host did not provide the message history needed to identify this giver instruction.')
+ let messages:any
+ try{messages=unwrap(await host.context({sessionID}))}catch(error){throw new QuestError('GIVER_TURN_REQUIRED','No Quest was created. The giver instruction boundary could not be read: '+String(error))}
+ if(!Array.isArray(messages))throw new QuestError('GIVER_TURN_REQUIRED','No Quest was created. The host returned no message history for this giver instruction.')
+ const type=(message:any)=>message?.type
+ // The supported native MCP transport supplies sessionID, but no messageID. Its
+ // call runs inside the session's current assistant; queued prompts are not yet
+ // in persisted context. Use that assistant, never a model-provided argument.
+ const index=typeof messageID==='string'?messages.findIndex(message=>message?.id===messageID):messages.findLastIndex(message=>type(message)==='assistant')
+ if(index<0)throw new QuestError('GIVER_TURN_REQUIRED','No Quest was created. The current assistant message is absent from the persisted giver history.')
+ const instruction=giverInstruction(store.runtime,sessionID,messages,index)
+ if(instruction)return instruction
+ throw new QuestError('GIVER_TURN_REQUIRED','No Quest was created. Neither the current host context nor delivered inbox evidence identifies the originating giver instruction. Inspect the host event connection before retrying.')
+}
 export function createQuestService(store:QuestStore,host:QuestHost,options:{policyFile?:string;settingsFile?:string;startRun?:StartRun;directory?:string;onDispose?:(dispose:()=>void)=>void}={}) {
  const {start,returns}=questDispatch(store,host,options)
  const continuation=new QuestContinuation(store,start,{verifyContext:async(context)=>{const result=await host.get({sessionID:context.sessionID});verifyGiverBinding(store,context,result?.data??result)}})
@@ -76,7 +93,8 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
    }
   if(!isWorker&&(session?.data??session)?.agent==='quest-giver'&&!userGiverID(store))await bindUserGiver(store,host,context.sessionID)
   if(!isWorker&&userGiverID(store)&&userGiverID(store)!==context.sessionID&&['create','update','run','start'].includes(input.action))throw new QuestError('SINGLE_GIVER_REQUIRED','Continue in your one Quest Giver: '+userGiverID(store))
-  const trusted=isWorker?{project:workerLedgerProject(store,context.sessionID,directory)??projectIdentity(directory),directory:physicalDirectory(directory),sessionID:context.sessionID,requestID}:giverContext(store,{...(session?.data??session),id:context.sessionID},requestID,input.id,input.action==='create')
+  const turnID=!isWorker&&input.action==='create'&&(context.native===true||typeof context.messageID==='string')?await originatingUserTurn(store,host,context.sessionID,context.messageID):undefined
+  const trusted=isWorker?{project:workerLedgerProject(store,context.sessionID,directory)??projectIdentity(directory),directory:physicalDirectory(directory),sessionID:context.sessionID,requestID}:giverContext(store,{...(session?.data??session),id:context.sessionID},requestID,input.id,input.action==='create',turnID)
   if(!isWorker&&trusted.giverDirectory&&input.id)adoptQuestGiver(store,input.id)
   if(input.action==='start'){questsAPI(store,trusted,start).get(input.id);return requestQuestStart(store,input.id,devQueueGeneration())}
   if(input.action==='run'){

@@ -51,7 +51,7 @@ async function openQuestServer(store: QuestStore, registrations: Set<Registratio
   }
   const call = (method: string, input: unknown, sessionID: string | undefined, requestID: string, service = giver()?.service, external = false) => {
     if (!sessionID || !service) throw Error('The Quest Giver service is not connected yet.')
-    return service.call(method, input, { sessionID, id: requestID, external })
+    return service.call(method, input, { sessionID, id: requestID, external, native: !external })
   }
   const http = createServer(async (request, response) => {
     const json = (status: number, value: unknown) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(value)) }

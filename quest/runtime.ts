@@ -15,7 +15,7 @@ import { reserveDispatch, dispatchReservationFile } from "../models/dispatch-pla
 import { workspaceRunID } from "./change-view"
 import { verifySourceBinding } from "./project"
 import { editingSource } from "./source-binding"
-export type QuestHost = { create:(input:any)=>Promise<any>;get:(input:any)=>Promise<any>;prompt:(input:any)=>Promise<any> }
+export type QuestHost = { create:(input:any)=>Promise<any>;get:(input:any)=>Promise<any>;prompt:(input:any)=>Promise<any>;context?:(input:any)=>Promise<any> }
 const unwrap=(value:any)=>value?.data??value
 const samePath=(a:string,b:string)=>process.platform==="win32"?realpathSync(a).toLowerCase()===realpathSync(b).toLowerCase():realpathSync(a)===realpathSync(b)
 /** Creates a session at the owned location before any prompt can execute. No parent-location mutation. */
