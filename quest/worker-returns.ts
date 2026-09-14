@@ -4,6 +4,7 @@ import {existsSync,mkdirSync,readFileSync,readdirSync,writeFileSync,renameSync} 
 import {join} from 'node:path'
 import {acquireLock} from './locking'
 import {hostPermissions} from './host-observation'
+import {physicalDirectory} from './project'
 import {permissionKey,workerSessionID} from './worker-permissions'
 import {PermissionReviewer,type PermissionReview} from './permission-reviewer'
 import {questCompletionReturn} from './completion-return'
@@ -22,7 +23,7 @@ export class QuestWorkerReturns {
   const lock=acquireLock(this.store.runtime,'worker-return-'+input.runID)
   try{if(existsSync(join(this.directory(),input.runID+'.json')))return;this.save({questID:input.quest.id,runID:input.runID,context:input.context,agent:session?.agent,model:session?.model,state:'waiting'})}finally{lock.release()}
  }
- async tick(){
+ async tick(permissionDirectory?:string){
   if(!existsSync(this.directory()))return
   for(const name of readdirSync(this.directory()).filter(n=>/^[a-f0-9]{26}\.json$/.test(n))){
    let lock;try{lock=acquireLock(this.store.runtime,'worker-return-'+name.slice(0,-5),{timeoutMs:0})}catch{continue}
@@ -31,6 +32,13 @@ export class QuestWorkerReturns {
     const q=this.store.read(row.questID),run=q?.sessions.find(s=>s.runID===row.runID)
     if(!q||!run)continue
     const terminal=['completed','failed','cancelled'].includes(run.state)
+    // Permission domains belong to a plugin location. Worker locations may review
+    // their own active assignment, but never coordinate or deliver board results.
+    if(permissionDirectory){
+     if(terminal||typeof run.scope?.worktree!=='string'||physicalDirectory(run.scope.worktree)!==permissionDirectory)continue
+     const workerID=workerSessionID(run),response=workerID?await this.host.get({sessionID:workerID}):undefined,worker=response?.data??response
+     if(worker?.id!==workerID||typeof worker?.location?.directory!=='string'||physicalDirectory(worker.location.directory)!==permissionDirectory)continue
+    }
     if(!terminal&&(!['executing','waiting','blocked'].includes(run.state)||run.harness||run.runtime==='claude-code'))continue
     const parent=await this.host.get({sessionID:row.context.sessionID}),session=parent?.data??parent
     try{verifyGiverBinding(this.store,row.context,session)}catch(error){row.error=String(error);this.save(row);continue}
@@ -64,4 +72,3 @@ export class QuestWorkerReturns {
   }
  }
 }
-
