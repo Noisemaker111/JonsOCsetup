@@ -76,7 +76,7 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
    }
   if(!isWorker&&(session?.data??session)?.agent==='quest-giver'&&!userGiverID(store))await bindUserGiver(store,host,context.sessionID)
   if(!isWorker&&userGiverID(store)&&userGiverID(store)!==context.sessionID&&['create','update','run','start'].includes(input.action))throw new QuestError('SINGLE_GIVER_REQUIRED','Continue in your one Quest Giver: '+userGiverID(store))
-  const trusted=isWorker?{project:workerLedgerProject(store,context.sessionID,directory,input.id)??projectIdentity(directory),directory:physicalDirectory(directory),sessionID:context.sessionID,requestID}:giverContext(store,{...(session?.data??session),id:context.sessionID},requestID,input.id,input.action==='create')
+  const trusted=isWorker?{project:workerLedgerProject(store,context.sessionID,directory)??projectIdentity(directory),directory:physicalDirectory(directory),sessionID:context.sessionID,requestID}:giverContext(store,{...(session?.data??session),id:context.sessionID},requestID,input.id,input.action==='create')
   if(!isWorker&&trusted.giverDirectory&&input.id)adoptQuestGiver(store,input.id)
   if(input.action==='start'){questsAPI(store,trusted,start).get(input.id);return requestQuestStart(store,input.id,devQueueGeneration())}
   if(input.action==='run'){
