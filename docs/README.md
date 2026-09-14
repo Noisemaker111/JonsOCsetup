@@ -3,6 +3,7 @@
 ## Using the setup
 
 - [Launch OpenCode](plain-opencode-launch.md): `oc`, project selection, and saved launch preferences.
+- [OpenCode2 update reports](opencode-update-report.md): running build, official changes and installed-plugin risks.
 - [Install and maintain personal setup](../setup/README.md): prerequisites, preview, installation, and linked instructions.
 - [Projects and conversations](../project-router/README.md): select a destination while keeping one Quest Giver.
 - [Quests and model outcomes](adaptive-quest-work.md): independent steps, guidance, and task reports.

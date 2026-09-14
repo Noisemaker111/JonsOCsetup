@@ -19,6 +19,7 @@
   },
   "scripts": {
     "runtime:host": "node scripts/host-status.mjs",
+    "runtime:update-report": "node scripts/opencode-update-report.mjs",
     "runtime:start": "node scripts/opencode-runtime.mjs",
     "runtime:verify": "bun scripts/verify-runtime.ts",
     "runtime:ship": "bun scripts/verify-runtime.ts",
