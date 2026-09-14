@@ -15,6 +15,7 @@ import {
   runQuestPair,
   sessionSettled,
   transcriptVisible,
+  workerTranscriptHeaderVisible,
 } from "../scripts/gate-decisions"
 
 test("pair selection chooses the newest bound records instead of title-only duplicates", () => {
@@ -58,6 +59,8 @@ test("frame and transcript decisions distinguish the board, detail and native wo
   expect(detailSelected(detail, "Installed single giver project 1")).toBe(true)
   expect(transcriptVisible(transcript, "Installed single giver project 1", "INSTALLED_QUEST_WORKER_VERIFIED")).toBe(true)
   expect(transcriptVisible(`${transcript}\nSearch quests`, "Installed single giver project 1", "INSTALLED_QUEST_WORKER_VERIFIED")).toBe(false)
+  expect(workerTranscriptHeaderVisible("QUEST WORKER\nInstalled single giver project 1 · completed\ncliproxyapi/gpt-5.6-luna (max reasoning)", "Installed single giver project 1")).toBe(true)
+  expect(workerTranscriptHeaderVisible("QUEST WORKER\nInstalled single giver project 1 · completed\nSearch quests", "Installed single giver project 1")).toBe(false)
 })
 
 test("return decisions require ordered completed assistant evidence", () => {

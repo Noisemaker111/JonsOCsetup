@@ -149,6 +149,11 @@ export function transcriptVisible(text: string, title: string, marker: string): 
   return text.includes(marker) && text.includes(title) && !boardVisible(text)
 }
 
+/** The native worker session is open even when its earlier assignment is above the viewport. */
+export function workerTranscriptHeaderVisible(text: string, title: string): boolean {
+  return text.includes("QUEST WORKER") && text.includes(title) && text.toLowerCase().includes("completed") && !boardVisible(text)
+}
+
 /** Back on the saved Quest detail after returning from a worker. */
 export function stepsVisible(text: string, title: string): boolean {
   return text.includes("QUEST STEPS") && detailSelected(text, title)
