@@ -77,7 +77,7 @@ test('a prepared release is only reused when its own receipts prove it is that c
     mkdirSync(root, {recursive: true})
     // No receipts at all: nothing to reuse, and no throw either.
     expect(findPrepared(commit, registry)).toBeUndefined()
-    writeFileSync(join(root, 'channel-release.json'), JSON.stringify({channel: 'dev', commit, root}))
+    writeFileSync(join(root, 'channel-release.json'), JSON.stringify({schema: 1, cleanupProtocol: 1, channel: 'dev', commit, root}))
     writeFileSync(join(root, 'plugin-activation.json'), JSON.stringify({activeGeneration: 'gen-a', evidence: {ok: false, sourceCommit: commit}}))
     // A preparation whose own model check failed is not a candidate to launch.
     expect(findPrepared(commit, registry)).toBeUndefined()
@@ -109,7 +109,7 @@ test('normal oc follows the hub source and refuses an identical candidate owned 
       mkdirSync(join(registry,'releases'),{recursive:true});git(repository,['worktree','add','--detach',root,commit])
       mkdirSync(join(root,'generations','gen-a'),{recursive:true})
       writeFileSync(join(root,'generations','gen-a','plugin-set.json'),'{}')
-      writeFileSync(join(root,'channel-release.json'),JSON.stringify({channel:'dev',commit,root}))
+      writeFileSync(join(root,'channel-release.json'),JSON.stringify({schema:1,cleanupProtocol:1,channel:'dev',commit,root}))
       writeFileSync(join(root,'plugin-activation.json'),JSON.stringify({activeGeneration:'gen-a',evidence:{ok:true,sourceCommit:commit}}))
       return root
     }
