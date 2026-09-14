@@ -14,12 +14,12 @@ export const userGiverID=(store=new QuestStore(questRoot()))=>readUserGiver(stor
  */
 function rootConversation(store:QuestStore,row:any){if(!row?.id?.startsWith('ses_')||row.parentID||row.parent_id||worker(store,row.id))throw new QuestError('GIVER_IDENTITY_INVALID','The user giver must be a verified root conversation, never an execution worker')}
 /**
- * What elects one. The quest-giver agent is how a conversation becomes the giver; after that the
- * binding is the session, not the agent its composer happens to be set to. Sending one message
- * through another agent rewrites the session's agent, and requiring it here un-elected the bound
- * giver mid-conversation and left the whole board with none.
+ * What can hold the binding. The session is the identity; the agent is a mutable composer
+ * selection and is deliberately not part of this check.
  */
-function eligible(store:QuestStore,row:any){rootConversation(store,row);if(row.agent!=='quest-giver')throw new QuestError('GIVER_IDENTITY_INVALID','A Quest Giver is elected from a conversation opened with the quest-giver agent')}
+function eligible(store:QuestStore,row:any){rootConversation(store,row)}
+/** A new conversation is elected by the quest-giver agent, before it is bound. */
+function elected(store:QuestStore,row:any){eligible(store,row);if(row.agent!=='quest-giver')throw new QuestError('GIVER_IDENTITY_INVALID','A Quest Giver is elected from a conversation opened with the quest-giver agent')}
 export async function bindUserGiver(store:QuestStore,host:any,sessionID:string){
  const row=unwrap(await host.get({sessionID}));if(row?.id!==sessionID)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different giver');eligible(store,row)
  const lock=acquireLock(store.runtime,'user-giver',{timeoutMs:0})
@@ -53,7 +53,7 @@ export async function ensureUserGiver(store:QuestStore,host:any,currentID?:strin
  if(ids.length&&!reached)throw new QuestError('GIVER_UNREACHABLE','No recorded Quest Giver answered on this host; reconnect it instead of creating another')
  if(candidates.length){candidates.sort((a,b)=>(Date.parse(b.time?.updated)||Number(b.time?.updated)||0)-(Date.parse(a.time?.updated)||Number(a.time?.updated)||0));return bindUserGiver(store,host,candidates[0].id)}
  const lock=acquireLock(store.runtime,'user-giver',{timeoutMs:0})
- try{if(readUserGiver(store.runtime))throw new QuestError('GIVER_CREATION_BUSY','Another request is establishing your giver; refresh');saveUserGiver(store.runtime,{state:'launching'});try{const created=unwrap(await host.create({title:'Quest Giver',agent:'quest-giver',location:{directory:physicalDirectory(directory)}})),row=unwrap(await host.get({sessionID:created?.id}));if(row?.id!==created?.id)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different created giver');eligible(store,row);saveUserGiver(store.runtime,{state:'bound',sessionID:row.id,directory:physicalDirectory(row.location.directory),model:row.model});return row}catch(error){saveUserGiver(store.runtime,{state:'unknown',reason:String(error)});throw error}}finally{lock.release()}
+ try{if(readUserGiver(store.runtime))throw new QuestError('GIVER_CREATION_BUSY','Another request is establishing your giver; refresh');saveUserGiver(store.runtime,{state:'launching'});try{const created=unwrap(await host.create({title:'Quest Giver',agent:'quest-giver',location:{directory:physicalDirectory(directory)}})),row=unwrap(await host.get({sessionID:created?.id}));if(row?.id!==created?.id)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different created giver');elected(store,row);saveUserGiver(store.runtime,{state:'bound',sessionID:row.id,directory:physicalDirectory(row.location.directory),model:row.model});return row}catch(error){saveUserGiver(store.runtime,{state:'unknown',reason:String(error)});throw error}}finally{lock.release()}
 }
 export function adoptQuestGiver(store:QuestStore,id:string){const sessionID=userGiverID(store),q=store.read(id);if(!sessionID||!q||q.integrationOwner===sessionID)return q;return store.apply(id,'patched',{integrationOwner:sessionID,extensions:{...q.extensions,previousGivers:[...new Set([...(q.extensions.previousGivers as string[]??[]),...(q.integrationOwner?[q.integrationOwner]:[])])] }},'quest:user-giver',{expectedRevision:q.revision})}
 export type GiverProjectSelection = {
@@ -114,8 +114,13 @@ export function verifyGiverBinding(store:QuestStore,context:QuestContext,session
  */
 export async function installUserGiverContext(store:QuestStore,host:any){
  await host.hook?.('context',async(event:any)=>{
-  if(event.agent!=='quest-giver'||worker(store,event.sessionID))return
-  let row=await ensureUserGiver(store,host,event.sessionID)
+  const registered=readUserGiver(store.runtime),isRegistered=registered?.state==='bound'&&registered.sessionID===event.sessionID
+  if(!isRegistered&&(event.agent!=='quest-giver'||worker(store,event.sessionID)))return
+  let row:any
+  try{row=await ensureUserGiver(store,host,event.sessionID)}catch(error){
+   if(isRegistered&&Array.isArray(event.system))event.system.push({type:'text',text:`The registered Quest Giver session ${event.sessionID} is no longer eligible. ${error instanceof Error?error.message:'The host could not confirm its identity'} Quest tools are unavailable until you inspect or succeed this giver.`})
+   throw error
+  }
   if(row.id===event.sessionID)return
   const incoming=unwrap(await host.get({sessionID:event.sessionID}))
   if(incoming?.id!==event.sessionID)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different session')
