@@ -3,25 +3,24 @@
 export type ShellViolation = { rule: string; message: string }
 
 const unixBinary = /\b(head|tail|cat|grep|ls|rm|cp|mv)(?=\s|$)/
-const hint = "See skills/windows-shell/SKILL.md."
 
 export function shellViolations(command: string): ShellViolation[] {
   const text = String(command ?? "")
   const violations: ShellViolation[] = []
   const add = (rule: string, message: string) => violations.push({ rule, message })
 
-  if (unixBinary.test(text)) add("unix-binary", `Use PowerShell or rg instead of Unix binaries. ${hint}`)
-  if (/(?:\\[^\r\n;&|]*)&&|&&[^\r\n;&|]*\\/i.test(text)) add("backslash-chain", `Use PowerShell ';' instead of &&. ${hint}`)
-  if (/\bcd\s+[^\r\n;&|]*&&/i.test(text)) add("cd-chain", `Use Set-Location and ';' instead of cd ... &&. ${hint}`)
+  if (unixBinary.test(text)) add("unix-binary", "Use PowerShell or rg instead of Unix binaries.")
+  if (/(?:\\[^\r\n;&|]*)&&|&&[^\r\n;&|]*\\/i.test(text)) add("backslash-chain", "Use PowerShell ';' instead of &&.")
+  if (/\bcd\s+[^\r\n;&|]*&&/i.test(text)) add("cd-chain", "Use Set-Location and ';' instead of cd ... &&.")
   if (/\bgit\s+ls-tree\b/i.test(text) && !/(?:^|\s)(?:-r|--recursive)(?:\s|$)/i.test(text)) {
-    add("ls-tree-object", `Use git show for commit history or add -r/--recursive. ${hint}`)
+    add("ls-tree-object", "Use git show for commit history or add -r/--recursive.")
   }
   // /dev/null as a PATH ARGUMENT (not a redirect) is rewritten to `nul` by MSYS
   // on Windows, and the tool then writes a real file with that name. `nul` is a
   // reserved DOS device, so git cannot hash it: every later commit dies with
   // "fatal: mmap failed: Invalid argument" until the file is removed.
   if (/(?:^|\s)--?[\w-]+[= ]\/dev\/null\b/.test(text)) {
-    add("devnull-argument", `/dev/null becomes the reserved file "nul" when passed as an argument on Windows, and it breaks every later git commit. Write to a temp file, or drop the flag. ${hint}`)
+    add("devnull-argument", `/dev/null becomes the reserved file "nul" when passed as an argument on Windows, and it breaks every later git commit. Write to a temp file, or drop the flag.`)
   }
   return violations
 }
