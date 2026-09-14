@@ -6,8 +6,8 @@ description: Use whenever running git or gh commands on this machine — cloning
 # Git and GitHub
 
 Use the current repository and its existing authentication and remotes.
-The personal setup described below is not a rule for other users or machines. Windows mechanics live in the `windows-shell`
-skill; publish gates live in `contribute`. This skill owns the mechanics.
+The personal setup described below is not a rule for other users or machines. Publish gates live in `contribute`.
+This skill owns Git and GitHub mechanics.
 
 ## Authentication
 
