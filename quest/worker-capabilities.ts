@@ -1,5 +1,5 @@
 import {userGiverID} from './user-giver'
-import {assertWorkerIdentity} from './worker-identity'
+import {assertWorkerIdentity,assertWorkerRequestIdentity} from './worker-identity'
 import {existsSync,mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs'
 import {join} from 'node:path'
 import {readAllQuests} from './index'
@@ -32,7 +32,10 @@ export async function installWorkerCapabilities(ctx:any,store:QuestStore){
  })
  await ctx.session.hook('http.request',async(event:any)=>{
   const assignment=run(event.sessionID);if(!assignment&&userGiverID(store)!==event.sessionID)return
-  if(assignment)assertWorkerIdentity(assignment,event)
+  if(assignment){
+   const session=event.agent==='compaction'?await ctx.session.get({sessionID:event.sessionID}):undefined
+   assertWorkerRequestIdentity(assignment,event,session?.data??session)
+  }
   try{const body=await event.request.clone().json();if(Array.isArray(body.tools))save(event.sessionID,{outboundTools:names(body.tools),requestKind:event.kind??'unknown'})}catch(error){console.error('[quests] worker capability observation failed',String(error))}
  })
 }
