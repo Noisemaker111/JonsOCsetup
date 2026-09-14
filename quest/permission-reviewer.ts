@@ -54,7 +54,7 @@ export class PermissionReviewer {
     const route=reserved.route
     if(route.harness!=='native'||route.serviceTier!=='default')throw Error('Permission reviewer requires the exact supported native model service')
     if(pin&&pin.accountID!==route.accountID)throw Error('The pinned reviewer account changed; no substitute selected')
-    if(!pin){pin={selector:'route:'+route.id,model:route.providerID+'/'+route.modelID+'#'+route.reasoning,settingsKey,selectionReason:reserved.decision?.summary,accountID:route.accountID,giverID:input.giverID,createdAt:new Date().toISOString(),reviewerSessionID:previous?.reviewerSessionID,sessionState:previous?.sessionState,pendingModelChange:!!previous?.reviewerSessionID};mkdirSync(directory,{recursive:true});const tmp=file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(pin));renameSync(tmp,file)}
+    if(!pin){const exactModel=route.providerID+'/'+route.modelID+'#'+route.reasoning;pin={selector:route.admission==='configured-choice'?exactModel:'route:'+route.id,model:exactModel,settingsKey,selectionReason:reserved.decision?.summary,accountID:route.accountID,giverID:input.giverID,createdAt:new Date().toISOString(),reviewerSessionID:previous?.reviewerSessionID,sessionState:previous?.sessionState,pendingModelChange:!!previous?.reviewerSessionID};mkdirSync(directory,{recursive:true});const tmp=file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(pin));renameSync(tmp,file)}
     const savePin=()=>{mkdirSync(directory,{recursive:true});const tmp=file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(pin));renameSync(tmp,file)}
     const model={providerID:route.providerID,id:route.modelID,...(route.reasoning!=='unknown'?{variant:route.reasoning}:{})}
     if(!pin.reviewerSessionID){

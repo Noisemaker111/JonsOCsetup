@@ -25,7 +25,15 @@ export async function reviewerCandidates(settings=reviewerSettings()){
  return {...plan,routes,request}
 }
 export async function reservePermissionReview(runtime:string,runID:string,settings:ReviewerSettings,pin?:{model:string;selector?:string;accountID:string}){
- const plan=await reviewerCandidates({...settings,model:pin?.selector??pin?.model??settings.model})
+ let plan:Awaited<ReturnType<typeof reviewerCandidates>>
+ try{plan=await reviewerCandidates({...settings,model:pin?.selector??pin?.model??settings.model})}
+ catch(error){
+  // Older pins stored a generated explicit-choice route ID that exists only in
+  // that planning call. Resolve the same model again, retaining its account pin.
+  // Ambiguous, prohibited or unavailable model choices still fail closed.
+  if(!pin?.selector||pin.selector===pin.model||!String(error).includes('AUTHORIZED_ROUTE_UNAVAILABLE:'))throw error
+  plan=await reviewerCandidates({...settings,model:pin.model})
+ }
  if(pin)plan.routes=plan.routes.filter(r=>r.accountID===pin.accountID)
  const ledger=new RouteReservations(dispatchReservationFile(runtime)),result=ledger.reserve(runID,plan)
  if(!result.reservation)throw Error(result.decision?.summary??'No user-authorized available reviewer route')
