@@ -50,10 +50,12 @@ export function readBurnControls(file=BURN_CONTROL_FILE):BurnControl[]{
  if(!Array.isArray(rows)||rows.some(r=>!r.accountID||!r.targetKey||!['ready','hold','stopped'].includes(r.state)||![r.desiredConcurrency,r.maxConcurrent,r.deadlineAt,r.updatedAt,r.lastAdjustedAt].every(Number.isFinite)||!Number.isInteger(r.desiredConcurrency)||!Number.isInteger(r.maxConcurrent)||r.maxConcurrent<1||r.maxConcurrent>16||r.desiredConcurrency<0||r.desiredConcurrency>r.maxConcurrent))throw Error("Invalid pacing ledger; preserve and inspect before dispatch")
  return rows
 }
-export function updateBurnControls(accounts:AccountUsage[],observations:Observation[],now=Date.now(),targets:UsageTarget[]|undefined=undefined,file=BURN_CONTROL_FILE){
- targets??=renewUsageTargets(accounts,now)
+export function updateBurnControls(accounts:AccountUsage[],observations:Observation[],now:number|undefined=undefined,targets:UsageTarget[]|undefined=undefined,file=BURN_CONTROL_FILE){
+ targets??=renewUsageTargets(accounts,now??Date.now())
  const lock=acquireLock(dirname(file),"burn-control")
- try{const prior=readBurnControls(file),rows=targets.filter(t=>t.pacing).map(t=>decideBurnControl(t,accounts.find(a=>a.id===t.accountID),observations,prior.find(p=>p.accountID===t.accountID),now));mkdirSync(dirname(file),{recursive:true});const tmp=file+"."+process.pid+".tmp";writeFileSync(tmp,JSON.stringify(rows),{mode:0o600});renameSync(tmp,file);return rows}finally{lock.release()}
+ // Another process may refresh this ledger while we wait. Sample live time under
+ // its lock; an earlier request timestamp is not evidence of a clock rollback.
+ try{const at=now??Date.now(),prior=readBurnControls(file),rows=targets.filter(t=>t.pacing).map(t=>decideBurnControl(t,accounts.find(a=>a.id===t.accountID),observations,prior.find(p=>p.accountID===t.accountID),at));mkdirSync(dirname(file),{recursive:true});const tmp=file+"."+process.pid+".tmp";writeFileSync(tmp,JSON.stringify(rows),{mode:0o600});renameSync(tmp,file);return rows}finally{lock.release()}
 }
 
 /** Recheck after workspace preparation, immediately before sending a worker prompt. */

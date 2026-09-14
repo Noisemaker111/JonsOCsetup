@@ -1,12 +1,13 @@
 /**
- * @core-prevents a release lease left open by a killed launch pinning its release for the life of the machine, and its opposite: retiring a release while a host that launch spawned is still running out of it
- * @core-observed On 2026-09-11 four dev releases were pinned by leases whose launcher pids (48228, 51024, 41376 and 40820) were provably dead -- three of them appeared inside ten minutes -- and nothing on the machine could ever close those leases, so retireReleases refused those roots on every later pass.
+ * @core-prevents a release lease left open by a killed launch pinning its release for the life of the machine, pre-lease worktrees accumulating forever, and their opposite: retiring a release while a host that launch spawned is still running out of it
+ * @core-observed On 2026-09-11 four dead-launcher leases permanently pinned releases; on 2026-09-14 fifty releases from the historical source checkout still occupied the channel tree because they predated leases, including thirty-three with complete process-owner records and no live holder that retirement refused before judging the evidence.
  */
 import {test,expect} from 'bun:test'
 import {spawnSync} from 'node:child_process'
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync} from 'node:fs'
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync,realpathSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
+import {git,pathKey,registeredWorktrees} from '../quest/cleanup-git.mjs'
 
 const script=new URL('../scripts/release-retirement.mjs',import.meta.url).href
 const reason=(results:any[],root:string)=>results.find(r=>r.root===root)?.reason??''
@@ -26,8 +27,8 @@ function stage(lease:{pid:number;startedAt:string}){
  return {home,root,file}
 }
 /** The production entry point, in its own process against that registry. */
-const retire=(home:string,env:Record<string,string>={})=>{
- const run=spawnSync(process.execPath,['-e',`import(${JSON.stringify(script)}).then(m=>console.log(JSON.stringify(m.retireReleases(${JSON.stringify(home)}))))`],
+const retire=(home:string,repository=home,env:Record<string,string>={})=>{
+ const run=spawnSync(process.execPath,['-e',`import(${JSON.stringify(script)}).then(m=>console.log(JSON.stringify(m.retireReleases(${JSON.stringify(repository)}))))`],
   {env:{...process.env,HOME:home,USERPROFILE:home,...env},encoding:'utf8',windowsHide:true})
  try{return JSON.parse(run.stdout)}catch{throw Error(`retireReleases did not report: status ${run.status} ${run.stderr||run.error?.message||'no output'}`)}
 }
@@ -109,4 +110,41 @@ test('a release lease is closed only when the machine shows nothing that launch 
   for(const pid of [orphan,inside])if(pid)try{process.kill(pid)}catch{}
   for(const home of homes)if(existsSync(home))rmSync(home,{recursive:true,force:true})
  }
+})
+
+test('a pre-lease release is removed only with complete process and historical worktree ownership evidence',()=>{
+ const home=realpathSync.native(mkdtempSync(join(tmpdir(),'release-legacy-')))
+ try{
+  const historical=join(home,'historical'),maintained=join(home,'maintained'),foreign=join(home,'foreign'),remote='https://example.invalid/owner/repository.git'
+  mkdirSync(historical);git(historical,['init']);git(historical,['config','user.email','test@example.invalid']);git(historical,['config','user.name','Test'])
+  writeFileSync(join(historical,'.gitignore'),'channel-release.json\nrun/\ngenerations/\nplugin-activation.json\nnode_modules/\n')
+  writeFileSync(join(historical,'source'),'owned source\n');git(historical,['add','.gitignore','source']);git(historical,['commit','-m','owned release'])
+  const commit=git(historical,['rev-parse','HEAD'])
+  const clone=spawnSync('git',['clone','--no-hardlinks',historical,maintained],{encoding:'utf8',windowsHide:true})
+  if(clone.status!==0)throw Error(clone.stderr||'fixture clone failed')
+  git(historical,['remote','add','origin',remote]);git(maintained,['remote','set-url','origin',remote]);git(maintained,['update-ref','refs/remotes/origin/agents',commit])
+  const other=spawnSync('git',['clone','--no-hardlinks',historical,foreign],{encoding:'utf8',windowsHide:true})
+  if(other.status!==0)throw Error(other.stderr||'foreign fixture clone failed')
+  git(foreign,['remote','set-url','origin','https://example.invalid/someone/else.git'])
+  const registry=join(home,'.config','opencode','.channels'),releases=join(registry,'releases')
+  const stageLegacy=(name:string,kind?:'runtime'|'direct',record:Record<string,unknown>={},owner=historical)=>{
+   const root=join(releases,name);git(owner,['worktree','add','--detach',root,commit])
+   writeFileSync(join(root,'channel-release.json'),JSON.stringify({schema:1,channel:'dev',commit,root,preparedAt:new Date(Date.now()-60_000).toISOString()}))
+   if(kind){const leaf=join(root,'run',kind,'launch');mkdirSync(leaf,{recursive:true});writeFileSync(join(leaf,kind==='runtime'?'owner.json':'launch.json'),JSON.stringify(record))}
+   return root
+  }
+  const removable=stageLegacy('dev-legacy-removable','runtime',{pid:deadPid(),sequence:1})
+  const occupied=stageLegacy('dev-legacy-occupied','runtime',{pid:process.pid,sequence:1})
+  const ownerless=stageLegacy('dev-legacy-ownerless','direct',{channel:'dev',generation:'old'})
+  const unknown=stageLegacy('dev-legacy-unknown')
+  const wrongRepository=stageLegacy('dev-legacy-other-repository','runtime',{pid:deadPid(),sequence:1},foreign)
+  const outcome=retire(home,maintained)
+  expect(outcome.find((row:any)=>row.root===removable)?.removed).toBe(true)
+  expect(existsSync(removable)).toBe(false)
+  expect(registeredWorktrees(historical).map(row=>pathKey(row.worktree))).not.toContain(pathKey(removable))
+  expect(reason(outcome,occupied)).toContain(String(process.pid));expect(existsSync(occupied)).toBe(true)
+  expect(reason(outcome,ownerless)).toContain('names no process owner');expect(existsSync(ownerless)).toBe(true)
+  expect(reason(outcome,unknown)).toContain('no launch records');expect(existsSync(unknown)).toBe(true)
+  expect(reason(outcome,wrongRepository)).toContain('different or unknown repository');expect(existsSync(wrongRepository)).toBe(true)
+ }finally{rmSync(home,{recursive:true,force:true})}
 })

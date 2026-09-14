@@ -15,9 +15,14 @@ test("a refused request and a substituted model both reach the conversation, not
     synthetic: async (input: any) => { posted.push(input) },
   }
   const restore = process.env.OPENCODE_CONFIG_CONTENT
+  const restoreSelection = process.env.OPENCODE_LAUNCH_SELECTION
   process.env.OPENCODE_CONFIG_CONTENT = launch
+  delete process.env.OPENCODE_LAUNCH_SELECTION
   try {
-    await installAccessGuard({ session })
+    await installAccessGuard({ session, event:{subscribe:async()=>({async *[Symbol.asyncIterator](){yield {type:'session.model.selected',data:{sessionID:'ses_manual',model:{providerID:'openai',id:'gpt-5.6-sol'}}}}})} })
+    await Bun.sleep(5)
+    hooks.context({sessionID:'ses_manual',agent:'quest-giver',model:{providerID:'openai',id:'gpt-5.6-sol'}})
+    expect(posted).toHaveLength(0)
 
     // The substitution is reported before anything is sent, so the user learns which model is
     // actually about to answer even when the substitute is one the policy would have allowed.
@@ -74,11 +79,13 @@ test("a refused request and a substituted model both reach the conversation, not
       expect(posted).toHaveLength(3)
       expect(posted[2].text).toContain('Nothing was sent')
       expect(posted[2].text).not.toContain('the launch asked for')
-      // An explicit change on resume and a newly created conversation retain the comparison.
+      // An explicit launch change applies only to its target, never a later /new conversation.
       process.env.OPENCODE_LAUNCH_SELECTION=JSON.stringify({agent:'quest-giver',sessionID:'ses_resumed',explicitModel:true})
       expect(requestedAgentRoute('quest-giver',launch,'ses_resumed')).toBe('opencode-go/deepseek-v4.1-flash#high')
       process.env.OPENCODE_LAUNCH_SELECTION=JSON.stringify({agent:'quest-giver',sessionID:'ses_resumed',explicitModel:false})
-      expect(requestedAgentRoute('quest-giver',launch,'ses_new')).toBe('opencode-go/deepseek-v4.1-flash#high')
+      expect(requestedAgentRoute('quest-giver',launch,'ses_new')).toBeUndefined()
+      process.env.OPENCODE_LAUNCH_SELECTION=JSON.stringify({explicitModel:false})
+      expect(requestedAgentRoute('quest-giver',launch,'ses_first')).toBeUndefined()
     }finally{if(priorSelection===undefined)delete process.env.OPENCODE_LAUNCH_SELECTION;else process.env.OPENCODE_LAUNCH_SELECTION=priorSelection}
 
     // The host draws a session's title and summary models from the session's own provider, so a
@@ -90,6 +97,8 @@ test("a refused request and a substituted model both reach the conversation, not
   } finally {
     if (restore === undefined) delete process.env.OPENCODE_CONFIG_CONTENT
     else process.env.OPENCODE_CONFIG_CONTENT = restore
+    if (restoreSelection === undefined) delete process.env.OPENCODE_LAUNCH_SELECTION
+    else process.env.OPENCODE_LAUNCH_SELECTION = restoreSelection
   }
 })
 

@@ -26,6 +26,8 @@ test('research uses the reviewed repository, retains hub ledger identity and rej
   new QuestWorkspaces(store.runtime).createResearch({runID:'research',questID:q.id,directory:selected.source,project:selected.project})
   store.apply(q.id,'session-claimed',{callID:'research',runID:'research',sessionID:'worker'},'check')
   expect(workerLedgerProject(store,'worker',repo,q.id)).toEqual(project)
+  expect(workerLedgerProject(store,'worker',repo)).toEqual(project)
+  expect(()=>workerLedgerProject(store,'worker',root)).toThrow('binding changed')
   const stale=store.read(q.id)!.revision
   store.apply(q.id,'patched',{reason:'Another writer changed the Quest'})
   expect(()=>store.apply(q.id,'session-claimed',{callID:'late',role:'late'},'check',{expectedRevision:stale})).toThrow('changed since it was read')

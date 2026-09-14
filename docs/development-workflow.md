@@ -210,7 +210,7 @@ dev because its isolated ledger cannot authorize against stable ownership.
 Use isolated worktrees for dev code work; this preserves stable checkout owners.
 
 Activation requires the current merged agents tree and two real return-flow passes.
-It installs the scoped workflow skill and creates `.channels/start.mjs`. Start with `oc`, which launches at the hub root so its AGENTS.md loads; `--here` uses
+It installs the scoped workflow skill and creates `.channels/start.mjs`. Start with `oc`, which launches in the maintained JonsOCsetup source; `--here` uses
 the current directory instead and `--cwd <project>` names one. Plain `oc` runs the
 latest merged `agents` code, `oc --gated` the release that passed the acceptance gate,
 `oc --default branch|gated` changes which one plain `oc` means, `oc --stable` is the
@@ -265,8 +265,10 @@ This does not select a release for other launches. Clear the variable afterward.
 
 Direct `quest run` workers retain the giver's original project, agent and model as
 a return address. Once their saved run reaches a terminal state, a durable notice
-starts a giver turn with the actual step notes. Accepted or uncertain admissions
-are never resent after reload; changed giver bindings retain the pending notice.
+starts a giver turn with only the Quest id, title and state, the finished step, a
+one-line outcome and the existing get/inspect pointer. Complete step notes remain
+on the Quest and are read only when the decision needs them. Accepted or uncertain
+admissions are never resent after reload; changed giver bindings retain the pending notice.
 
 Dev continuation queues and worker-return notices are scoped to the loaded immutable
 generation. An older open dev session cannot claim a newer generation's queued work.
@@ -334,9 +336,33 @@ selected release's `worktree:cleanup finish --repo <main checkout> --worktree
 <finished checkout>`. The command asserts that the owner and its child processes
 have finished. It records the exact head and retries immediately. Activation and
 direct session exit retry pending tasks; `worktree:cleanup retry --repo <main
-checkout>` is the manual retry. Keep evidence outside task checkouts before finish.
+checkout>` is the manual retry. Keep durable evidence in the main JonsOCsetup
+checkout under `.evidence/<task>/` before finish.
 Unknown ignored files, nested worktrees, changes and unintegrated commits block
 removal with a saved reason. Never infer completion from file age.
+
+### Local work and evidence locations
+
+Use the main JonsOCsetup checkout as the common root for development:
+
+- `.worktrees/<task>/` contains owned implementation checkouts.
+- Each checkout's `run/` contains disposable build output and scratch files.
+- The main checkout's `.evidence/<task>/` contains durable verification captures,
+  logs, task-specific verification drivers and acceptance reports. Save these here
+  from the start so checkout retirement does not remove the evidence.
+
+Reusable verification tools belong in tracked `scripts/`; generated output belongs
+in `.evidence/<task>/`. Evidence is ignored by Git because captures and transcripts
+can contain local session data. Use canonical paths in saved Quest deliverables.
+
+The former `C:/Users/Jk101/dev-workflow-evidence` directory contains compatibility
+links to `.evidence`. Historical reports and archived Git worktree references
+retain their existing paths. Windows currently holds the historical
+`quest-review-reliability` folder open, so its canonical `.evidence` entry links
+back to its preserved original location. Do not stop a process or alter ownership
+to relocate an archive. New work uses the canonical location; do not create another
+home-level evidence root. The installed `.config/opencode` directory remains the
+runtime destination.
 
 New dev releases record process lifetime leases. Activation and launch exit can
 retire unselected, integrated releases only after every recorded process acknowledges

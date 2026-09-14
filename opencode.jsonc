@@ -60,7 +60,7 @@
             { "id": "max", "settings": { "providerOptions": { "reasoningEffort": "max" } } }
           ]
         },
-        "gpt-5.6-luna": { "name": "GPT-5.6 Luna (CLIProxy)", "limit": { "context": 400000, "output": 128000 }, "variants": [{ "id": "medium", "settings": { "providerOptions": { "reasoningEffort": "medium" } } }] },
+        "gpt-5.6-luna": { "name": "GPT-5.6 Luna (CLIProxy)", "limit": { "context": 400000, "output": 128000 }, "variants": [{ "id": "max", "settings": { "providerOptions": { "reasoningEffort": "max" } } }] },
         "gpt-5.6-terra": { "name": "GPT-5.6 Terra (CLIProxy)", "limit": { "context": 400000, "output": 128000 } },
         "gpt-6-astra": { "name": "GPT-6 Astra (CLIProxy)", "settings": { "providerOptions": { "reasoningEffort": "high" } }, "limit": { "context": 400000, "output": 128000 } },
         "claude-fable-5-1": {
