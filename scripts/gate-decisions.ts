@@ -112,9 +112,10 @@ export function questSettled(quest: GateQuest | undefined, reservations: GateRes
 }
 
 /** The saved worker result must belong to the latest bound attempt, not an older successful run. */
-export function latestRunSavedResult(quest: GateQuest | undefined, marker: string): boolean {
+export function latestRunSavedResult(quest: GateQuest | undefined, messages: GateMessage[], marker: string): boolean {
   const run = latestBoundSession(quest)
-  if (!run || run.state !== "completed" || !run.runID || !run.result) return false
+  if (!quest?.title || !run || run.state !== "completed" || !run.runID || !run.result) return false
+  if (!automaticReturn(messages, quest.title, { questID: quest.id, runID: run.runID, marker }).received) return false
   return (quest?.stages ?? []).some(stage => run.deliverables?.includes(stage.id)
     && stage.status === "done" && stage.note?.includes(marker))
 }
