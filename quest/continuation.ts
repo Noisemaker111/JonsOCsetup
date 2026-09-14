@@ -12,7 +12,9 @@ import { redact } from './privacy'
 import type { Quest, QuestStage } from './types'
 import {dispatchReservationFile} from '../models/dispatch-planner'
 import { verifySourceBinding } from './project'
-function verified(q:Quest,s:QuestStage){const command=(q.extensions.routerVerification as Record<string,string>|undefined)?.[s.id]??s.commandID;return !!command&&s.proofs.some(p=>p.command===command&&p.verified===true&&(p.result==='passed'||p.verdict==='PASS'))}
+// A bound command is a verification contract. An ordinary worker step does not
+// acquire an unspecified command requirement merely because it belongs to a goal.
+function verified(q:Quest,s:QuestStage){const command=(q.extensions.routerVerification as Record<string,string>|undefined)?.[s.id]??s.commandID;return !command||s.proofs.some(p=>p.command===command&&p.verified===true&&(p.result==='passed'||p.verdict==='PASS'))}
 const verificationSnapshot=(q:Quest,ids:string[])=>Object.fromEntries(ids.map(id=>[id,(q.extensions.routerVerification as Record<string,string>|undefined)?.[id]??q.stages.find(s=>s.id===id)?.commandID??null]))
 
 export type ContinuationRunOptions = RunQuest & { maxConcurrent?:number; stepModels?:Record<string,string> }
@@ -67,7 +69,7 @@ export class QuestContinuation {
     if(row.verification&&JSON.stringify(row.verification)!==JSON.stringify(verificationSnapshot(q,row.steps.map(s=>s.id)))){stop('Verification contract changed; explicitly start a newly authorized goal');return}
     if(steps.some(s=>s.status==='blocked')){stop('Assigned step blocked; inspect its result');return}
     if(steps.some(s=>s.status==='done'&&!verified(q,s))){stop('Assigned result lacks a verified passing proof for its verification contract');return}
-    if(steps.every(s=>s.status==='done')){row.state='done';row.reason='Assigned verification passed';return}
+    if(steps.every(s=>s.status==='done')){row.state='done';row.reason='Assigned steps completed';return}
     if(row.attempt>=3){stop('Bounded worker goal turn budget exhausted; explicit resume after review required');return}
     row.state='claiming';claimed=structuredClone(row)
    })

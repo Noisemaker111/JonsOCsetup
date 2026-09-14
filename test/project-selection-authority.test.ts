@@ -45,6 +45,29 @@ test('registered prompt hook preserves goals for automatic notices and pauses on
   expect(continuation.goalStatus(sessionID)[0].state).toBe('stopped')
  }finally{dispose?.();f.close()}
 })
+test('worker goals require bound verification but do not invent a command contract',async()=>{
+ for(const bound of [false,true]){
+  const f=fixture()
+  try{
+   const context={sessionID,requestID:'completion',directory:f.root,project:verifyTarget(f.root)} as any
+   const {id}=questsAPI(f.store,context,async()=>({sessionID})).create({title:'Save the assigned result',description:'Record the completed native operation',steps:[{id:'work',title:'Complete assigned work'}]})
+   if(bound)f.store.apply(id,'patched',{extensions:{...f.store.read(id)!.extensions,routerVerification:{work:'configured-check'}}},'test')
+   f.store.apply(id,'session-claimed',{callID:'run',runID:'run',sessionID,role:'worker',deliverables:['work']},'test')
+   const goal=new QuestContinuation(f.store,async()=>({sessionID}),{goalMode:true})
+   goal.startWorkerGoal(id,['work'],context,'configured/model#effort')
+   f.store.apply(id,'stage-state',{stageID:'work',status:'done',evidence:'Actual operation completed'},'test')
+   f.store.apply(id,'session-state',{callID:'run',state:'completed'},'test')
+   await goal.workerEvent(sessionID,'terminal',true)
+   expect(goal.goalStatus(sessionID)[0].state).toBe(bound?'stopped':'done')
+   if(bound){
+    f.store.apply(id,'proof-added',{stageID:'work',proof:{id:'proof',command:'configured-check',verified:true,result:'passed',at:new Date().toISOString(),attempt:1}},'test')
+    await goal.resumeGoal(context)
+    expect(goal.goalStatus(sessionID)[0].state).toBe('done')
+   }
+  }finally{f.close()}
+ }
+})
+
 test('registered router tools return JSON values when discovery has optional nested fields',async()=>{
  const f=fixture();let dispose:(()=>void)|undefined
  try{
