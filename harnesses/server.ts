@@ -79,7 +79,7 @@ export async function installShellGuard(ctx: { tool?: { hook?: Function } }) {
     // produces work nobody can find again, whatever it types.
     const cwd = [input.cwd, ev.cwd, ev.directory].find((v): v is string => typeof v === "string" && v.length > 0)
     if (typeof command === "string") assertSafeShell(command, cwd)
-  })
+  }, true)
 }
 
 /** Keep the model context small while writing an untouched copy for diagnosis. */
