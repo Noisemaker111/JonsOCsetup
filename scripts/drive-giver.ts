@@ -174,6 +174,11 @@ const quests = () => !live ? allQuests() : existsSync(questDir)
   : []
 const field = (text: string, key: string) => new RegExp(`^${key}: (.*)$`, "m").exec(text)?.[1]
 const parse = (text: string, key: string) => { try { return JSON.parse(field(text, key) ?? "null") } catch { return null } }
+const records = (): QuestRecord[] => allQuests().map(q => ({
+  id: field(q, "id")?.replace(/"/g, ""),
+  stages: parse(q, "stages") ?? [],
+  sessions: parse(q, "sessions") ?? [],
+}))
 function sessionRows() {
   const file = live ? join(home, ".local", "share", "opencode", "opencode.db") : join(out, "host.db")
   if (!existsSync(file)) return [] as any[]
@@ -216,8 +221,17 @@ await sleep(1500)
 // A long paste collapses to a "[Pasted N lines]" chip, so accept either form as landed.
 const typed = await capture("typed")
 if (!typed.includes("[Pasted") && !typed.includes(ask.slice(0, 40))) throw new Error("Paste never reached the composer; evidence in " + out)
-send({ action: "key", name: "return" })
+
+/**
+ * Snapshot the board before submitting the prompt. The giver can dispatch synchronously from the
+ * return key, so taking this baseline afterwards races the launch and makes the new worker look
+ * pre-existing to the shutdown grace below.
+ */
+const beforePrompt = records()
+const baseline = finishedBaseline(beforePrompt)
+const runsBefore = knownRuns(beforePrompt)
 const promptAt = Date.now()
+send({ action: "key", name: "return" })
 
 /**
  * What counts as this run's work finishing.
@@ -228,20 +242,10 @@ const promptAt = Date.now()
  * still pending, because a session from 2026-09-06 on that same Quest was marked completed and the
  * file's mtime had moved when the giver merely read it.
  *
- * So a condition has to name something that did not exist when the prompt was sent. Records carry
- * `updatedAt`; anything stamped before the prompt is somebody else's finished work.
+ * So a condition has to name something that did not exist when the prompt was sent. The driver
+ * snapshots the finished records immediately before submitting the prompt; anything absent from
+ * that snapshot is work the prompt may have caused.
  */
-const records = (): QuestRecord[] => allQuests().map(q => ({
-  id: field(q, "id")?.replace(/"/g, ""),
-  stages: parse(q, "stages") ?? [],
-  sessions: parse(q, "sessions") ?? [],
-}))
-// What was already finished when the prompt was sent. Anything finished that is not in here is work
-// this run caused; see finishedBaseline in scripts/drive-isolation.ts for the two wrong answers
-// this replaces.
-const baseline = finishedBaseline(records())
-// Every run the board already carried, so a worker this drive caused is recognisable later.
-const runsBefore = knownRuns(records())
 const satisfied = () => {
   if (condition === "reply") return sessionRows().some(s => s.agent === "quest-giver" && (s.tokens_output ?? 0) > 0 && s.idle_outcome && (!live || (s.time_updated ?? 0) >= promptAt))
   return conditionMet({ condition, live, baseline, quests: records() })
