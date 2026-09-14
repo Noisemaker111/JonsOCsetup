@@ -173,7 +173,13 @@ export function automaticReturn(messages: GateMessage[], title: string, expected
   if (noticeAt < 0) return { received: false, noticeAt, responseAt: -1 }
   for (let index = noticeAt + 1; index < messages.length; index++) {
     const message = messages[index]
-    if (message.type === "user") return { received: false, noticeAt, responseAt: -1 }
+    // One giver turn can coalesce sibling worker returns before it emits the single
+    // completed assistant response. Those tagged notices are still automatic wake
+    // input; an untagged/manual user prompt must invalidate this automatic result.
+    if (message.type === "user") {
+      if (message.metadata?.questWorkerReturn === true) continue
+      return { received: false, noticeAt, responseAt: -1 }
+    }
     if (message.type === "assistant" && !!message.time?.completed && message.finish === "stop") return { received: true, noticeAt, responseAt: index }
   }
   return { received: false, noticeAt, responseAt: -1 }

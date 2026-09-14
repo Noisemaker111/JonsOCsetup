@@ -66,6 +66,8 @@ test("return decisions require ordered completed assistant evidence", () => {
   expect(automaticReturn([notice, assistant], title, { questID: "q", runID: "run-1" }).received).toBe(true)
   expect(automaticReturn([notice, assistant], title, { questID: "q", runID: "run-1", marker: "INSTALLED_QUEST_WORKER_VERIFIED" }).received).toBe(false)
   expect(automaticReturn([{ ...notice, text: `${notice.text}\nINSTALLED_QUEST_WORKER_VERIFIED` }, assistant], title, { questID: "q", runID: "run-1", marker: "INSTALLED_QUEST_WORKER_VERIFIED" }).received).toBe(true)
+  const siblingNotice = { type: "user", text: "Automatic Quest worker update for sibling", metadata: { questWorkerReturn: true, questID: "sibling", runID: "run-sibling" } }
+  expect(automaticReturn([notice, siblingNotice, assistant], title, { questID: "q", runID: "run-1" }).received).toBe(true)
   expect(automaticReturn([notice, { type: "user", text: "A manual prompt" }, assistant], title, { questID: "q", runID: "run-1" }).received).toBe(false)
   expect(automaticReturn([notice, assistant], title, { questID: "q", runID: "run-old" }).received).toBe(false)
   expect(nudgeReply([
