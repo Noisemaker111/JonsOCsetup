@@ -7,12 +7,14 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { questsAPI } from "../quest/api"
-import { projectIdentity } from "../quest/project"
+import { physicalDirectory, projectIdentity } from "../quest/project"
 import { QuestStore } from "../quest/store"
 import { QuestWorkerReturns } from "../quest/worker-returns"
 
 test("each terminal worker return queues and explicitly wakes its own giver turn", async () => {
-  const root = mkdtempSync(join(tmpdir(), "quest-worker-return-"))
+  // Native sessions bind the physical directory. Windows runner TEMP can use
+  // an alias, so the fixture must establish the same host-derived identity.
+  const root = physicalDirectory(mkdtempSync(join(tmpdir(), "quest-worker-return-")))
   const store = new QuestStore(root)
   const giver = {
     id: "ses_giver",
