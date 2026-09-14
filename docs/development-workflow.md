@@ -265,8 +265,10 @@ This does not select a release for other launches. Clear the variable afterward.
 
 Direct `quest run` workers retain the giver's original project, agent and model as
 a return address. Once their saved run reaches a terminal state, a durable notice
-starts a giver turn with the actual step notes. Accepted or uncertain admissions
-are never resent after reload; changed giver bindings retain the pending notice.
+starts a giver turn with only the Quest id, title and state, the finished step, a
+one-line outcome and the existing get/inspect pointer. Complete step notes remain
+on the Quest and are read only when the decision needs them. Accepted or uncertain
+admissions are never resent after reload; changed giver bindings retain the pending notice.
 
 Dev continuation queues and worker-return notices are scoped to the loaded immutable
 generation. An older open dev session cannot claim a newer generation's queued work.

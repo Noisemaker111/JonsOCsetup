@@ -8,7 +8,7 @@
  * learn that nothing has changed yet.
  *
  * There is already a return path: QuestWorkerReturns prompts the originating giver with an
- * "Automatic Quest worker update" the moment a run reaches a terminal state, so the cheapest wait
+ * bounded "Automatic Quest worker update" the moment a run reaches a terminal state, so the cheapest wait
  * is no turn at all -- the giver stops and is woken. This module is what makes the tool layer
  * enforce that rather than ask for it: it fingerprints exactly what a `get` would tell the caller,
  * so a repeat of the same request against the same state is recognisable, and it blocks on the
@@ -64,7 +64,7 @@ export const runSummary = (run: QuestSession) => ({
 
 const RETURN_PATH =
   "When a run reaches completed, failed or cancelled this session is woken automatically with an " +
-  '"Automatic Quest worker update" message carrying the run state and its step results. No get is needed to receive it.'
+  '"Automatic Quest worker update" carrying the Quest state, finished step, one-line outcome and a pointer to its complete saved notes.'
 
 /** What the caller should do instead of asking again. Named actions, not encouragement. */
 export function waitSteering(quest: Quest, runID: string | undefined, waitedMs: number): string {
