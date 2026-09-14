@@ -62,10 +62,11 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
  ]
  let disposeCleanup:(()=>void)|undefined
  const directory=options.directory?physicalDirectory(options.directory):undefined
+ const workerPermissions=poll('worker permission review',()=>returns.tick(directory))
  const timer=setInterval(()=>{
   // Worker locations also load this plugin. Only the registered giver's location
   // coordinates the board; workers retain their tools and local host observations.
-  if(directory&&readUserGiver(store.runtime)?.directory!==directory)return
+  if(directory&&readUserGiver(store.runtime)?.directory!==directory){void workerPermissions();return}
   disposeCleanup??=installQuestCleanup(store,host)
   for(const poll of polls)void poll()
  },5000);timer.unref()

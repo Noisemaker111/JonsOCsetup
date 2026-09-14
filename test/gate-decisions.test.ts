@@ -46,7 +46,7 @@ test("completion needs the matching settled reservation, not elapsed or title ev
   expect(questSettled(quest, [{ runID: "run-1", state: "settled" }])).toBe(false)
   expect(latestRunSavedResult(quest, [], "INSTALLED_QUEST_WORKER_VERIFIED")).toBe(false)
   const completedLatest = { ...newerActive, state: "completed", result: "Host reported execution succeeded" }
-  const returned = { type: "user", text: "Automatic Quest worker update for primary\nINSTALLED_QUEST_WORKER_VERIFIED", metadata: { questWorkerReturn: true, questID: "q", runID: "run-2" } }
+  const returned = { type: "user", text: "Automatic Quest worker update for primary: native reads completed; full notes remain on the Quest", metadata: { questWorkerReturn: true, questID: "q", runID: "run-2" } }
   expect(latestRunSavedResult({ ...quest, title: "primary", sessions: [staleSuccess, completedLatest] }, [returned, { type: "assistant", finish: "stop", time: { completed: 1 } }], "INSTALLED_QUEST_WORKER_VERIFIED")).toBe(true)
 })
 

@@ -115,7 +115,7 @@ export function questSettled(quest: GateQuest | undefined, reservations: GateRes
 export function latestRunSavedResult(quest: GateQuest | undefined, messages: GateMessage[], marker: string): boolean {
   const run = latestBoundSession(quest)
   if (!quest?.title || !run || run.state !== "completed" || !run.runID || !run.result) return false
-  if (!automaticReturn(messages, quest.title, { questID: quest.id, runID: run.runID, marker }).received) return false
+  if (!automaticReturn(messages, quest.title, { questID: quest.id, runID: run.runID }).received) return false
   return (quest?.stages ?? []).some(stage => run.deliverables?.includes(stage.id)
     && stage.status === "done" && stage.note?.includes(marker))
 }
