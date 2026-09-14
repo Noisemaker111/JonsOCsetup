@@ -334,9 +334,33 @@ selected release's `worktree:cleanup finish --repo <main checkout> --worktree
 <finished checkout>`. The command asserts that the owner and its child processes
 have finished. It records the exact head and retries immediately. Activation and
 direct session exit retry pending tasks; `worktree:cleanup retry --repo <main
-checkout>` is the manual retry. Keep evidence outside task checkouts before finish.
+checkout>` is the manual retry. Keep durable evidence in the main JonsOCsetup
+checkout under `.evidence/<task>/` before finish.
 Unknown ignored files, nested worktrees, changes and unintegrated commits block
 removal with a saved reason. Never infer completion from file age.
+
+### Local work and evidence locations
+
+Use the main JonsOCsetup checkout as the common root for development:
+
+- `.worktrees/<task>/` contains owned implementation checkouts.
+- Each checkout's `run/` contains disposable build output and scratch files.
+- The main checkout's `.evidence/<task>/` contains durable verification captures,
+  logs, task-specific verification drivers and acceptance reports. Save these here
+  from the start so checkout retirement does not remove the evidence.
+
+Reusable verification tools belong in tracked `scripts/`; generated output belongs
+in `.evidence/<task>/`. Evidence is ignored by Git because captures and transcripts
+can contain local session data. Use canonical paths in saved Quest deliverables.
+
+The former `C:/Users/Jk101/dev-workflow-evidence` directory contains compatibility
+links to `.evidence`. Historical reports and archived Git worktree references
+retain their existing paths. Windows currently holds the historical
+`quest-review-reliability` folder open, so its canonical `.evidence` entry links
+back to its preserved original location. Do not stop a process or alter ownership
+to relocate an archive. New work uses the canonical location; do not create another
+home-level evidence root. The installed `.config/opencode` directory remains the
+runtime destination.
 
 New dev releases record process lifetime leases. Activation and launch exit can
 retire unselected, integrated releases only after every recorded process acknowledges

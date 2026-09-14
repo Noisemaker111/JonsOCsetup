@@ -3,6 +3,7 @@ node_modules/
 generations/
 .channels/
 .worktrees/
+/.evidence/
 /.claude/
 .visual-e2e/
 run/
