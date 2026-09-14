@@ -10,10 +10,12 @@
  * built the wrong commit on 2026-09-11. So the remote-tracking ref wins whenever one exists, and
  * what was resolved is recorded on the release and shown at launch.
  */
-import {existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, readdirSync, realpathSync} from 'node:fs'
+import {existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, readdirSync, realpathSync, statSync} from 'node:fs'
 import {join, dirname} from 'node:path'
 import {spawnSync, spawn} from 'node:child_process'
 import {homedir} from 'node:os'
+import JSON5 from 'json5'
+export const HOST_MODELS_SOURCE = 'https://models.opencode.ai'
 
 export const runtimeHome = join(homedir(), '.config', 'opencode')
 export const registryRoot = join(runtimeHome, '.channels')
@@ -22,6 +24,125 @@ export function git(cwd, argv) {
   const p = spawnSync('git', ['-C', cwd, ...argv], {encoding: 'utf8', windowsHide: true, timeout: 120000})
   if (p.status !== 0) throw Error(p.stderr || String(p.error))
   return p.stdout.trim()
+}
+
+/** Parse the exact provider/model identity the host receives, ignoring its reasoning variant. */
+export function modelRoute(route) {
+  const text = String(route ?? '').trim()
+  const base = text.split('#', 1)[0]
+  const slash = base.indexOf('/')
+  if (slash <= 0 || slash === base.length - 1) throw Error(`Preparation requires an exact provider/model route, received ${text || '<empty>'}`)
+  return {route: text, providerID: base.slice(0, slash), modelID: base.slice(slash + 1)}
+}
+
+export function hostModelsSource(environment = process.env) {
+  return (environment.OPENCODE_MODELS_URL || HOST_MODELS_SOURCE).replace(/\/$/, '')
+}
+
+/** The legacy native host cache that decides whether a catalog-backed route exists. */
+export function hostModelsCacheFile(environment = process.env) {
+  const cacheRoot = environment.XDG_CACHE_HOME || join(homedir(), '.cache')
+  return join(cacheRoot, 'opencode', 'models.json')
+}
+
+function record(value) { return value && typeof value === 'object' && !Array.isArray(value) ? value : undefined }
+
+export function readHostModelCatalog(file = hostModelsCacheFile()) {
+  try {
+    const raw = readFileSync(file, 'utf8')
+    const catalog = record(JSON.parse(raw))
+    if (!catalog) return undefined
+    let mtime
+    try { mtime = statSync(file).mtime.toISOString() } catch {}
+    return {catalog, raw, mtime}
+  } catch { return undefined }
+}
+
+export function catalogContainsModel(catalog, route) {
+  const {providerID, modelID} = typeof route === 'string' ? modelRoute(route) : route
+  const provider = record(catalog?.[providerID])
+  return Boolean(record(provider?.models)?.[modelID])
+}
+
+/** Models explicitly declared by the selected source config are already in the host's merged catalog. */
+export function configuredModelResolution(repository, commit, route) {
+  if (!repository || !commit) return undefined
+  const identity = typeof route === 'string' ? modelRoute(route) : route
+  try {
+    const config = JSON5.parse(git(repository, ['show', `${commit}:opencode.jsonc`]))
+    const provider = record(config?.providers?.[identity.providerID])
+    if (!provider) return {providerConfigured: false, modelConfigured: false}
+    return {
+      providerConfigured: true,
+      modelConfigured: Boolean(record(provider.models)?.[identity.modelID]),
+    }
+  } catch { return undefined }
+}
+
+/** Refresh the native host's legacy models.json without exposing a partial file to a running host. */
+export async function refreshHostModelCatalog({cacheFile = hostModelsCacheFile(), source = hostModelsSource(), fetchImpl = globalThis.fetch} = {}) {
+  if (typeof fetchImpl !== 'function') throw Error('Host model catalog refresh is unavailable: fetch is not configured')
+  let response
+  try {
+    response = await fetchImpl(`${source}/api.json`, {
+      headers: {'user-agent': 'JonsOCsetup channel preparation'},
+      signal: AbortSignal.timeout(10000),
+    })
+  } catch (error) {
+    throw Error(`Host model catalog refresh failed from ${source}: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  if (!response?.ok) throw Error(`Host model catalog refresh failed from ${source}: HTTP ${response?.status ?? 'unknown'}`)
+  const raw = await response.text()
+  let parsed
+  try { parsed = JSON.parse(raw) } catch { throw Error(`Host model catalog refresh failed from ${source}: response was not JSON`) }
+  if (!record(parsed)) throw Error(`Host model catalog refresh failed from ${source}: response was not a provider catalog`)
+
+  const previous = readHostModelCatalog(cacheFile)
+  const changed = previous?.raw !== raw
+  if (changed) {
+    mkdirSync(dirname(cacheFile), {recursive: true})
+    const temporary = `${cacheFile}.${process.pid}.${Date.now()}.tmp`
+    writeFileSync(temporary, raw)
+    renameSync(temporary, cacheFile)
+  }
+  const current = readHostModelCatalog(cacheFile)
+  return {
+    cacheFile,
+    source,
+    changed,
+    changedAt: changed ? new Date().toISOString() : undefined,
+    mtime: current?.mtime,
+  }
+}
+
+/**
+ * Ensure the exact preparation route is resolvable before a worktree, install or prompt is started.
+ * Config-declared models (for example CLIProxyAPI) are resolved by the selected source config;
+ * all other routes must be present in the native host catalog, refreshing it once when absent.
+ */
+export async function ensureHostModelCatalog({model, repository, commit, cacheFile = hostModelsCacheFile(), source = hostModelsSource(), fetchImpl = globalThis.fetch} = {}) {
+  const identity = modelRoute(model)
+  const initial = readHostModelCatalog(cacheFile)
+  if (catalogContainsModel(initial?.catalog, identity)) {
+    return {route: identity.route, cacheFile, source, resolvedBy: 'host-cache', refreshed: false, changed: false, mtime: initial.mtime}
+  }
+
+  const configured = configuredModelResolution(repository, commit, identity)
+  if (configured?.modelConfigured) {
+    return {route: identity.route, cacheFile, source, resolvedBy: 'source-config', refreshed: false, changed: false}
+  }
+
+  let refreshed
+  try {
+    refreshed = await refreshHostModelCatalog({cacheFile, source, fetchImpl})
+  } catch (error) {
+    throw Error(`Cannot prepare channel on ${identity.route}: the host model catalog does not contain it and refresh failed. ${error instanceof Error ? error.message : String(error)}; no prompt was sent.`)
+  }
+  const current = readHostModelCatalog(cacheFile)
+  if (catalogContainsModel(current?.catalog, identity)) {
+    return {route: identity.route, ...refreshed, resolvedBy: 'host-cache', refreshed: true}
+  }
+  throw Error(`Cannot prepare channel on ${identity.route}: the host model catalog at ${cacheFile} still cannot resolve it after refresh from ${source}; no prompt was sent.`)
 }
 /** The hub's installed source mapping owns repository selection; runtimeHome only stores runtime data. */
 export function sourceRepository(source = join(homedir(), 'Projects', 'opencode-hub', 'source')) {
@@ -113,13 +234,19 @@ export function findPrepared(commit, registry = registryRoot, repository) {
  */
 export async function prepareDevRelease({repository, registry = registryRoot, commit, model, ref, resolved, integration, subject}) {
   if (!commit || !model) throw Error('Preparation requires a committed ref and exact real model route')
+  // This is deliberately before worktree creation, dependency installation and the real prompt.
+  // A stale host catalog otherwise lets the native composer silently bind a different model.
+  const modelCatalog = await ensureHostModelCatalog({model, repository, commit})
   const root = join(registry, 'releases', 'dev-' + commit.slice(0, 12) + '-' + Date.now())
   mkdirSync(dirname(root), {recursive: true})
   git(repository, ['worktree', 'add', '--detach', root, commit])
   // Frozen lockfile restores the environment once, before dispatching any work.
   await run('bun', ['install', '--frozen-lockfile'], root, process.env)
-  await run('bun', [join(root, 'scripts/prepare-channel.ts'), '--model', model], root, envFor(root, 'dev', registry))
-  const release = {schema: 1, cleanupProtocol: existsSync(join(root, 'scripts/release-retirement.mjs')) ? 1 : undefined, channel: 'dev', commit, root, repository: repositoryOwner(repository), model, ref, resolved, subject, integrationRef: integration, preparedAt: new Date().toISOString()}
+  await run('bun', [join(root, 'scripts/prepare-channel.ts'), '--model', model], root, {
+    ...envFor(root, 'dev', registry),
+    OPENCODE_MODEL_CATALOG_PREFLIGHT: JSON.stringify(modelCatalog),
+  })
+  const release = {schema: 1, cleanupProtocol: existsSync(join(root, 'scripts/release-retirement.mjs')) ? 1 : undefined, channel: 'dev', commit, root, repository: repositoryOwner(repository), model, modelCatalog, ref, resolved, subject, integrationRef: integration, preparedAt: new Date().toISOString()}
   atomic(join(root, 'channel-release.json'), release)
   return {root, release}
 }
