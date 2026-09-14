@@ -6,7 +6,7 @@ import { expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { projectIdentity } from '../quest/project'
+import { physicalDirectory, projectIdentity } from '../quest/project'
 import { saveUserGiver } from '../quest/giver-registry.mjs'
 import { questsAPI } from '../quest/api'
 import { QuestStore } from '../quest/store'
@@ -16,7 +16,7 @@ import { QuestWorkerReturns } from '../quest/worker-returns'
 const id = (lead: string) => lead.repeat(26).slice(0, 26)
 
 test('terminal worker delivery carries one outcome line while the complete note stays readable', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'quest-bounded-return-')), store = new QuestStore(root)
+  const root = physicalDirectory(mkdtempSync(join(tmpdir(), 'quest-bounded-return-'))), store = new QuestStore(root)
   const project = projectIdentity(root), giverID = 'ses_bounded_return', runID = id('a')
   const model = { providerID: 'provider', id: 'model', variant: 'max' }, prompts: any[] = []
   const host = {
@@ -41,7 +41,8 @@ test('terminal worker delivery carries one outcome line while the complete note 
     await returns.tick()
     expect(prompts).toHaveLength(1)
     const text = prompts[0].text as string, payload = JSON.parse(text.split('\n')[1])
-    expect(Object.keys(payload)).toEqual(['questID', 'title', 'state', 'finishedStep', 'outcome', 'notes'])
+    expect(Object.keys(payload)).toEqual(['questID', 'title', 'state', 'runState', 'finishedStep', 'outcome', 'notes'])
+    expect(payload.runState).toBe('completed')
     expect(payload).toMatchObject({ questID: quest.id, title: quest.title, state: 'Ready to complete', finishedStep: { id: 'bounded-return', title: 'Bound the completion return', state: 'done' }, outcome: 'Implemented the bounded return and verified the saved record; [REDACTED]' })
     expect(payload.notes).toContain('quests.inspect')
     expect(text).not.toContain(secret)
@@ -49,11 +50,22 @@ test('terminal worker delivery carries one outcome line while the complete note 
     expect(questsAPI(store, context, async () => ({ sessionID: 'unused' })).get(quest.id).steps[0].note).toBe(note)
     await new QuestWorkerReturns(store, host, 'bounded-return-test').tick()
     expect(prompts).toHaveLength(1)
+    // A failed retry must not present the earlier saved success as its outcome.
+    const failedRunID = id('d')
+    store.apply(quest.id, 'session-planned', { callID: failedRunID, runID: failedRunID, parentID: giverID, role: 'worker', deliverables: ['bounded-return'] }, 'test')
+    store.apply(quest.id, 'session-state', { callID: failedRunID, state: 'failed', result: 'Provider disconnected before completing the retry.\nDetailed failure evidence remains saved.' }, 'test')
+    await returns.watch({ quest: store.read(quest.id)!, runID: failedRunID, stepIDs: ['bounded-return'], context })
+    await returns.tick()
+    expect(prompts).toHaveLength(2)
+    expect(prompts[1]).toMatchObject({ delivery: 'queue', resume: true })
+    expect(JSON.parse(prompts[1].text.split('\n')[1])).toMatchObject({ runState: 'failed', outcome: store.read(quest.id)!.sessions.find(run => run.runID === failedRunID)!.result })
+    expect(prompts[1].text).not.toContain('Implemented the bounded return')
+    expect(questsAPI(store, context, async () => ({ sessionID: 'unused' })).get(quest.id).steps[0].note).toBe(note)
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 
 test('review delivery uses the same bounded shape and accepted records queue no envelope', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'quest-bounded-review-')), store = new QuestStore(root)
+  const root = physicalDirectory(mkdtempSync(join(tmpdir(), 'quest-bounded-review-'))), store = new QuestStore(root)
   const project = projectIdentity(root), giverID = 'ses_bounded_review', prompts: any[] = []
   const host = {
     create: async () => undefined,

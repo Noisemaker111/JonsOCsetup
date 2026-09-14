@@ -26,11 +26,14 @@ export function questCompletionReturn(input: {
   const step = returnedStep(input.quest, input.stepIDs ?? [])
   const run = input.run ?? latestStepRun(input.quest, step?.id)
   const state = line(input.quest.state, run?.state ?? 'unknown')
-  const outcome = line(step?.note, line(run?.result, `${step?.title ?? 'Worker'}: ${state}`))
+  const unsuccessful = run && ['failed', 'cancelled'].includes(run.state)
+  const outcome = unsuccessful ? line(run.result, `Worker ${run.state}`)
+    : line(step?.note, line(run?.result, `${step?.title ?? 'Worker'}: ${state}`))
   const payload = {
     questID: line(input.quest.id),
     title: line(input.quest.title),
     state,
+    ...(run ? { runState: run.state } : {}),
     finishedStep: step ? { id: line(step.id), title: line(step.title), state: line(step.status) } : null,
     outcome,
     notes: 'quests.get({id: questID}) or quests.inspect({id: questID, section: "steps"})',
