@@ -1,6 +1,6 @@
 # Launch OpenCode
 
-After [setup](../setup/README.md), run `oc`. It opens the native OpenCode2 terminal at the OpenCode hub. The default is the latest merged `agents` revision unless you have saved a different launch preference.
+After [setup](../setup/README.md), run `oc`. It opens the native OpenCode2 terminal at `C:/Users/Jk101/Projects/JonsOCsetup`. The default is the latest merged `agents` revision unless you have saved a different launch preference.
 
 ```powershell
 oc

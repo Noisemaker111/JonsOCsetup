@@ -6,7 +6,7 @@
 #   oc --gated             on the release that passed the acceptance gate
 #   oc --default gated     make that the default for plain `oc`; --default branch puts it back
 #   oc --stable            the stable channel
-#   oc --here              launch in the current directory instead of the hub
+#   oc --here              launch in the current directory instead of the maintained source
 #   oc <branch> --fresh    rebuild the candidate rather than reusing one
 #   oc --model <route>     pin the model a candidate runs on
 #
@@ -20,7 +20,7 @@
 param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Arguments)
 $ErrorActionPreference='Stop'
 
-$hub=Join-Path $env:USERPROFILE 'Projects\opencode-hub'
+$defaultDirectory=Join-Path $env:USERPROFILE 'Projects\JonsOCsetup'
 $rule='-'*72
 $source=join-path $PSScriptRoot 'oc-source.mjs'
 $channel='dev'; $ref=$null; $defaulted=$false; $here=$false; $fresh=$false; $model=$null; $want=$null; $setDefault=$null; $hostArgs=@()
@@ -86,10 +86,10 @@ $plan=$planText | ConvertFrom-Json
 
 # Say which code is about to run. A candidate is never the release that passed the gate, and the
 # difference has to be readable at a glance or the wrong one gets trusted.
-# The host walks up from the launch directory for instructions, so a session started anywhere else
-# never loads the hub AGENTS.md. Launch at the hub unless --here or an explicit --cwd says otherwise.
+# New launches start in the maintained source. Existing sessions retain their saved identity.
+# --here and explicit --cwd continue to select the caller's directory.
 $explicitCwd=$hostArgs -contains '--cwd'
-$launchAt=if($here -or $explicitCwd){(Get-Location).Path}else{$hub}
+$launchAt=if($here -or $explicitCwd){(Get-Location).Path}else{$defaultDirectory}
 $b=$plan.banner
 if($b.candidate -and $defaulted){
  # The ordinary case now: plain `oc` on the latest merged code. Say what it is, quietly.
