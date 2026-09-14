@@ -4,7 +4,7 @@
   "entries": [
     {
       "target": "Projects/opencode-hub/AGENTS.md",
-      "sha256": "a90b1ca8194a7f6fabed223ded193ce2c835a6ed3630a83379c018ded59f76d6"
+      "sha256": "d824652920a71d3ebf864339074912a79dc8f35f2d5012cb27dd045df6552503"
     },
     {
       "target": "Projects/opencode-hub/CLAUDE.md",
@@ -12,7 +12,7 @@
     },
     {
       "target": "Projects/opencode-hub/MEMORY.md",
-      "sha256": "97de7b5b188dd2cb9f31085dce7679cb04c3a76030c85f27b64cef4613ec5eb6"
+      "sha256": "d4f415c66016f7c0ae976b1981bd444687a516fb9892c46b6f4d43a0f75a0b87"
     },
     {
       "target": ".agents/matt-pocock.md",
@@ -33,7 +33,7 @@
     },
     {
       "target": ".codex/AGENTS.md",
-      "sha256": "e6ba13d74859e5cadc00769cd600d15c4cfa7e69457a7f754639a9af9f8caec2"
+      "sha256": "9ea99d9ef1659ddc3067a9549ab391e1d5634df081dc6011927902dadc5e738b"
     },
     {
       "target": ".codex/config.toml",
@@ -99,7 +99,7 @@
     {
       "source": "skills/github/SKILL.md",
       "target": ".agents/skills/github/SKILL.md",
-      "sha256": "7bd1c2dffb6ebfc1f7277670f1941f1905444d6d140fd21e1a5cb6321448b8d5"
+      "sha256": "6638790766ac055e180c1e766e699241ab97d56c2346c79fe6bdbf0935f149c2"
     },
     {
       "source": "skills/help-i-cant-work-right/handoff.md",
@@ -113,7 +113,7 @@
     },
     {
       "target": ".agents/skills/README.md",
-      "sha256": "32c6596f492d16587692f7b5792e36c53dab7cb681ace03947ee36463100b206"
+      "sha256": "14a414e5de7cffc3d716e8bc44f777fc5adc9dc62e8955c030a269e5e663e25c"
     },
     {
       "target": ".agents/skills/skill-maker/agents/openai.yaml",
@@ -146,11 +146,6 @@
     {
       "target": ".agents/skills/web-artifacts-builder/SKILL.md",
       "sha256": "81c5002c6643b0de7b8710b00e7a9038daa6fb9b68d59870ee6adb12da8d10f8"
-    },
-    {
-      "source": "skills/windows-shell/SKILL.md",
-      "target": ".agents/skills/windows-shell/SKILL.md",
-      "sha256": "1f702bde7bc6800455bb0b04c562929f15bb339ca27ff6d857d90082ed37b290"
     },
     {
       "target": ".agents/skills-disabled/2026-09-07-trim/agents/browser-task-recovery/agents/openai.yaml",
@@ -405,10 +400,6 @@
       "sha256": "0b6aed9ee617194000c86be52b67291b00427a71c4dccb512ea5de184decf0ff"
     },
     {
-      "target": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-clean/skills/windows-shell/SKILL.md",
-      "sha256": "7fc0ad681f1e25fd82b3d39be4fb52244011172c610726bc57b60203bddfed3f"
-    },
-    {
       "target": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-harness/skills/model-routing/SKILL.md",
       "sha256": "d0eda3346448a4d4f5450ab0fa09a113be282d29945e3e15893fe0e6764d8f25"
     },
@@ -417,20 +408,12 @@
       "sha256": "0b6aed9ee617194000c86be52b67291b00427a71c4dccb512ea5de184decf0ff"
     },
     {
-      "target": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-claude-harness/skills/windows-shell/SKILL.md",
-      "sha256": "7fc0ad681f1e25fd82b3d39be4fb52244011172c610726bc57b60203bddfed3f"
-    },
-    {
       "target": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-scope-enforcement/skills/model-routing/SKILL.md",
       "sha256": "d0eda3346448a4d4f5450ab0fa09a113be282d29945e3e15893fe0e6764d8f25"
     },
     {
       "target": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-scope-enforcement/skills/review/SKILL.md",
       "sha256": "0b6aed9ee617194000c86be52b67291b00427a71c4dccb512ea5de184decf0ff"
-    },
-    {
-      "target": ".agents/skills-disabled/2026-09-07-trim/opencode-harness-copies/opencode-scope-enforcement/skills/windows-shell/SKILL.md",
-      "sha256": "7fc0ad681f1e25fd82b3d39be4fb52244011172c610726bc57b60203bddfed3f"
     },
     {
       "target": ".agents/skills-disabled/ask-matt/agents/openai.yaml",
@@ -506,7 +489,7 @@
     },
     {
       "target": ".agents/skills-disabled/README.md",
-      "sha256": "daaaa801f14a5105d8a3f07c5301f0e96e491d7e2fc721a77b038a76ca2b11f5"
+      "sha256": "4559a8b6f62e620eac9aa698215739947b2515eaeb9c0ffe148d01c9731f521f"
     },
     {
       "target": ".agents/skills-disabled/setup-matt-pocock-skills/agents/openai.yaml",

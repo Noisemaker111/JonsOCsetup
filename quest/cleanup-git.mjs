@@ -24,9 +24,9 @@ export function removeEmptyWorktreeShell(root){
  for(const item of plan){const stat=lstatSync(item.path);if(item.link){if(!stat.isSymbolicLink())throw Error('Leftover link changed; preserved');unlinkSync(item.path)}else{if(!stat.isDirectory()||stat.isSymbolicLink())throw Error('Leftover directory changed; preserved');rmdirSync(item.path)}}
  rmdirSync(root)
 }
-export function removeIntegratedWorktree({root,path,ref,head,branch,allowedIgnored=['node_modules/'],beforeRemove=()=>{}}){
+export function removeIntegratedWorktree({root,path,ref,head,branch,allowedIgnored=['node_modules/'],beforeRemove=()=>{},integrationRoot=root}){
  const retained=reason=>({removed:false,reason})
- if(!isAbsolute(root)||!isAbsolute(path)||pathKey(root)===pathKey(path))return retained('The main checkout is never removed')
+ if(!isAbsolute(root)||!isAbsolute(path)||!isAbsolute(integrationRoot)||pathKey(root)===pathKey(path))return retained('The main checkout is never removed')
  if(!existsSync(path))return retained('Workspace missing; reconcile its registration and retained evidence')
  if(pathKey(realpathSync(path))!==pathKey(path))return retained('Workspace resolves through an alias; ownership is uncertain')
  const rows=registeredWorktrees(root),entry=rows.find(r=>pathKey(r.worktree)===pathKey(path))
@@ -37,8 +37,8 @@ export function removeIntegratedWorktree({root,path,ref,head,branch,allowedIgnor
  const ignored=git(path,['ls-files','--others','--ignored','--exclude-standard','--directory','-z']).split('\0').filter(Boolean)
  const unknown=ignored.filter(p=>!allowedIgnored.some(a=>p===a||a.endsWith('/')&&p.startsWith(a)))
  if(unknown.length)return retained('Ignored files need preservation: '+unknown.slice(0,8).join(', '))
- const target=git(root,['rev-parse','--verify',ref+'^{commit}'])
- const merged=spawnSync('git',['-C',root,'merge-base','--is-ancestor',entry.HEAD,target],{windowsHide:true,timeout:30000})
+ const target=git(integrationRoot,['rev-parse','--verify',ref+'^{commit}'])
+ const merged=spawnSync('git',['-C',integrationRoot,'merge-base','--is-ancestor',entry.HEAD,target],{windowsHide:true,timeout:30000})
  if(merged.status!==0)return retained('Commits are not integrated into '+ref)
  beforeRemove()
  if(git(path,['rev-parse','HEAD'])!==entry.HEAD||git(path,['status','--porcelain','--untracked-files=all']))return retained('Workspace changed during cleanup')

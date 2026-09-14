@@ -64,24 +64,18 @@ function launchRecords(root){
  * A pid that is running but started after the record that names it is a number Windows handed on,
  * not the process the record meant, and it is not allowed to pin the release.
  *
- * `accounted` collects every pid this lease explains, so the root-wide scan does not report the
+ * `accounted` collects every pid this launch evidence explains, so the root-wide scan does not report the
  * same process a second time in different words. `judged` is what was decided about each recorded
  * pid, and it is written onto a lease that gets closed so the decision can be read back later.
  */
-function leaseHolders(lease,snapshot,accounted){
- const started=Date.parse(lease.startedAt)
- if(!Number.isSafeInteger(lease.pid)||lease.pid<1||!Number.isFinite(started))return {held:[`the lease names no usable owner (pid ${lease.pid}, started ${lease.startedAt}), so nothing on this machine can be matched against it`],judged:[]}
+function processHolders(started,claims,snapshot,accounted){
  const held=[],judged=[]
  // pid -> when something else took that number over. A real orphan of the original must predate it.
  const handedOn=new Map()
  const byPid=new Map(snapshot.processes.map(entry=>[entry.pid,entry]))
- const claimed=new Map() // pid -> the moment the record naming it was written
- const note=(pid,at)=>{if(Number.isSafeInteger(pid)&&pid>0&&!claimed.has(pid))claimed.set(pid,at)}
- note(lease.pid,started)
- // A launch record only adds pids; it is never the only source of one. Both launchers write the
- // lease with the pid that goes on to spawn the host, and the direct launcher records no pid of
- // its own at all -- the shell that owns the lease is the shell that runs the host as its child.
- for(const {record,at} of lease.launches){note(record.pid,at);note(record.childPID,at)}
+ const claimed=new Map() // pid -> the earliest moment a record named it
+ const note=(pid,at)=>{if(Number.isSafeInteger(pid)&&pid>0&&Number.isFinite(at)&&(!claimed.has(pid)||at<claimed.get(pid)))claimed.set(pid,at)}
+ for(const claim of claims)note(claim.pid,claim.at)
  const owned=accounted
  for(const [pid,at] of claimed){
   owned.add(pid) // kept even when the number has been handed on, so a real orphaned child of it is still found below
@@ -98,10 +92,36 @@ function leaseHolders(lease,snapshot,accounted){
    const reissued=handedOn.get(entry.ppid) // a child of the number's new holder is not this launch's child
    if(reissued!==undefined&&entry.createdAt>=reissued)continue
    owned.add(entry.pid);grew=true
-   held.push(`pid ${entry.pid} (${entry.name}) started ${new Date(entry.createdAt).toISOString()} is a child of pid ${entry.ppid} from this lease and is still running`)
+   held.push(`pid ${entry.pid} (${entry.name}) started ${new Date(entry.createdAt).toISOString()} is a child of pid ${entry.ppid} from this launch and is still running`)
   }
  }
  return {held,judged}
+}
+
+function leaseHolders(lease,snapshot,accounted){
+ const started=Date.parse(lease.startedAt)
+ if(!Number.isSafeInteger(lease.pid)||lease.pid<1||!Number.isFinite(started))return {held:[`the lease names no usable owner (pid ${lease.pid}, started ${lease.startedAt}), so nothing on this machine can be matched against it`],judged:[]}
+ const claims=[{pid:lease.pid,at:started}]
+ // A launch record only adds pids; it is never the only source of one. Both launchers write the
+ // lease with the pid that goes on to spawn the host, and the direct launcher records no pid of
+ // its own at all -- the shell that owns the lease is the shell that runs the host as its child.
+ for(const {record,at} of lease.launches){claims.push({pid:record.pid,at},{pid:record.childPID,at})}
+ return processHolders(started,claims,snapshot,accounted)
+}
+
+/**
+ * Pre-lease releases can be judged only when every launch left a concrete process owner. The
+ * release preparation time is the lower bound: a host can start just before owner.json is written,
+ * so using that file's mtime would miss the exact orphan this evidence is meant to find.
+ */
+function legacyLaunchHolders(release,records,snapshot,accounted){
+ const started=Date.parse(release.preparedAt)
+ if(!Number.isFinite(started))return {unknown:'Older release has no usable preparation time; process lifetime is unknown'}
+ if(!records.length)return {unknown:'Older release has no launch records; process lifetime is unknown'}
+ const ownerless=records.filter(({record})=>![record.pid,record.childPID].some(pid=>Number.isSafeInteger(pid)&&pid>0))
+ if(ownerless.length)return {unknown:`${ownerless.length} older launch record${ownerless.length===1?' names':'s name'} no process owner; process lifetime is unknown`}
+ const claims=records.flatMap(({record,at})=>[{pid:record.pid,at},{pid:record.childPID,at}])
+ return processHolders(started,claims,snapshot,accounted)
 }
 
 /**
@@ -128,6 +148,16 @@ function preserveTree(source,destination){
   if(e.isDirectory())preserveTree(from,to);else if(e.isFile()){copyFileSync(from,to);if(!readFileSync(from).equals(readFileSync(to)))throw Error('Release evidence copy changed: '+from)}
  }
 }
+const remoteKey=value=>value.trim().replaceAll('\\','/').replace(/\/$/,'').replace(/\.git$/i,'').toLowerCase()
+/** A migrated release remains a registered worktree of its historical clone; require the same origin before using that clone to remove it. */
+function worktreeRepository(root,integrationRepository){
+ const common=git(root,['rev-parse','--path-format=absolute','--git-common-dir'])
+ const owner=dirname(resolve(root,common))
+ const expected=remoteKey(git(integrationRepository,['config','--get','remote.origin.url']))
+ const actual=remoteKey(git(owner,['config','--get','remote.origin.url']))
+ if(!expected||actual!==expected)throw Error('Release worktree belongs to a different or unknown repository')
+ return owner
+}
 export function retireReleases(repository){return locked('retirement',()=>retireReleasesLocked(repository))}
 function retireReleasesLocked(repository){
  const dir=join(registry,'releases');if(!existsSync(dir))return []
@@ -143,8 +173,8 @@ function retireReleasesLocked(repository){
   if(!entry.isDirectory()||!entry.name.startsWith('dev-'))continue
   const root=join(dir,entry.name),file=join(root,'channel-release.json');if(protectedRoots.has(pathKey(root)))continue
   if(!existsSync(file)){results.push({root,removed:false,reason:'No release ownership receipt'});continue}
-  const release=read(file)
-  if(release.cleanupProtocol!==1){results.push({root,removed:false,reason:'Older release has no complete process lifetime record'});continue}
+   const release=read(file),legacy=release.schema===1&&release.cleanupProtocol===undefined
+   if(release.cleanupProtocol!==1&&!legacy){results.push({root,removed:false,reason:`Unsupported release cleanup protocol: ${release.cleanupProtocol}`});continue}
   // A release built by trying a branch records the ref it belongs to. Judging it against
   // origin/agents would keep an unmerged candidate forever, so its own ref decides -- and while it
   // is still that ref's tip it is what the next try of that branch reuses, so it is kept.
@@ -154,27 +184,31 @@ function retireReleasesLocked(repository){
    if(tip===release.commit){results.push({root,removed:false,reason:'Still the tip of '+integration+'; the next try of that ref reuses this preparation'});continue}
   }
   if(!within(dir,realpathSync(root))||pathKey(root)!==pathKey(realpathSync(root))||pathKey(release.root)!==pathKey(root)||release.channel!=='dev')throw Error('Release ownership mismatch')
-  const records=launchRecords(root)
-  if(records.some(r=>!r.record.releaseLease)){results.push({root,removed:false,reason:'A launch has no process lifetime lease; ownership review required'});continue}
-  if(snapshot.unavailable){results.push({root,removed:false,reason:`The running processes on this machine could not be listed (${snapshot.unavailable}), so nothing can say whether this release is still in use`});continue}
-  const open=users.filter(u=>u.root&&pathKey(u.root)===pathKey(root)&&!u.endedAt)
+   const records=launchRecords(root)
+   if(!legacy&&records.some(r=>!r.record.releaseLease)){results.push({root,removed:false,reason:'A launch has no process lifetime lease; ownership review required'});continue}
+   if(snapshot.unavailable){results.push({root,removed:false,reason:`The running processes on this machine could not be listed (${snapshot.unavailable}), so nothing can say whether this release is still in use`});continue}
+   const open=legacy?[]:users.filter(u=>u.root&&pathKey(u.root)===pathKey(root)&&!u.endedAt)
   // A launch killed before it acknowledged its exit leaves an open lease. Close it only on
   // evidence that nothing it could have started is running; otherwise say what is holding it.
-  const accounted=new Set(),pinning=[],closing=[]
-  for(const lease of open){
-   const launches=records.filter(r=>r.record.releaseLease&&pathKey(r.record.releaseLease)===pathKey(lease.file))
-   const {held,judged}=leaseHolders({...lease,launches},snapshot,accounted)
-   if(held.length)pinning.push(`pid ${lease.pid} since ${lease.startedAt}: ${held.join('; ')}`)
-   else closing.push({lease,judged})
-  }
+   const accounted=new Set(),pinning=[],closing=[]
+   if(legacy){
+    const old=legacyLaunchHolders(release,records,snapshot,accounted)
+    if(old.unknown){results.push({root,removed:false,reason:old.unknown});continue}
+    if(old.held.length)pinning.push(`older launch evidence: ${old.held.join('; ')}`)
+   }else for(const lease of open){
+    const launches=records.filter(r=>r.record.releaseLease&&pathKey(r.record.releaseLease)===pathKey(lease.file))
+    const {held,judged}=leaseHolders({...lease,launches},snapshot,accounted)
+    if(held.length)pinning.push(`pid ${lease.pid} since ${lease.startedAt}: ${held.join('; ')}`)
+    else closing.push({lease,judged})
+   }
   const occupants=rootOccupants(root,snapshot,accounted)
   if(pinning.length||occupants.length){results.push({root,removed:false,reason:`A release process is active or its exit could not be judged (${[...pinning,...occupants].join(' | ')})`});continue}
-  for(const {lease,judged} of closing)atomic(lease.file,{...(({file,...rest})=>rest)(lease),endedAt:new Date().toISOString(),endedBy:{reason:'Nothing this launch started was running and nothing was running out of the release root',judged,checkedProcesses:snapshot.processes.length,by:process.pid,at:new Date().toISOString()}})
-  try{
-   const evidence=join(registry,'retired-evidence',entry.name)
-   for(const name of ['run','.visual-e2e'])if(existsSync(join(root,name)))preserveTree(join(root,name),join(evidence,name))
-   const result=removeIntegratedWorktree({root:repository,path:root,head:release.commit,ref:integration,allowedIgnored:['node_modules/','generations/','.candidates/','.cache/','run/','.visual-e2e/','plugin-activation.json','channel-release.json']})
-   atomic(join(registry,'retirements',entry.name+'.json'),{root,evidence,...result,at:new Date().toISOString()});results.push({root,...result})
+   for(const {lease,judged} of closing)atomic(lease.file,{...(({file,...rest})=>rest)(lease),endedAt:new Date().toISOString(),endedBy:{reason:'Nothing this launch started was running and nothing was running out of the release root',judged,checkedProcesses:snapshot.processes.length,by:process.pid,at:new Date().toISOString()}})
+   try{
+    const owner=worktreeRepository(root,repository)
+    const evidence=join(registry,'retired-evidence',entry.name)
+    const result=removeIntegratedWorktree({root:owner,integrationRoot:repository,path:root,head:release.commit,ref:integration,allowedIgnored:['node_modules/','generations/','.candidates/','.cache/','run/','.visual-e2e/','plugin-activation.json','channel-release.json'],beforeRemove:()=>{for(const name of ['run','.visual-e2e'])if(existsSync(join(root,name)))preserveTree(join(root,name),join(evidence,name))}})
+    atomic(join(registry,'retirements',entry.name+'.json'),{root,evidence,worktreeRepository:owner,...result,at:new Date().toISOString()});results.push({root,...result})
   }catch(error){results.push({root,removed:false,reason:String(error)})}
  }
  // A lease says "this release root is in use". Nothing ever removed one, so they accumulated

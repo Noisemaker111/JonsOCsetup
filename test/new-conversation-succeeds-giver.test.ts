@@ -24,6 +24,7 @@ function fakeHost(sessions: Record<string, { id: string; agent: string; parentID
 }
 
 const conversation = (id: string) => ({ id, agent: "quest-giver", location: { directory: process.cwd() } })
+const project = { id: "a".repeat(64), root: process.cwd() }
 
 test("a new Quest Giver conversation takes over instead of being refused, and the old one is kept", async () => {
   const root = mkdtempSync(join(tmpdir(), "giver-succession-"))
@@ -70,6 +71,17 @@ test("a new Quest Giver conversation takes over instead of being refused, and th
     // Neither does a session on another agent.
     await fire({ agent: "build", sessionID: first, system: [] })
     expect(readUserGiver(store.runtime)?.sessionID).toBe(second)
+
+    // A real identity failure is different from a composer selection: if the registered root is
+    // also recorded as a worker, the context hook refuses it and says why instead of failing silent.
+    const invalidQuest = "01j000000000000000000000a4"
+    store.create({ id: invalidQuest, title: "Invalid giver identity", objective: "A worker must not become the registered giver", contractVersion: 2, project, stages: [{ id: "step", title: "Check the identity", status: "pending", needs: [] }] } as any)
+    store.apply(invalidQuest, "patched", { integrationOwner: second }, "test")
+    store.apply(invalidQuest, "session-claimed", { callID: "run-invalid-giver", runID: "run-invalid-giver", sessionID: second, parentID: first, agentRole: "general", role: "worker", scope: { files: ["."], requestedFiles: ["."] } }, "test")
+    const warning: any[] = []
+    await expect(fire({ agent: "build", sessionID: second, system: warning })).rejects.toThrow("never an execution worker")
+    expect(warning).toHaveLength(1)
+    expect(warning[0].text).toContain("registered Quest Giver session")
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

@@ -9,6 +9,7 @@ This skill applies across projects. It is hand-maintained policy guidance,
 not a generated model catalog. Model inventory refresh must not overwrite it.
 
 - Honor the user's explicit model and account choice. A fixed paid API route, subscription route or free-only configuration is valid. Automatic selection is optional.
+- A deliberate /model change owns the current conversation; the launch default does not override it. Chat selection does not pin automatically routed Quest workers. project_route_status diagnoses a selector against dispatch candidates, not the complete host model catalog or every supported thinking level. REASONING_REQUIRED means that an exact worker selector lacks an effort; it does not mean only one effort exists. Omit the Quest workflow model to use automatic selection.
 - Use only routes allowed by the user's configuration. Credentials and catalog availability alone are not permission to select a route or spend from another account.
 - Fallbacks require a configured policy. Without one, report the selected route's error. Do not silently switch provider, model or payment method.
 - Read available runtime tools for route availability and usage_status for current quota/reset information. Missing prices or entitlement information are unknown, not free or available. Do not run config-repository scripts from an unrelated project.

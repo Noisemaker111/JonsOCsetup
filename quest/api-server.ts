@@ -49,9 +49,9 @@ async function openQuestServer(store: QuestStore, registrations: Set<Registratio
     const registration = current?.state === 'bound' && [...registrations].find(row => row.owner === current.directory)
     return registration ? { sessionID: current.sessionID, service: registration.service } : undefined
   }
-  const call = (method: string, input: unknown, sessionID: string | undefined, requestID: string, service = giver()?.service) => {
+  const call = (method: string, input: unknown, sessionID: string | undefined, requestID: string, service = giver()?.service, external = false) => {
     if (!sessionID || !service) throw Error('The Quest Giver service is not connected yet.')
-    return service.call(method, input, { sessionID, id: requestID })
+    return service.call(method, input, { sessionID, id: requestID, external, native: !external })
   }
   const http = createServer(async (request, response) => {
     const json = (status: number, value: unknown) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(value)) }
@@ -75,7 +75,7 @@ async function openQuestServer(store: QuestStore, registrations: Set<Registratio
             const metadata = message.params._meta?.sessionID
             const sessionID = typeof metadata === 'string' ? metadata : request.url === '/mcp' ? giver()?.sessionID : undefined
             if (!sessionID) throw Error('The OpenCode MCP connection must supply its session identity.')
-            const result = await call(message.params.name, message.params.arguments ?? {}, sessionID, instance + ':' + randomUUID() + ':' + extra.requestId, registration ? registration.service : giver()?.service)
+            const result = await call(message.params.name, message.params.arguments ?? {}, sessionID, instance + ':' + randomUUID() + ':' + extra.requestId, registration ? registration.service : giver()?.service, !registration)
             return { content: [{ type: 'text' as const, text: JSON.stringify(result) }], structuredContent: result }
           } catch (error) {
             return { isError: true, content: [{ type: 'text' as const, text: JSON.stringify({ code: (error as any).code ?? 'REQUEST_FAILED', message: (error as Error).message }) }] }
@@ -94,7 +94,7 @@ async function openQuestServer(store: QuestStore, registrations: Set<Registratio
       const input = JSON.parse(Buffer.concat(chunks).toString('utf8'))
       const requestID = request.headers['idempotency-key']
       if (typeof requestID !== 'string' || !requestID.trim()) { json(400, { code: 'INVALID_INPUT', message: 'An idempotency-key header is required.' }); return }
-      json(200, await call(method, input, giver()?.sessionID, requestID))
+      json(200, await call(method, input, giver()?.sessionID, requestID, giver()?.service, true))
     } catch (error) {
       if (!response.headersSent) json(400, { code: (error as any).code ?? 'REQUEST_FAILED', message: (error as Error).message })
     }

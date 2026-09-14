@@ -6,6 +6,7 @@ import {acquireLock} from './locking'
 import {hostPermissions} from './host-observation'
 import {permissionKey,workerSessionID} from './worker-permissions'
 import {PermissionReviewer,type PermissionReview} from './permission-reviewer'
+import {questCompletionReturn} from './completion-return'
 import type {QuestStore} from './store'
 import type {StartRun,QuestContext} from './api'
 import type {QuestHost} from './runtime'
@@ -33,7 +34,7 @@ export class QuestWorkerReturns {
     if(!terminal&&(!['executing','waiting','blocked'].includes(run.state)||run.harness||run.runtime==='claude-code'))continue
     const parent=await this.host.get({sessionID:row.context.sessionID}),session=parent?.data??parent
     try{verifyGiverBinding(this.store,row.context,session)}catch(error){row.error=String(error);this.save(row);continue}
-    if(session?.agent!==row.agent||JSON.stringify(session?.model)!==JSON.stringify(row.model)){row.error='Giver model or agent changed; return retained for inspection';this.save(row);continue}
+     if(JSON.stringify(session?.model)!==JSON.stringify(row.model)){row.error='Giver model changed; return retained for inspection';this.save(row);continue}
     if(!terminal){
      const sessionID=workerSessionID(run);if(!sessionID)continue
      const response=await hostPermissions(this.host,sessionID),pending=response?.data??response
@@ -53,9 +54,9 @@ export class QuestWorkerReturns {
      continue
     }
     row.state='sending';this.save(row)
-    const steps=q.stages.filter(s=>run.deliverables.includes(s.id)).map(s=>({id:s.id,title:s.title,state:s.status,note:s.note?.slice(0,1500)}))
     try{
-     await this.host.prompt({sessionID:row.context.sessionID,id:'msg_questreturn'+row.runID,text:'Automatic Quest worker update for '+q.title+'.\n'+JSON.stringify({state:run.state,workerSessionID:run.sessionID??run.openCodeSessionId,result:run.result,permissions:run.permissionDecisions,steps})+'\nInspect the saved Quest and actual evidence. A terminal turn alone is not completion. Report blockers or the verified deliverable; continue only already-authorized pending work. An active continuation owns queued steps; do not launch duplicates. Do not retry a rejected action without new user authorization.',metadata:{questWorkerReturn:true,questID:q.id,runID:row.runID}})
+     // Each independent terminal outcome retains its queued giver response.
+     await this.host.prompt({sessionID:row.context.sessionID,id:'msg_questreturn'+row.runID,delivery:'queue',resume:true,text:questCompletionReturn({quest:q,label:'Automatic Quest worker update',stepIDs:run.deliverables,run}),metadata:{questWorkerReturn:true,questID:q.id,runID:row.runID}})
      row.state='accepted'
     }catch(error){row.state='unknown';row.error=String(error)}
     this.save(row)
@@ -63,3 +64,4 @@ export class QuestWorkerReturns {
   }
  }
 }
+

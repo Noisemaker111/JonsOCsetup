@@ -1,6 +1,6 @@
 # Quest API
 
-Open `oc` at the hub. The persistent giver hosts the Quest API; workers use the same typed contract with their own session identity. The runtime prepares repositories and workspaces, selects an allowed account/model from the saved preferences and current evidence, and returns worker outcomes to the giver.
+Open `oc` in the maintained JonsOCsetup source. The persistent giver hosts the Quest API; workers use the same typed contract with their own session identity. The runtime prepares repositories and workspaces, selects an allowed account/model from the saved preferences and current evidence, and returns worker outcomes to the giver.
 
 Install the command as a durable local package from the reviewed `agents` checkout: run `npm install --global --install-links --omit=dev .`. This copies the generated client into the global installation, so retiring an implementation worktree cannot break `quest`. Repeat after updating the reviewed source. `quest --help` lists generated operations; `quest create --help` describes nested fields and `quest create --help --json` prints the contract. Pipe a JSON object to `quest create --input-json` for multiline descriptions and steps.
 

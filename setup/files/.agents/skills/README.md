@@ -1,8 +1,7 @@
 # Global skills
 
-Keep this directory small. Three junctions, nothing else:
+Keep this directory small. Two junctions, nothing else:
 
-- `windows-shell` — Windows shell/filesystem facts
 - `github` — git/gh on this machine
 - `help-i-cant-work-right` — host/tool recovery
 

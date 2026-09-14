@@ -25,6 +25,7 @@ import {installSharedWorkspaceGuard} from "./shared-guard"
  *    "the Quest giver and the sessions on Quests"; there is no third actor.
  */
 import { createQuestService } from "./service"
+import { observeGiverInstruction } from './giver-instruction'
 import { serveQuestAPI } from "./api-server"
 import { questRoot } from "./root"
 import { define } from "@opencode-ai/plugin/v2/promise"
@@ -154,7 +155,7 @@ export function installQuestEvents(ctx: { event?: { subscribe?: Function }; sess
   }
   const controller = new AbortController()
   connections.set(owner, { controller })
-  const handle = (event: unknown) => { try { if(ctx.session)recordHostObservation(ctx.session,event);quests.onHostEvent(event);if(ctx.session&&/^session\.execution\.(succeeded|failed|interrupted)$/.test((event as any)?.type))void cleanupQuests(quests.store,ctx.session).catch(error=>console.error('[quests] cleanup',error)) } catch (error) { console.error("[quests] host event error:", error) } }
+  const handle = (event: unknown) => { try { observeGiverInstruction(quests.store.runtime,event);if(ctx.session)recordHostObservation(ctx.session,event);quests.onHostEvent(event);if(ctx.session&&/^session\.execution\.(succeeded|failed|interrupted)$/.test((event as any)?.type))void cleanupQuests(quests.store,ctx.session).catch(error=>console.error('[quests] cleanup',error)) } catch (error) { console.error("[quests] host event error:", error) } }
   queueMicrotask(async () => {
     let delay=1000
     while(!controller.signal.aborted){

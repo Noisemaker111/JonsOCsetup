@@ -21,7 +21,7 @@ if(action==='prepare'){
   const target=resolveRef(source,ref)
   const {root,release}=await prepareDevRelease({repository,registry,model,...target})
   const commit=release.commit
-  console.log(JSON.stringify({prepared:true,active:false,root,commit,ref,resolved:release.resolved,next:'Exercise this candidate twice, then activate dev with the real evidence report.'},null,2))
+  console.log(JSON.stringify({prepared:true,active:false,root,commit,ref,resolved:release.resolved,modelCatalog:release.modelCatalog,next:'Exercise this candidate twice, then activate dev with the real evidence report.'},null,2))
 }else if(action==='activate'){
   if(channel!=='dev')throw Error('Stable activation is never an implicit dev action')
   const root=realpathSync(option('--candidate')??''),reportPath=resolve(option('--evidence')??'')

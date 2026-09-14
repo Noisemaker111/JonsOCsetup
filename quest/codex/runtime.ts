@@ -15,25 +15,12 @@ import {sameDirectory,hasCheckout,checkoutIndependent,recoverWorkspace,validateR
 export type HookInput={session_id:string;cwd:string;hook_event_name:string;tool_name?:string;tool_use_id?:string;tool_input?:any;tool_response?:any;transcript_path?:string;source?:string}
 type Session={diagnostics?:Record<string,string>;recovery?:RecoveryBinding;directory:string;sessionID:string;questID?:string;pending:string[];calls?:Record<string,{tool:string;outer?:string;running?:boolean;fingerprint?:string;updatedInput?:any;recoveryTicket?:string}>;reconciled?:string[];baseline?:string;clean?:boolean;snapshotUnavailable?:string;ended?:boolean;detached?:boolean;transcript?:string;events:any[]}
 const key=(v:string)=>createHash('sha256').update(v).digest('hex')
-// This loader is carried in the hook's rewritten argv, not in the writable
-// staged file. Execute the verified bytes in memory, avoiding a hash/exec reopen
-// race. The installed runner is a self-contained Bun bundle (node:* imports only).
-const recoveryLoader=String.raw`
-const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
-function check(p){for(let a=path.resolve(p);;a=path.dirname(a)){if(fs.lstatSync(a).isSymbolicLink()||fs.realpathSync(a)!==a)throw Error('Recovery path contains a symlink/junction');if(path.dirname(a)===a)break}}
-function read(p){
- p=path.resolve(p);
- check(p);const before=fs.lstatSync(p);
- if(!before.isFile()||before.nlink!==1||before.size>8*1024*1024)throw Error('Recovery file must be a bounded unlinked regular file');
- const fd=fs.openSync(p,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW??0));
- try{const opened=fs.fstatSync(fd);if(!opened.isFile()||opened.dev!==before.dev||opened.ino!==before.ino)throw Error('Recovery file replaced');const bytes=Buffer.alloc(before.size);let offset=0;while(offset<bytes.length){const n=fs.readSync(fd,bytes,offset,bytes.length-offset,null);if(!n)throw Error('Recovery file shortened');offset+=n}const after=fs.fstatSync(fd);check(p);if(after.size!==before.size||after.mtimeMs!==before.mtimeMs)throw Error('Recovery file changed');return bytes}finally{fs.closeSync(fd)}
-}
-`
+import {readRecoveryFile,checkRecoveryPath} from './recovery-loader'
 // Exported for exact-bundle boundary tests; source .ts execution retains its
 // development imports. Production always stages the sibling installed .js.
 export function stagedRecoveryCommand(runner:string,recovered:{command:string;ticket:string}){
  if(!runner.endsWith('.js'))return recovered
- const {read,check}=new Function('require',recoveryLoader+';return {read,check};')(require) as {read:(path:string)=>Buffer;check:(path:string)=>void}
+ const read=readRecoveryFile,check=checkRecoveryPath
  const bytes=read(runner),ticketBytes=read(recovered.ticket)
  check(tmpdir())
  const owned=mkdtempSync(join(tmpdir(),'quest-recovery-runner-')),staged=join(owned,'recovery-command.js')
@@ -44,12 +31,12 @@ export function stagedRecoveryCommand(runner:string,recovered:{command:string;ti
  // necessarily read the canonical ledger either. Session state retains this path.
  const ticket=join(owned,recovered.ticket.split(/[\\/]/).at(-1)!)
  writeFileSync(ticket,ticketBytes,{flag:'wx',mode:0o600})
- const code=recoveryLoader+`const bytes=read(${JSON.stringify(staged)});if(crypto.createHash('sha256').update(bytes).digest('hex')!==${JSON.stringify(hash)})throw Error('Recovery helper digest mismatch');const runner=await import('data:text/javascript;base64,'+bytes.toString('base64'));await runner.runRecoveryTicket(${JSON.stringify(ticket)},${JSON.stringify(ticketHash)});`
+ // The loader lives beside the installed hook, outside the recovered writable
+ // workspace. Never stage executable verification code or inline it in argv.
+ const loader=join(runner,'..','recovery-loader.js')
+ check(loader)
  const quote=(value:string)=>"'"+value.replaceAll("'","''")+"'"
- // Windows PowerShell 5 native argv drops embedded double quotes. Carry only
- // base64 plus a fixed decoder across that boundary (no shell interpolation).
- const launch="eval(Buffer.from('"+Buffer.from("(async()=>{const require=(await import('node:module')).createRequire(process.cwd()+'/quest-recovery-loader.js');"+code+'})().catch(error=>{console.error(error);process.exitCode=1})').toString('base64')+"','base64').toString())"
- return {command:'& '+quote(process.execPath)+' --eval '+quote(launch),ticket}
+ return {command:'& '+[process.execPath,loader,staged,hash,ticket,ticketHash].map(quote).join(' '),ticket}
 }
 function boundRecoveryCommand(store:QuestStore,binding:RecoveryBinding,command:string,options:RecoveryOptions,workdir?:string){
  const runner=options.runner??join(import.meta.dir,import.meta.path.endsWith('.ts')?'recovery-command.ts':'recovery-command.js')

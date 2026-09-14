@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto"
 
 const SECRET = /(?:sk-[A-Za-z0-9_-]{12,}|gh[oprs]_[A-Za-z0-9_]{20,}|(?:token|secret|password|api[_-]?key)\s*[:=]\s*[^\s,;]+)/gi
+export function redactSensitive(value: string): string {
+  return value.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(SECRET, "[REDACTED]").replace(/[\x00-\x1f\x7f]+/g, " ")
+}
 export function redact(value: string, max = 500): string {
-  return value.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(SECRET, "[REDACTED]").replace(/[\x00-\x1f\x7f]+/g, " ").slice(0, max)
+  return redactSensitive(value).slice(0, max)
 }
 export function digest(value: string): string { return createHash("sha256").update(value).digest("hex") }
 export function bounded<T>(values: T[], max = 500): T[] { return values.slice(-max) }

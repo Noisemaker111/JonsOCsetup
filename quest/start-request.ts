@@ -7,13 +7,14 @@ import { readContinuations, devQueueGeneration } from './runtime-queues'
 import { readUserGiver } from './giver-registry.mjs'
 import { adoptQuestGiver, giverContext, verifyGiverBinding } from './user-giver'
 import { questWorkflow } from './workflow'
+import { questCompletionReturn } from './completion-return'
 import type { QuestStore } from './store'
 import type { QuestHost } from './runtime'
 import type { QuestContinuation } from './continuation'
 import type { Quest } from './types'
 
 type Request = {
-  quest: string; requestID: string; kind?: 'review'; generation?: string; createdAt: string
+  quest: string; requestID: string; kind?: 'review'; stepID?: string; generation?: string; createdAt: string
   state: 'queued' | 'admitting' | 'started' | 'failed' | 'unknown'
   authorization?: { at: string; action: 'Start saved Quest'; definition: string; giverID?: string }
   result?: unknown; error?: string
@@ -76,14 +77,14 @@ export function questStartAuthorization(store: QuestStore, questID: string, runI
 }
 
 /** Completing externally held steps returns their saved results for review; it never accepts its own work. */
-export function requestQuestReview(store: QuestStore, id: string, generation?: string) {
+export function requestQuestReview(store: QuestStore, id: string, generation?: string, stepID?: string) {
   const lock = acquireLock(store.runtime, 'start-requests')
   try {
     const quest = store.read(id)
-    if (!quest || !quest.stages.length || quest.stages.some(step => step.status !== 'done') || quest.sessions.some(run => active(run.state))) return
+    if (!quest || quest.archive || !quest.stages.length || quest.stages.some(step => step.status !== 'done') || quest.sessions.some(run => active(run.state))) return
     const requestID = createHash('sha256').update(JSON.stringify([id, quest.lifecycleEpoch, quest.stages.map(step => [step.id, step.note])])).digest('hex')
     if (existsSync(path(store, requestID))) return
-    save(store, { quest: id, requestID, kind: 'review', generation, createdAt: new Date().toISOString(), state: 'queued' })
+    save(store, { quest: id, requestID, kind: 'review', stepID, generation, createdAt: new Date().toISOString(), state: 'queued' })
   } finally { lock.release() }
 }
 
@@ -107,8 +108,9 @@ export async function consumeQuestStarts(store: QuestStore, host: QuestHost, con
       adoptQuestGiver(store, row.quest)
       const quest = store.read(row.quest)!
       if (row.kind === 'review') {
+        if (quest.archive) { row.state = 'started'; save(store, row); continue }
         if (quest.stages.some(step => step.status !== 'done') || quest.sessions.some(run => active(run.state))) throw new QuestError('QUEST_CHANGED', 'Quest changed before review; inspect its saved result')
-        await host.prompt({ sessionID: giver.sessionID, id: 'msg_questreview' + row.requestID, text: 'Quest ready for review: ' + quest.title + '.\n' + JSON.stringify({ questID: quest.id, workflow: questWorkflow(quest), steps: quest.stages.map(step => ({ id: step.id, title: step.title, note: step.note })) }) + '\nInspect the saved work and evidence, then deliver according to its workflow and existing project authorization. Completion notes are not independent verification.', metadata: { questReview: true, questID: quest.id } })
+        await host.prompt({ sessionID: giver.sessionID, id: 'msg_questreview' + row.requestID, text: questCompletionReturn({ quest, label: 'Quest ready for review', stepIDs: row.stepID ? [row.stepID] : undefined }), metadata: { questReview: true, questID: quest.id } })
         row.state = 'started'; save(store, row)
         continue
       }
