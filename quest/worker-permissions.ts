@@ -32,10 +32,9 @@ const unwrap=(value:any)=>value?.data??value
 export class WorkerPermissions {
  constructor(readonly store:QuestStore,readonly host:any,readonly permission:any){}
  private async owned(callerID:string,questID:string,runID:string){
-  if(!callerID||userGiverID(this.store)!==callerID)throw Error('Only the registered Quest Giver can decide worker permissions.')
-  const caller=unwrap(await this.host.get({sessionID:callerID}))
-  if(caller?.agent!=='quest-giver')throw Error('The registered conversation is not currently the Quest Giver.')
-  verifyGiverBinding(this.store,giverContext(this.store,caller,'permission-review',questID),caller)
+   if(!callerID||userGiverID(this.store)!==callerID)throw Error('Only the registered Quest Giver can decide worker permissions.')
+   const caller=unwrap(await this.host.get({sessionID:callerID}))
+   verifyGiverBinding(this.store,giverContext(this.store,caller,'permission-review',questID),caller)
   const quest=this.store.read(questID),run=quest?.sessions.find(s=>(s.runID??s.callID)===runID)
   if(!quest||quest.state==='Archived'||!run||!['executing','waiting','blocked'].includes(run.state)||run.harness||run.runtime==='claude-code')throw Error('No active native assignment owns this request.')
   return {quest,run}
