@@ -32,9 +32,10 @@ export async function getUsageStatus(query: UsageStatusQuery = {}) {
   const pageTimeline={...timeline,points:timeline.points.slice(offset,offset+limit),compactions:timeline.compactions.filter(c=>(c.endedAt??c.startedAt)>=pageStart&&(c.endedAt??c.startedAt)<pageEnd).slice(-limit),quotaPoints:timeline.quotaPoints.filter(o=>o.at>=pageStart&&o.at<pageEnd).slice(-limit)}
   const calibration = readCalibrations(), ids = new Set(aggregate.requestHistory.map(r=>r.id))
   const allowance = calibratedUsage(stored.records.filter(r=>ids.has(r.id)), calibration.calibrations, { now: Date.now() })
-  const now = Date.now(), selectedAccounts = query.accountID ? accounts.accounts.filter(a => a.id === query.accountID) : accounts.accounts
-  const targets=renewUsageTargets(accounts.accounts,now)
-  const allControls=updateBurnControls(accounts.accounts,observations.observations,now,targets)
+  const selectedAccounts = query.accountID ? accounts.accounts.filter(a => a.id === query.accountID) : accounts.accounts
+  const targets=renewUsageTargets(accounts.accounts,Date.now())
+  const allControls=updateBurnControls(accounts.accounts,observations.observations,undefined,targets)
+  const now=Date.now()
   const portfolio=portfolioPacing(accounts.accounts,observations.observations,targets,allControls,now)
   const burnControl=allControls.filter(c=>!query.accountID||c.accountID===query.accountID)
   const planning = selectedAccounts.flatMap(account=>{const target=targets.find(t=>t.accountID===account.id&&t.deadlineAt>now);return resetPlan([account],observations.observations,now,query.reservePoints??target?.reservePoints,query.deadlineAt??target?.deadlineAt)})

@@ -38,8 +38,8 @@ export function portfolioPacingLines(portfolio:ReturnType<typeof portfolioPacing
 
 /** Small scheduler-facing status: no transcripts, request history, charts or coefficient matrices. */
 export async function getUsagePacing(query:{refresh?:boolean;accountID?:string}={}){
- const snapshot=await getAccountUsage({refresh:query.refresh}),now=Date.now(),observations=readQuotaObservations(ACCOUNT_USAGE_FILE+".observations").observations
- const targets=renewUsageTargets(snapshot.accounts,now),controls=updateBurnControls(snapshot.accounts,observations,now,targets),portfolio=portfolioPacing(snapshot.accounts,observations,targets,controls,now)
+ const snapshot=await getAccountUsage({refresh:query.refresh}),observations=readQuotaObservations(ACCOUNT_USAGE_FILE+".observations").observations
+ const targets=renewUsageTargets(snapshot.accounts,Date.now()),controls=updateBurnControls(snapshot.accounts,observations,undefined,targets),now=Date.now(),portfolio=portfolioPacing(snapshot.accounts,observations,targets,controls,now)
  const accounts=portfolio.accounts.filter(a=>!query.accountID||a.accountID===query.accountID).map(a=>({accountID:a.accountID,provider:a.provider,plan:a.plan,state:a.state,mode:a.mode,requestedSlots:a.requestedSlots,pacing:a.pacing,targetBasis:a.targetBasis,
   deadlineAt:a.target?.deadlineAt??null,windowID:a.focus?.windowID??null,resetAt:a.focus?.resetAt??null,remainingPoints:a.focus?.remainingPoints??null,minutesToTarget:a.focus?.minutesToTarget??null,requiredPointsPerMinute:a.focus?.requiredPointsPerMinute??null,observedPointsPerMinute:a.focus?.observedPointsPerMinute??null,paceMultiplier:a.focus?.paceMultiplier??null,projectedUnusedPoints:a.projectedUnusedPoints,sharedConstraints:a.sharedConstraints,ambiguousBindings:a.bindings.filter(b=>b.state==="ambiguous-account-selection"),
   pools:a.pools.map(p=>({windowID:p.windowID,scope:p.scope,model:p.model??null,state:p.state,remainingPoints:p.remainingPoints,resetAt:p.resetAt,observedAt:p.observedAt,reason:p.reason}))}))
