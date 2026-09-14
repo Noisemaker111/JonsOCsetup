@@ -80,7 +80,7 @@ export function requestQuestReview(store: QuestStore, id: string, generation?: s
   const lock = acquireLock(store.runtime, 'start-requests')
   try {
     const quest = store.read(id)
-    if (!quest || !quest.stages.length || quest.stages.some(step => step.status !== 'done') || quest.sessions.some(run => active(run.state))) return
+    if (!quest || quest.archive || !quest.stages.length || quest.stages.some(step => step.status !== 'done') || quest.sessions.some(run => active(run.state))) return
     const requestID = createHash('sha256').update(JSON.stringify([id, quest.lifecycleEpoch, quest.stages.map(step => [step.id, step.note])])).digest('hex')
     if (existsSync(path(store, requestID))) return
     save(store, { quest: id, requestID, kind: 'review', generation, createdAt: new Date().toISOString(), state: 'queued' })
@@ -107,6 +107,7 @@ export async function consumeQuestStarts(store: QuestStore, host: QuestHost, con
       adoptQuestGiver(store, row.quest)
       const quest = store.read(row.quest)!
       if (row.kind === 'review') {
+        if (quest.archive) { row.state = 'started'; save(store, row); continue }
         if (quest.stages.some(step => step.status !== 'done') || quest.sessions.some(run => active(run.state))) throw new QuestError('QUEST_CHANGED', 'Quest changed before review; inspect its saved result')
         await host.prompt({ sessionID: giver.sessionID, id: 'msg_questreview' + row.requestID, text: 'Quest ready for review: ' + quest.title + '.\n' + JSON.stringify({ questID: quest.id, workflow: questWorkflow(quest), steps: quest.stages.map(step => ({ id: step.id, title: step.title, note: step.note })) }) + '\nInspect the saved work and evidence, then deliver according to its workflow and existing project authorization. Completion notes are not independent verification.', metadata: { questReview: true, questID: quest.id } })
         row.state = 'started'; save(store, row)

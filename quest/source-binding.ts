@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process'
 import { physicalDirectory, projectIdentity, sourceCheckout, verifySourceBinding, type ProjectIdentity } from './project'
 import type { QuestStore } from './store'
 import { QuestWorkspaces } from './workspaces'
+import { readAllQuests } from './index'
 
 /** A reviewed dispatch-policy binding, never a path supplied by a worker or ledger. */
 export function editingSource(context:{project:ProjectIdentity;directory:string},policyFile:string,files?:string[],options:{readOnly?:boolean}={}) {
@@ -57,7 +58,12 @@ export function editingSource(context:{project:ProjectIdentity;directory:string}
 
 /** Worker membership grants ledger access only at the runtime's verified owned checkout. */
 export function workerLedgerProject(store:QuestStore,sessionID:string,directory:string,questID?:string):ProjectIdentity|undefined {
-  if(!questID)return
+  if(!questID){
+    const assigned=readAllQuests(store.projectRoot,{includeArchived:true}).flatMap(row=>row.quest?.sessions.some(run=>(run.sessionID??run.openCodeSessionId)===sessionID)?[row.quest]:[])
+    if(assigned.length>1)throw Error('Worker belongs to multiple Quest ledgers')
+    questID=assigned[0]?.id
+    if(!questID)return
+  }
   const quest=store.read(questID),run=quest?.sessions.findLast(row=>(row.sessionID??row.openCodeSessionId)===sessionID)
   if(!run?.runID||quest?.project?.id===projectIdentity(directory).id)return
   const workspaces=new QuestWorkspaces(store.runtime),workspace=workspaces.get(run.runID)
