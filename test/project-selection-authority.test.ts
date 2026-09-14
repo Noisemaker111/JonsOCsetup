@@ -45,6 +45,20 @@ test('registered prompt hook preserves goals for automatic notices and pauses on
   expect(continuation.goalStatus(sessionID)[0].state).toBe('stopped')
  }finally{dispose?.();f.close()}
 })
+test('registered router tools return JSON values when discovery has optional nested fields',async()=>{
+ const f=fixture();let dispose:(()=>void)|undefined
+ try{
+  const operations=new Map<string,any>()
+  const discovery=new DiscoveryHost('unused',async()=>{throw Error('Use the supplied discovery result')})
+  discovery.sessions=async()=>({items:[{id:'ses_discovered',directory:f.root,parentID:undefined,model:{id:'configured',variant:undefined}}],next:undefined}) as any
+  dispose=await installProjectRouter({storage:f.storage,tool:{transform:async(fn:Function)=>fn({add:(op:any)=>operations.set(op.name,op)})},session:{get:async()=>f.session,create:async()=>{},prompt:async()=>{},hook:async()=>{}}},discovery)
+  const result=await operations.get('project_discover').execute({source:'sessions'},{sessionID,id:'json-output'})
+  expect(result.output).toStrictEqual(JSON.parse(result.content))
+  expect(Object.hasOwn(result.output,'next')).toBe(false)
+  expect(Object.hasOwn(result.output.items[0].model,'variant')).toBe(false)
+  expect(result.output.items[0].id).toBe('ses_discovered')
+ }finally{dispose?.();f.close()}
+})
 test('legacy selection migrates once and a new router reads the same authority as Quest creation',async()=>{
  const f=fixture()
  try{
