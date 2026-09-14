@@ -210,7 +210,7 @@ dev because its isolated ledger cannot authorize against stable ownership.
 Use isolated worktrees for dev code work; this preserves stable checkout owners.
 
 Activation requires the current merged agents tree and two real return-flow passes.
-It installs the scoped workflow skill and creates `.channels/start.mjs`. Start with `oc`, which launches at the hub root so its AGENTS.md loads; `--here` uses
+It installs the scoped workflow skill and creates `.channels/start.mjs`. Start with `oc`, which launches in the maintained JonsOCsetup source; `--here` uses
 the current directory instead and `--cwd <project>` names one. Plain `oc` runs the
 latest merged `agents` code, `oc --gated` the release that passed the acceptance gate,
 `oc --default branch|gated` changes which one plain `oc` means, `oc --stable` is the
