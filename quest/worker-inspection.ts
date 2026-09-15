@@ -20,9 +20,10 @@ export async function inspectWorker(host:any, run:QuestSession):Promise<any> {
  }catch(error){return observationFailure(error)}
 }
 /** Poll persisted outcomes to recover missed events without turning silence into completion. */
-async function reconcile(store:QuestStore,host:any) {
+async function reconcile(store:QuestStore,host:any,questID:string) {
  const tracker=new QuestTracker(store,host),observations:Record<string,any>={}
- for(const entry of readAllQuests(store.projectRoot,{includeArchived:true})){
+ const quest=store.read(questID)
+ for(const entry of quest?[{quest}]:[]){
   // The listing is a Markdown projection; pending journal events can advance its revision.
   // Reconciliation writes must start from the same journal-backed record as QuestStore.apply.
   let current=entry.quest&&store.read(entry.quest.id)
@@ -49,10 +50,18 @@ async function reconcile(store:QuestStore,host:any) {
 }
 
 const clients=new WeakMap<object,Map<string,Promise<Record<string,any>>>>()
-export function reconcileWorkers(store:QuestStore,host:any){
+export function reconcileWorkers(store:QuestStore,host:any,questID?:string):Promise<Record<string,any>>{
  let polls=clients.get(host)
  if(!polls){polls=new Map();clients.set(host,polls)}
- const prior=polls.get(store.runtime);if(prior)return prior
- const promise=reconcile(store,host).finally(()=>{if(polls.get(store.runtime)===promise)polls.delete(store.runtime)})
- polls.set(store.runtime,promise);return promise
+ const key=store.runtime+'\0'+(questID??'*')
+ const prior=polls.get(key);if(prior)return prior
+ // A board sweep shares each Quest's observation, but an interactive request
+ // never waits for unrelated historical workers ahead of it in that sweep.
+ const task=questID?reconcile(store,host,questID):(async()=>{
+  const observations:Record<string,any>={}
+  for(const {quest} of readAllQuests(store.projectRoot,{includeArchived:true}))if(quest)Object.assign(observations,await reconcileWorkers(store,host,quest.id))
+  return observations
+ })()
+ const promise=task.finally(()=>{if(polls.get(key)===promise)polls.delete(key)})
+ polls.set(key,promise);return promise
 }

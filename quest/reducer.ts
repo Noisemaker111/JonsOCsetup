@@ -58,8 +58,8 @@ export function reduceQuest(input: Quest, event: QuestEvent): Quest {
     }
     case "session-claimed": {
       const existing = findSession(q, p)
-      if (existing) { for (const [key, value] of Object.entries(sessionIdentity(p))) if (value !== undefined) (existing as any)[key] = value; existing.taskID = p.taskID ?? existing.taskID; existing.sessionID = p.sessionID ?? existing.sessionID; existing.model = redact(p.model ?? existing.model ?? "", 150) || undefined; existing.state = "executing"; existing.updatedAt = event.at }
-      else q.sessions.push({ ...sessionIdentity(p), callID: p.callID, taskID: p.taskID, sessionID: p.sessionID, role: redact(p.role ?? p.agentRole ?? "worker", 100), model: redact(p.model ?? "", 150) || undefined, harness: redact(p.harness ?? "", 100) || undefined, branch: redact(p.branch ?? "", 300) || undefined, worktree: redact(p.worktree ?? "", 500) || undefined, state: "executing", evidence: [], deliverables: p.deliverables ?? [], attempt: p.attempt ?? 1, resumedFrom: p.resumedFrom, resumeRoot: p.resumeRoot, updatedAt: event.at })
+      if (existing) { for (const [key, value] of Object.entries(sessionIdentity(p))) if (value !== undefined) (existing as any)[key] = value; existing.taskID = p.taskID ?? existing.taskID; existing.sessionID = p.sessionID ?? existing.sessionID; existing.model = redact(p.model ?? existing.model ?? "", 150) || undefined; existing.state = mergeSessionState(existing.state, p.state === "planned" ? "planned" : "executing"); existing.updatedAt = event.at }
+      else q.sessions.push({ ...sessionIdentity(p), callID: p.callID, taskID: p.taskID, sessionID: p.sessionID, role: redact(p.role ?? p.agentRole ?? "worker", 100), model: redact(p.model ?? "", 150) || undefined, harness: redact(p.harness ?? "", 100) || undefined, branch: redact(p.branch ?? "", 300) || undefined, worktree: redact(p.worktree ?? "", 500) || undefined, state: p.state === "planned" ? "planned" : "executing", evidence: [], deliverables: p.deliverables ?? [], attempt: p.attempt ?? 1, resumedFrom: p.resumedFrom, resumeRoot: p.resumeRoot, updatedAt: event.at })
       break
     }
     case "session-bound": {

@@ -81,7 +81,7 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
 
   const waitRequest=input.action==='wait'?(input.wait??{}):undefined
   if(waitRequest){if(!input.id)throw new QuestError('INVALID_INPUT','wait needs the Quest id to block on');input={...input,action:'get'}}
-  if(input.action==='run'||waitRequest||input.inspect?.section==='runs')await reconcileWorkers(store,host)
+  if(input.action==='run'||waitRequest||input.inspect?.section==='runs')await reconcileWorkers(store,host,input.id)
   const requestID=context?.id??context?.callID
   if(!context?.sessionID||!requestID)throw new QuestError("HOST_CONTEXT_REQUIRED","Host must supply a session and tool call identity")
   const session=await host.get({sessionID:context.sessionID}),directory=(session?.data??session)?.location?.directory
@@ -122,7 +122,7 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
      if(blocking){
       const seconds=Math.min(Math.max(Math.round(waitRequest?.timeoutSeconds??DEFAULT_WAIT_SECONDS),1),MAX_WAIT_SECONDS)
       let announced=0
-      outcome=await awaitQuestChange({read:()=>store.read(input.id),fingerprint,runID,deadline:Date.now()+seconds*1000,reconcile:()=>reconcileWorkers(store,host),
+      outcome=await awaitQuestChange({read:()=>store.read(input.id),fingerprint,runID,deadline:Date.now()+seconds*1000,reconcile:()=>reconcileWorkers(store,host,input.id),
        onWaiting:ms=>{if(ms-announced<10000)return;announced=ms;try{void Promise.resolve(context?.progress?.({questID:input.id,runID,waitingSeconds:Math.round(ms/1000)})).catch(()=>{})}catch{}}})
      }
      const after=outcome.quest??store.read(input.id)
