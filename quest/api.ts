@@ -124,6 +124,7 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
       if (input.steps !== undefined) {
         if (!Array.isArray(input.steps)) throw new QuestError("INVALID_INPUT", "steps must be an array")
         const stages = structuredClone(q.stages), seen = new Set<string>()
+        const stepResults=structuredClone((q.extensions.stepResults??{}) as Record<string,{runIDs:string[];state:string;recordedAt:string}>)
         for (const update of input.steps) {
           keys(update, ["id", "state", "title", "detail", "needs", "note"])
           if (!["pending", "working", "blocked", "done"].includes(update.state)) throw new QuestError("INVALID_INPUT", "Step state is required: pending, working, blocked or done")
@@ -136,10 +137,18 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
           if (update.needs !== undefined) { if (!Array.isArray(update.needs) || update.needs.some(n => typeof n !== "string")) throw new QuestError("INVALID_INPUT", "Dependencies must be step IDs"); step.needs = update.needs }
           seen.add(update.id); step.status = update.state
           if (update.note !== undefined) { if (typeof update.note !== "string") throw new QuestError("INVALID_INPUT", "Step note must be text"); step.note = update.note }
+          // Saving a terminal result reconciles the observed completed runs. A
+          // blocked result may later be retried; preserve the old runs and notes.
+          // Merely setting pending must never bypass an uninspected completion.
+          if((update.state==='blocked'||update.state==='done')&&update.note?.trim()){
+            const completed=q.sessions.filter(s=>s.state==='completed'&&s.deliverables.includes(step.id)).map(s=>s.runID??s.callID)
+            if(completed.length)stepResults[step.id]={runIDs:[...new Set([...(stepResults[step.id]?.runIDs??[]),...completed])],state:update.state,recordedAt:new Date().toISOString()}
+          }
         }
         if (stages.some(s => s.needs.some(id => id === s.id || !stages.some(other => other.id === id)))) throw new QuestError("INVALID_INPUT", "Unknown or self-dependent step")
         validateGraph(stages)
         patch.stages = stages
+        patch.extensions={...(patch.extensions??q.extensions) as Record<string,unknown>,stepResults}
       }
       if (input.artifacts !== undefined) {
         if (!Array.isArray(input.artifacts)) throw new QuestError("INVALID_INPUT", "Artifacts must be an array")
@@ -192,7 +201,8 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
           if (q.sessions.some(s => ["planned", "executing", "waiting", "blocked"].includes(s.state) && s.deliverables.includes(id))) throw new QuestError("STEP_RUNNING", "The step already has an active run on this Quest; inspect it with get inspect.section=runs. Another Quest for the same request is not a retry.")
           // A worker that finished without recording its step leaves the step pending forever.
           // Re-dispatching repeats the same work in a second worktree; reconcile the result instead.
-          if (q.sessions.some(s => s.state === "completed" && s.deliverables.includes(id))) throw new QuestError("STEP_UNRECONCILED", "A worker already completed this step without recording a result; inspect that session and update the step instead of dispatching again")
+          const reconciled=(q.extensions.stepResults as Record<string,{runIDs:string[]}>|undefined)?.[id]?.runIDs??[]
+          if (q.sessions.some(s => s.state === "completed" && s.deliverables.includes(id)&&!reconciled.includes(s.runID??s.callID))) throw new QuestError("STEP_UNRECONCILED", "A worker already completed this step without a reconciled result; inspect that session and save the step done or blocked with its result note before retrying")
         }
         const previous = [...q.sessions].reverse().find(s => ["failed", "cancelled"].includes(s.state) && JSON.stringify([...s.deliverables].sort()) === JSON.stringify([...stepIDs].sort()))
         store.apply(q.id, "session-planned", { callID: runID, runID, parentID: context.sessionID, role: "worker", model: input.model, scope:{readOnly:input.readOnly===true,files:input.files??["."],requestedFiles:input.files??["."]}, deliverables: stepIDs, attempt: previous ? previous.attempt + 1 : 1, resumedFrom: previous?.callID, resumeRoot: previous?.resumeRoot ?? previous?.callID }, "quest:run")
