@@ -1,10 +1,9 @@
-import {hostExecution} from './host-observation'
 import {existsSync,readdirSync,readFileSync,mkdirSync,watch} from 'node:fs'
 import {join,resolve} from 'node:path'
 import {retireWorkspace} from './workspace-retirement'
 import {QuestWorkspaces} from './workspaces'
 import {readAllQuests} from './index'
-import {inspectWorker} from './worker-inspection'
+import {inspectWorker,confirmWorkerIdle} from './worker-inspection'
 import {readContinuations} from './runtime-queues'
 import {pathKey,git} from './cleanup-git.mjs'
 import type {QuestStore} from './store'
@@ -33,9 +32,7 @@ export function cleanupQuests(store:QuestStore,host?:any,only?:string):Promise<a
      if(s.sessionID?.startsWith('command_'))continue
      if(!host){reason='Connect the owning OpenCode host to verify worker completion';break}
      const sessionID=s.openCodeSessionId??s.sessionID
-     let active=hostExecution(host,sessionID!)
-     if(typeof host.active==='function'){const response=await host.active();const rows=response?.data??response;active=Object.hasOwn(rows,sessionID!)}
-     if(active!==false){reason='Owning host has not confirmed this worker is idle';break}
+     if(!sessionID||!await confirmWorkerIdle(host,sessionID)){reason='Owning host has not confirmed this worker is idle';break}
      const observed=await inspectWorker(host,s)
      if(!['completed','failed','interrupted'].includes(observed.state)){reason='Worker retained: '+observed.reason;break}
      const row=await host.get({sessionID:s.openCodeSessionId??s.sessionID});const actual=row?.data??row

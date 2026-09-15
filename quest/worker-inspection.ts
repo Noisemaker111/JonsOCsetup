@@ -7,6 +7,21 @@ import { readAllQuests } from './index'
 import type { QuestStore } from './store'
 import type { QuestSession } from './types'
 const unwrap = (value:any) => value?.data ?? value
+/** Confirm historical workers through the owning host even when no live event survived restart. */
+export async function confirmWorkerIdle(host:any,sessionID:string):Promise<boolean> {
+ try {
+  if(typeof host.active==='function'){
+   const active=unwrap(await boundedInspection(signal=>host.active({signal})))
+   if(active&&typeof active==='object')return !Object.hasOwn(active,sessionID)
+  }
+  const observed=hostExecution(host,sessionID)
+  if(observed!==undefined)return observed===false
+  if(typeof host.wait!=='function')return false
+  // Native wait only awaits idle. It never interrupts or resumes the execution.
+  await boundedInspection(signal=>host.wait({sessionID},{signal}))
+  return hostExecution(host,sessionID)!==true
+ }catch{return false}
+}
 export async function inspectWorker(host:any, run:QuestSession):Promise<any> {
  const sessionID=run.openCodeSessionId??run.openCodeSessionID??run.sessionID
  if(!sessionID) return {state:run.state==='planned'?'launching':run.state==='failed'?'failed':'queued',reason:run.result??'No worker session was confirmed'}
