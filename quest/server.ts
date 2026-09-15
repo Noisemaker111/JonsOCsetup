@@ -141,12 +141,12 @@ const HOST_EVENTS = Symbol.for("opencode-config.quests.host-events")
  * ends when the host shuts down. State lives on globalThis so a plugin reload
  * reuses the running subscription instead of stacking a second one.
  */
-export function installQuestEvents(ctx: { event?: { subscribe?: Function }; session?: any; permission?: any }, quests: QuestTracker) {
+export function installQuestEvents(ctx: { event?: { subscribe?: Function }; session?: any; permission?: any; catalog?: any; integration?:any }, quests: QuestTracker) {
   const state = globalThis as { [HOST_EVENTS]?: WeakMap<object, { controller: AbortController }> }
   const connections = state[HOST_EVENTS] ??= new WeakMap()
   const owner = ctx.session ?? ctx.event
   if (!owner) return
-  if(ctx.session)registerHostObservation(ctx.session,ctx.permission)
+  if(ctx.session)registerHostObservation(ctx.session,ctx.permission,ctx.catalog,ctx.integration)
   if (connections.has(owner)) return
   const subscribe = ctx?.event?.subscribe
   if (typeof subscribe !== "function") {

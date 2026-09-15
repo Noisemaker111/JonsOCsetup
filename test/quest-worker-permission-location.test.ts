@@ -8,9 +8,19 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {physicalDirectory,projectIdentity} from '../quest/project'
 import {saveUserGiver} from '../quest/giver-registry.mjs'
-import {registerHostObservation} from '../quest/host-observation'
+import {registerHostObservation,hostModelIdentities} from '../quest/host-observation'
 import {QuestStore} from '../quest/store'
 import {QuestWorkerReturns} from '../quest/worker-returns'
+
+test('reviewer availability belongs to the connected host, never another host account catalog',async()=>{
+ const first={},second={},unregistered={}
+ const catalog={model:{list:async()=>({data:[{providerID:'broker',id:'chosen'},{providerID:'direct',id:'chosen'}]})},provider:{list:async()=>[{id:'broker'},{id:'direct',activation:'enabled',integrationID:'direct'}]}}
+ registerHostObservation(first,undefined,catalog,{list:async()=>[{id:'direct',connections:[]}]})
+ registerHostObservation(second,undefined,{...catalog,model:{list:async()=>[{providerID:'direct',id:'chosen'}]}},{list:async()=>[{id:'direct',connections:[{type:'env',name:'CONFIGURED_KEY'}]}]})
+ expect(await hostModelIdentities(first)).toEqual(['broker/chosen'])
+ expect(await hostModelIdentities(second)).toEqual(['direct/chosen'])
+ await expect(hostModelIdentities(unregistered)).rejects.toThrow('catalog is unavailable')
+})
 
 test('only the verified worker location polls its domain; terminal delivery remains with the giver',async()=>{
  const root=physicalDirectory(mkdtempSync(join(tmpdir(),'quest-permission-location-'))),workerDirectory=join(root,'worker'),otherDirectory=join(root,'other')

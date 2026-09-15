@@ -6,7 +6,7 @@ import {join} from 'node:path'
 import {acquireLock} from './locking'
 import {digest,redact} from './privacy'
 import {WorkerPermissions} from './worker-permissions'
-import {hostPermissionDomain} from './host-observation'
+import {hostPermissionDomain,hostModelIdentities} from './host-observation'
 import {reviewerSettings,reviewerSettingsKey,reservePermissionReview} from './reviewer-settings'
 import type {QuestStore} from './store'
 
@@ -32,7 +32,8 @@ export class PermissionReviewer {
     const view=await service.inspect(input.giverID,input.questID,input.runID)
     const instructions=permissionUserInstructions(unwrap(await this.host.context({sessionID:input.giverID})))
     const authority={instructions,start:questStartAuthorization(this.store,input.questID,input.runID,input.giverID),reviewer:reviewerSettings(),assignment:{title:view.title,description:view.description,steps:view.steps,workspace:view.workspace}}
-    return {view,authority,key:digest(JSON.stringify(authority))}
+    const availableModels=await hostModelIdentities(this.host)
+    return {view,authority,availableModels,key:digest(JSON.stringify({authority,hostModels:digest(JSON.stringify(availableModels))}))}
    }
    const before=await snapshot(),request=before.view.requests.find((r:any)=>r.requestID===input.requestID&&r.requestKey===input.requestKey)
    if(!request)return
@@ -49,8 +50,9 @@ export class PermissionReviewer {
     const settings=before.authority.reviewer,settingsKey=reviewerSettingsKey(settings)
     const previous=pin
     if(pin?.settingsKey!==settingsKey)pin=undefined
+    if(pin&&!settings.model&&!before.availableModels.includes(pin.model.split('#')[0]))pin=undefined
     const reviewID='permission-'+digest(input.giverID+input.requestKey+before.key)
-    reserved=await reservePermissionReview(this.store.runtime,reviewID,settings,pin)
+    reserved=await reservePermissionReview(this.store.runtime,reviewID,settings,pin,before.availableModels)
     const route=reserved.route
     if(route.harness!=='native'||route.serviceTier!=='default')throw Error('Permission reviewer requires the exact supported native model service')
     if(pin&&pin.accountID!==route.accountID)throw Error('The pinned reviewer account changed; no substitute selected')
