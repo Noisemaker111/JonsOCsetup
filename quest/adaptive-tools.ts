@@ -1,6 +1,7 @@
 import {readAllQuests} from './index'
 import {QuestStore} from './store'
 import {projectIdentity} from './project'
+import {workerLedgerProject} from './source-binding'
 import {QuestError,type QuestContext} from './api'
 import type {QuestHost} from './runtime'
 import {SessionGuidance} from './session-guidance'
@@ -14,7 +15,7 @@ const result=(value:unknown)=>{const content=JSON.stringify(value);return {conte
 async function caller(store:QuestStore,host:QuestHost,ctx:any):Promise<{context:QuestContext;worker:boolean}>{
  if(!ctx?.sessionID||!(ctx.id??ctx.callID))throw new QuestError('HOST_CONTEXT_REQUIRED','Session and tool call identities required')
  const info=await host.get({sessionID:ctx.sessionID}),directory=(info?.data??info)?.location?.directory
- const context={project:projectIdentity(directory),sessionID:ctx.sessionID,requestID:ctx.id??ctx.callID}
+ const context={project:workerLedgerProject(store,ctx.sessionID,directory)??projectIdentity(directory),sessionID:ctx.sessionID,requestID:ctx.id??ctx.callID}
  const worker=readAllQuests(store.projectRoot,{includeArchived:true}).some(r=>r.quest?.sessions.some(s=>s.openCodeSessionId===ctx.sessionID||s.sessionID===ctx.sessionID))
  return {context,worker}
 }
