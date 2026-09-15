@@ -12,6 +12,7 @@ import {projectIdentity,physicalDirectory} from '../quest/project'
 import {QuestStore} from '../quest/store'
 import {QuestWorkspaces} from '../quest/workspaces'
 import {guidanceTool} from '../quest/adaptive-tools'
+import {installSharedWorkspaceGuard} from '../quest/shared-guard'
 
 test('research uses the reviewed repository, retains hub ledger identity and rejects a changed binding',()=>{
  const root=physicalDirectory(mkdtempSync(join(tmpdir(),'quest-hub-')))
@@ -53,8 +54,12 @@ test('guidance acknowledges through the native tool using the verified worker le
   let workerDirectory=repo
   const host={get:async({sessionID}:{sessionID:string})=>({id:sessionID,location:{directory:sessionID==='giver'?hub:workerDirectory},model:{providerID:'provider',id:'model',variant:'high'},agent:'worker'}),prompt:async(input:any)=>({id:input.id,sessionID:input.sessionID})}
   const tool=guidanceTool(store,host as any)
+  // Register through the production transform: native verification exposed that
+  // the research guard blocked acknowledgement before the binding check ran.
+  await installSharedWorkspaceGuard({tool:{transform:async(transform:any)=>transform({list:()=>[{id:'quest_guidance'}],get:()=>tool,update:(_id:string,update:any)=>update(tool)})}},store)
   const sent=(await tool.execute({action:'send',questID:q.id,runID:'guided',text:'Read the existing evidence.'},{sessionID:'giver',id:'send'})).output
   expect(sent.state).toBe('submitted')
+  await expect(tool.execute({action:'send',questID:q.id,runID:'guided',text:'Guide someone else'},{sessionID:'worker',id:'send-denied'})).rejects.toThrow('Read-only research cannot run quest_guidance')
   await expect(tool.execute({action:'acknowledge',questID:q.id,guidanceID:sent.id},{sessionID:'stranger',id:'foreign'})).rejects.toThrow()
   workerDirectory=root
   await expect(tool.execute({action:'acknowledge',questID:q.id,guidanceID:sent.id},{sessionID:'worker',id:'moved'})).rejects.toThrow('binding changed')
