@@ -29,6 +29,7 @@ export type QuestSession = {
   updatedAt: string; lastHeartbeatAt?: string; leaseExpiresAt?: string; commandSummary?: string; result?: string; routingNote?:string
   /** Terminal was a quota/model-failover notice ("Usage reached — ... Falling over"), not a verdict on the work. */
   quotaExhausted?: boolean
+  permissionDecisions?: Array<{requestID:string;reply:"once"|"reject";state:"sending"|"acknowledged"|"unknown";actor:"user"|"reviewer";model?:string;reason:string;at:string}>
 }
 export type FileClaim = { sessionID?: string; repo: string; worktree?: string; include: string[]; exclude: string[]; state: "active" | "released" }
 export type QuestStageStatus = "pending" | "working" | "blocked" | "done"

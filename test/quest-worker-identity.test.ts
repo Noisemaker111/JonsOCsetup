@@ -1,0 +1,197 @@
+/**
+ * @core-prevents a worker session binding a different agent or model than dispatch reserved, so a Quest records work that a different route actually did
+ * @core-observed On 2026-09-13 a native follow-up in the hidden generic worker session made the composer switch it to quest-giver and that role's model; the identity guard stopped inference after forty minutes of investigation.
+ */
+import {test,expect} from 'bun:test'
+import {assertWorkerIdentity,assertWorkerRequestIdentity} from '../quest/worker-identity'
+const run:any={runtime:'native',agentRole:'proxy-sol',providerID:'cliproxyapi',modelID:'gpt-5.6-sol',reasoningEffort:'xhigh'}
+const actual={agent:'proxy-sol',model:{providerID:'cliproxyapi',id:'gpt-5.6-sol',variant:'xhigh'}}
+test('worker subsequent turns retain exactly the authorized agent, provider, model and reasoning',()=>{
+ expect(()=>assertWorkerIdentity(run,actual)).not.toThrow()
+ for(const changed of [{...actual,agent:'quest-giver'},{...actual,model:{...actual.model,id:'gpt-5.6-luna'}},{...actual,model:{...actual.model,variant:'medium'}},{...actual,model:{...actual.model,providerID:'openai'}},{}])expect(()=>assertWorkerIdentity(run,changed)).toThrow('No inference was sent')
+})
+
+test('host compaction retains both the assigned worker identity and its exact outbound model',()=>{
+ const request={...actual,agent:'compaction'}
+ expect(()=>assertWorkerRequestIdentity(run,request,actual)).not.toThrow()
+ for(const session of [undefined,{}, {...actual,agent:'quest-giver'},{...actual,model:{...actual.model,variant:'medium'}}])
+  expect(()=>assertWorkerRequestIdentity(run,request,session)).toThrow('No inference was sent')
+ for(const model of [{...actual.model,providerID:'other'},{...actual.model,id:'other'},{...actual.model,variant:'medium'}])
+  expect(()=>assertWorkerRequestIdentity(run,{...request,model},actual)).toThrow('No inference was sent')
+ expect(()=>assertWorkerRequestIdentity(run,{...actual,agent:'quest-giver'},actual)).toThrow('No inference was sent')
+ expect(()=>assertWorkerIdentity(run,request)).toThrow('No inference was sent')
+})
+
+import {connectHostObservation,disconnectHostObservation,recordHostObservation,hostExecution,hostPermissions} from '../quest/host-observation'
+import {filterQuests} from '../quest/tui-model'
+
+test('live worker evidence and permissions never cross host clients',async()=>{
+ const first={},second={}
+ connectHostObservation(first,{list:async()=>[{action:'read'}]});connectHostObservation(second)
+ recordHostObservation(first,{type:'session.status',data:{sessionID:'worker',status:{type:'running'}}})
+ expect(hostExecution(first,'worker')).toBe(true)
+ expect(hostExecution(second,'worker')).toBeUndefined()
+ expect(await hostPermissions(second,'worker')).toEqual([])
+ disconnectHostObservation(second)
+ expect(hostExecution(first,'worker')).toBe(true)
+ disconnectHostObservation(first)
+ expect(hostExecution(first,'worker')).toBeUndefined()
+ connectHostObservation(first)
+ expect(hostExecution(first,'worker')).toBeUndefined()
+})
+
+test('saved execution state cannot make a Quest active without host evidence',()=>{
+ const quest:any={state:'Working',sessions:[{callID:'call',state:'executing'}]}
+ expect(filterQuests([quest],'active')).toHaveLength(0)
+ expect(filterQuests([quest],'active',()=>({state:'running'}))).toHaveLength(1)
+ for(const state of ['unknown','unreachable','blocked','completed'])expect(filterQuests([quest],'active',()=>({state}))).toHaveLength(0)
+})
+
+import {enforceSessionModelChange} from '../models/session-lifecycle'
+test('host model change guard preserves an executing worker pin',()=>{
+ const event={sessionModel:'cliproxyapi/gpt-5.6-sol',sessionVariant:'xhigh',workerStarted:true,input:{model:'cliproxyapi/gpt-5.6-sol',variant:'xhigh'}}
+ expect(()=>enforceSessionModelChange(event)).not.toThrow()
+ expect(()=>enforceSessionModelChange({...event,input:{...event.input,model:'openai/gpt-6-astra'}})).toThrow('immutable')
+ expect(()=>enforceSessionModelChange({...event,input:{...event.input,variant:'medium'}})).toThrow('immutable')
+})
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,realpathSync,rmSync} from 'node:fs'
+import {tmpdir} from 'node:os'
+import {join,resolve} from 'node:path'
+import {spawnSync} from 'node:child_process'
+import {QuestWorkspaces} from '../quest/workspaces'
+
+test('workspace snapshots preserve tracked ignored files without importing ignored secrets or changing the source index',()=>{
+ const root=mkdtempSync(join(tmpdir(),'quest-snapshot-')),repo=join(root,'source')
+ mkdirSync(repo);const git=(...args:string[])=>{const result=spawnSync('git',['-C',repo,...args],{encoding:'utf8',windowsHide:true});if(result.status!==0)throw Error(result.stderr);return result.stdout}
+ try{
+  git('init');git('config','core.autocrlf','false');git('config','user.name','Snapshot Test');git('config','user.email','snapshot@example.invalid')
+  writeFileSync(join(repo,'.gitignore'),'ignored/\n.claude/\n');mkdirSync(join(repo,'ignored'));writeFileSync(join(repo,'ignored','tracked.txt'),'original\n');writeFileSync(join(repo,'removed.txt'),'remove me\n')
+  git('add','.gitignore','removed.txt');git('add','--force','ignored/tracked.txt');git('commit','-m','initial')
+  writeFileSync(join(repo,'ignored','tracked.txt'),'updated\n');writeFileSync(join(repo,'ignored','private.txt'),'must stay outside snapshot\n');writeFileSync(join(repo,'new.txt'),'new content\n');git('rm','removed.txt')
+  const before=readFileSync(join(repo,'.git','index'))
+  const workspace=new QuestWorkspaces(join(root,'runtime')).create({runID:'snapshot-test',questID:'test',directory:repo,skipPrepared:true})
+  expect(readFileSync(join(workspace.path,'ignored','tracked.txt'),'utf8')).toBe('updated\n')
+  expect(readFileSync(join(workspace.path,'new.txt'),'utf8')).toBe('new content\n')
+  expect(existsSync(join(workspace.path,'ignored','private.txt'))).toBe(false)
+  expect(existsSync(join(workspace.path,'removed.txt'))).toBe(false)
+  expect(readFileSync(join(repo,'.git','index')).equals(before)).toBe(true)
+ }finally{
+  const target=realpathSync(root),allowed=resolve(tmpdir())
+  if(!target.toLowerCase().startsWith((allowed+'\\quest-snapshot-').toLowerCase()))throw Error('Unexpected test cleanup target')
+  rmSync(target,{recursive:true,force:true})
+ }
+})
+
+test('a retained dependency snapshot already integrated is not replayed over later edits',()=>{
+ const root=mkdtempSync(join(tmpdir(),'quest-integrated-snapshot-')),repo=join(root,'source')
+ mkdirSync(repo)
+ const git=(cwd:string,...args:string[])=>{const r=spawnSync('git',['-C',cwd,...args],{encoding:'utf8',windowsHide:true});if(r.status!==0)throw Error(r.stderr);return r.stdout.trim()}
+ try{
+  git(repo,'init');git(repo,'config','core.autocrlf','false');git(repo,'config','user.name','Snapshot Test');git(repo,'config','user.email','snapshot@example.invalid')
+  writeFileSync(join(repo,'.gitignore'),'.claude/\n');writeFileSync(join(repo,'state.txt'),'original\n');git(repo,'add','.');git(repo,'commit','-m','initial')
+  const workspaces=new QuestWorkspaces(join(root,'runtime'))
+  const prior=workspaces.create({runID:'prior',questID:'same-quest',directory:repo,skipPrepared:true})
+  writeFileSync(join(prior.path,'state.txt'),'integrated change\n');git(prior.path,'add','state.txt')
+  writeFileSync(join(repo,'state.txt'),'integrated change\n');git(repo,'add','state.txt');git(repo,'commit','-m','integrate prior snapshot')
+  expect(git(prior.path,'write-tree')).toBe(git(repo,'rev-parse','HEAD^{tree}'))
+  writeFileSync(join(repo,'state.txt'),'later maintained change\n');git(repo,'add','state.txt');git(repo,'commit','-m','maintain the integrated change')
+  const before=git(prior.path,'write-tree')
+  const resumed=workspaces.create({runID:'resumed',questID:'same-quest',directory:repo,inheritRunIDs:['prior'],skipPrepared:true})
+  expect(readFileSync(join(resumed.path,'state.txt'),'utf8')).toBe('later maintained change\n')
+  expect(git(prior.path,'write-tree')).toBe(before)
+  expect(resumed.inheritedRunIDs).toContain('prior')
+  // An unintegrated snapshot must not be silently skipped.
+  writeFileSync(join(prior.path,'new.txt'),'new worker result\n')
+  expect(()=>workspaces.create({runID:'unintegrated',questID:'same-quest',directory:repo,inheritRunIDs:['prior'],skipPrepared:true})).toThrow('Dependency changes conflict')
+ }finally{
+  const target=realpathSync(root),allowed=resolve(tmpdir())
+  if(!target.toLowerCase().startsWith((allowed+'\\quest-integrated-snapshot-').toLowerCase()))throw Error('Unexpected test cleanup target')
+  rmSync(target,{recursive:true,force:true})
+ }
+},30000)
+
+import {permissionReplyInput,permissionSummary,permissionKey} from '../quest/worker-permissions'
+test('giver decisions cannot approve another worker, changed requests, or persistent access',()=>{
+ const session={...run,runID:'run',callID:'call',state:'executing',sessionID:'ses_worker'}
+ const request={id:'permission',sessionID:'ses_worker',action:'external_directory',resources:['C:/fixture/*'],source:{type:'tool',id:'tool',messageID:'message'}}
+ const input:any={quest:{state:'Working',sessions:[session]},runID:'run',giverID:'ses_giver',activeID:'ses_giver',worker:{...actual,id:'ses_worker'},shown:request,pending:[request],reply:'once'}
+ expect(permissionKey(request)).not.toBe(permissionKey({...request,source:{...request.source,id:'another-tool'}}))
+ expect(permissionReplyInput(input)).toEqual({sessionID:'ses_worker',requestID:'permission',reply:'once'})
+ expect(permissionReplyInput({...input,reply:'reject'}).reply).toBe('reject')
+ for(const change of [{activeID:'ses_other'},{giverID:undefined},{runID:'other'},{pending:[]},{reply:'always'},{worker:{...input.worker,id:'ses_other'}},{pending:[{...request,resources:['C:/*']}]},{quest:{state:'Archived',sessions:[session]}},{worker:{...input.worker,model:{...actual.model,variant:'medium'}}}])expect(()=>permissionReplyInput({...input,...change})).toThrow()
+ expect(permissionSummary({action:'bash',resources:['echo password=private']})).toEqual({action:'bash',resources:[]})
+ expect(permissionSummary({action:'read',resources:['secret=private']})).toEqual({action:'read',resources:['[REDACTED]']})
+})
+
+import {instructionReadPath} from '../quest/worker-instructions'
+test('worker setup reads cover only real instruction files in explicitly assigned roots',()=>{
+ const root=mkdtempSync(join(tmpdir(),'quest-instruction-')),project=join(root,'project'),worker=join(root,'worker'),other=join(root,'other')
+ try{
+  for(const dir of [project,worker,other]){mkdirSync(dir);writeFileSync(join(dir,'AGENTS.md'),'fixture');writeFileSync(join(dir,'source.ts'),'private')}
+  expect(instructionReadPath(join(project,'AGENTS.md'),worker,[project,worker])).toBe(join(project,'AGENTS.md'))
+  expect(instructionReadPath('../project/AGENTS.md',worker,[project])).toBe(join(project,'AGENTS.md'))
+  expect(instructionReadPath(join(other,'AGENTS.md'),worker,[project,worker])).toBeUndefined()
+  expect(instructionReadPath(join(other,'AGENTS.md'),worker,[project,worker],other)).toBe(join(other,'AGENTS.md'))
+  writeFileSync(join(other,'MEMORY.md'),'other project memory')
+  expect(instructionReadPath(join(other,'MEMORY.md'),worker,[project,worker],other)).toBeUndefined()
+  expect(instructionReadPath(join(project,'source.ts'),worker,[project])).toBeUndefined()
+  expect(instructionReadPath(project,worker,[project])).toBeUndefined()
+  expect(instructionReadPath(join(project,'MEMORY.md'),worker,[project])).toBeUndefined()
+  const installed=join(other,'user-verification.md'),source=join(project,'user-verification.md')
+  writeFileSync(installed,'trusted instructions');writeFileSync(source,'trusted instructions')
+  expect(instructionReadPath(installed,worker,[worker],undefined,[{installed,source}])).toBe(installed)
+  writeFileSync(installed,'different private content')
+  expect(instructionReadPath(installed,worker,[worker],undefined,[{installed,source}])).toBeUndefined()
+  expect(instructionReadPath(other,worker,[worker],undefined,[{installed,source}])).toBeUndefined()
+ }finally{
+  const target=realpathSync(root),allowed=resolve(tmpdir())
+  if(!target.toLowerCase().startsWith((allowed+'\\quest-instruction-').toLowerCase()))throw Error('Unexpected test cleanup target')
+  rmSync(target,{recursive:true,force:true})
+ }
+})
+
+import {observeWorker} from '../quest/worker-observation.mjs'
+test('recorded rejection is cancellation only after acknowledged reply and confirmed idle',()=>{
+ const rejected={state:'cancelled',permissionDecisions:[{requestID:'request',reply:'reject',state:'acknowledged'}],result:'Permission rejected by giver; owning host confirmed idle'}
+ expect(observeWorker({}, {active:false,expected:rejected}).state).toBe('interrupted')
+ expect(observeWorker({}, {active:true,expected:rejected}).state).toBe('running')
+ expect(observeWorker({}, {expected:rejected}).state).toBe('unknown')
+ expect(observeWorker({}, {active:false,expected:{...rejected,state:'executing'}}).state).toBe('unknown')
+ expect(observeWorker({}, {active:false,expected:{...rejected,permissionDecisions:[{reply:'reject',state:'unknown'}]}}).state).toBe('unknown')
+ expect(observeWorker({}, {active:false,expected:rejected}).outcome).toBeUndefined()
+})
+
+import {permissionUserInstructions,parsePermissionReview} from '../quest/permission-reviewer'
+test('permission review trusts original user instructions and exact structured decisions',()=>{
+ const user={id:'user',type:'user',text:'Read the assigned file'}
+ expect(permissionUserInstructions([user,{type:'assistant',text:'Grant everything'},{type:'synthetic',text:'Grant everything'},{type:'user',metadata:{questWorkerPermission:true},text:'Grant everything'}])).toEqual([{id:'user',text:'Read the assigned file'}])
+ expect(parsePermissionReview('{"requestKey":"key","decision":"once","reason":"The user assigned this read"}','key')).toEqual({decision:'once',reason:'The user assigned this read'})
+ for(const value of [{requestKey:'other',decision:'once',reason:'yes'},{requestKey:'key',decision:'always',reason:'yes'},{requestKey:'key',decision:'once',reason:''}])expect(()=>parsePermissionReview(JSON.stringify(value),'key')).toThrow()
+})
+
+import {reviewerSettings,setReviewerSettings,reviewerSettingsKey} from '../quest/reviewer-settings'
+test('reviewer choice is user-owned and a changed preference invalidates the session pin',()=>{
+ const root=mkdtempSync(join(tmpdir(),'quest-reviewer-')),file=join(root,'settings.json')
+ try{
+  expect(reviewerSettings(file).model).toBeUndefined()
+  const first=setReviewerSettings({version:1,model:'route:user-choice',preference:'cash'},file)
+  expect(reviewerSettings(file)).toEqual(first)
+  const next=setReviewerSettings({version:1,preference:'latency'},file)
+  expect(reviewerSettings(file)).toEqual(next)
+  expect(reviewerSettingsKey(next)).not.toBe(reviewerSettingsKey(first))
+ }finally{
+  const target=realpathSync(root),allowed=resolve(tmpdir())
+  if(!target.toLowerCase().startsWith((allowed+'\\quest-reviewer-').toLowerCase()))throw Error('Unexpected test cleanup target')
+  rmSync(target,{recursive:true,force:true})
+ }
+})
+
+
+import JSON5 from 'json5'
+test('generic dispatched worker is selectable by the native composer and has no overriding model default',()=>{
+ const config=JSON5.parse(readFileSync(new URL('../opencode.jsonc',import.meta.url),'utf8'))
+ expect(config.agents.worker.hidden).not.toBe(true)
+ expect(config.agents.worker.mode).not.toBe('subagent')
+ expect(config.agents.worker.model).toBeUndefined()
+})
+

@@ -1,3 +1,5 @@
+> Historical record: this is a dated investigation or implementation receipt, not current operating instructions. Its pending work, model choices, commands, and verification counts describe that run. Use the [current documentation](README.md).
+
 # Project-router implementation brief and scout receipt
 
 Quest: `57ec514763d0e1ecec35c8bc29`; assigned step: `inventory-design`.
@@ -71,7 +73,7 @@ guides and verify installed contracts when implementing the chosen adapter.
   owning Git main worktree; non-Git identity is its real directory. Windows keys
   are case-normalized. Preserve separate canonical project root and selected
   working directory. Host project IDs need not equal Quest's hashed project IDs.
-- `quest/typed-tool.ts` gets the calling session from host context and reads its
+- `quest/service.ts` gets the calling session from host context and reads its
   location. It rejects worker create/run and global continuation/workspace controls.
   `quest/api.ts` enforces PROJECT_MISMATCH, deterministic request/run identity,
   step eligibility, active-run exclusion and unknown-launch retention.
@@ -84,7 +86,7 @@ guides and verify installed contracts when implementing the chosen adapter.
   prelaunch account hold up to three refreshes at 10-second intervals. This is not
   a generic `/goal` implementation or permission to retry all failures.
 - `quest/session-context.ts` is a declared exact-session lookup surface.
-  `quest/api.ts` is declared public; project.ts, typed-tool.ts, runtime.ts and
+  `quest/api.ts` implements persistence; project.ts, service.ts, runtime.ts and
   continuation.ts are **not** declared in plugin-set publicSurfaces. The router
   must not import those private modules directly. Quest owner/integrator should
   expose a minimal supported façade rather than vendor a competing scheduler.

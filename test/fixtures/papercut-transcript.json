@@ -1,7 +1,0 @@
-{
-  "events": [
-    {"sessionID":"ses_fixture_timeout","id":"t1","tool":"pwsh","input":{"command":"artifact-gate.ps1 -RepoUrl https://example.invalid/t3code.git","cwd":"/fixture","shell":"powershell"},"output":{"timeout":true,"stderr":"remote discovery timed out"}},
-    {"sessionID":"ses_fixture_local","id":"t2","tool":"pwsh","input":{"command":"artifact-gate.ps1 -RepoRoot C:\\work\\t3code -ArtifactPath C:\\work\\t3code\\apps\\server\\dist\\bin.mjs -PublishStatus credentials-limitation -VpsRepoRoot C:\\work\\vps-code -ExpectedVpsCommit abc1234","cwd":"/fixture","shell":"powershell"},"output":{"exitCode":0,"stdout":"PASS source; PASS artifact; PASS publish; PASS vps"}},
-    {"sessionID":"ses_fixture_unrelated","id":"u1","tool":"pwsh","input":{"command":"Get-Date","cwd":"/fixture","shell":"powershell"},"output":{"exitCode":0,"stdout":"Thursday"}}
-  ]
-}

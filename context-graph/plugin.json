@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "name": "opencode-context-graph",
+  "description": "Where the live session's tokens and Code Mode time went, as a TUI screen",
+  "server": "context-graph/server.ts",
+  "tui": "context-graph/tui-active/context-graph.tsx",
+  "assets": [
+    "context-graph/context-graph.ts",
+    "context-graph/execute-attribution.ts",
+    "context-graph/execute-timing.ts"
+  ]
+}

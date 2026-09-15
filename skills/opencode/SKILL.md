@@ -1,6 +1,6 @@
 ---
 name: opencode
-description: Use when working on the OpenCode config repo (~/.config/opencode) — plugins, TUI chrome, harnesses, quota/failover, Quests, or promoting a generation. Holds the brick invariants and the deploy gate.
+description: Use when working on the OpenCode config repo (~/Projects/JonsOCsetup) — plugins, TUI chrome, harnesses, quota/failover, Quests, or promoting a generation. Holds the brick invariants and the deploy gate.
 ---
 
 # OpenCode config / plugin work
@@ -10,9 +10,9 @@ Internals for this repo only. Global rules stay in `AGENTS.md`; the ecosystem ma
 ## Development ownership
 
 Follow `docs/development-workflow.md` for every OpenCode2 change. The user has
-authorized the agent to own coherent commits, ready PRs targeting dev, verified
-merges into dev, and dev activation. Do not ask the user to perform technical
-review or approve each dev merge. Stable master promotion and mirror publishing
+authorized the agent to own coherent commits, ready PRs targeting agents, verified
+merges into agents, and dev activation. Do not ask the user to perform technical
+review or approve each dev merge. Stable main promotion and mirror publishing
 remain separate explicit actions. Exercise the real flow twice and inspect
 captures and saved outcomes; synthetic providers are not acceptance evidence.
 
@@ -56,7 +56,7 @@ Break one of these and the host stops loading plugins, usually silently.
   `The subagent is working in the background (sessionID: ses_x)…`; turn ends
   are `session.execution.succeeded|failed|interrupted` (no `.cancelled`);
   `message.updated` carries `info.{sessionID, providerID, modelID, agent}`.
-- **Verify the installed host and SDK separately.** Read package.json and the isolated host receipts; do not assume a version from this skill is current. The observations below describe previously tested host contracts. Re-run the relevant tests after host updates.
+- **Verify the installed host and SDK separately.** Read package.json and the isolated host receipts; do not assume a version from this skill is current. The observations below describe previously tested host contracts. Re-exercise affected operations in the installed app after host updates.
 - **Chrome mounts via `context.ui.slot({ <placement>: "<slot>", render })`**,
   where placement is exactly one of `prepend` `append` `before` `after`
   `replace` — two or none throws *Slot claim requires exactly one placement
@@ -132,36 +132,17 @@ in `opencode.jsonc`. Omit it and the host invents a default — which is what
 made a 500k Grok model compact at 200k. Do not add a `limit` to a provider the
 catalog already knows (e.g. `openai`).
 
-## Promotion
+## Integration and runtime selection
 
-Use README.md for the current managed launch/restart and deployment commands.
-Local candidate promotion uses:
+Follow [the development workflow](../../docs/development-workflow.md) for candidate preparation, installed-app acceptance, agents integration, and activation. `oc` selects the configured branch or gated version; it does not require replacing the vendor CLI.
 
-```powershell
-bun scripts/plugin-deploy.ts --no-publish --no-prune
-```
+`scripts/plugin-deploy.ts` is the low-level local generation builder used by maintenance tooling. Its activation is scoped to the supplied root. It does not publish mirrors; omitting an obsolete `--no-publish` flag does not turn it into a publishing command. Do not use a low-level pointer change as evidence that the managed channel or a running terminal adopted the change.
 
-Promotion changes the runtime generation and needs to be within the task's
-scope. Omitting --no-publish can push public mirrors; only do that with explicit
-publish authorization. Never restart or terminate unrelated running sessions.
-Immutable generations are build output; edit source in this checkout.
+## Acceptance
 
-## Gates
-
-```bash
-bun test
-pwsh -NoProfile -File .\smoke-test.ps1
-```
-
-`bunfig.toml` scopes `bun test` to `./test`; the preload gives each run its own
-orchestration ledger (`OPENCODE_ORCHESTRATION_LEDGER`), so tests never touch
-`~/.local/state/opencode/orchestration.jsonl`. `OPENCODE_QUEST_ROOT` pins the
-Quest ledger for the server plugin, the board and dispatch. The test root in
-bunfig.toml prevents discovery of stale suites inside generations. Pass every
-test file that exists — bun treats a missing path as a name *filter* and
-searches the whole tree for it.
-
-Never assert on a frame a test drew itself. A prior "screenshot proof" rendered
-a hand-written ASCII mockup to a PNG and asserted on its own drawing; it passed
-for weeks while the chrome mounted nowhere. Assert against the real module and
-the SDK's real slot map.
+Follow the app-use, removal and memory policy in `docs/development-workflow.md`.
+Use the installed app for every change, inspect actual output and saved results
+after reload, and search for and delete superseded code and instructions before
+finishing. Do not create or regenerate test suites, fixtures or old compatibility
+paths. Build/type checks supplement actual app use. Root MEMORY.md preserves
+durable decisions separately from Quest task progress.

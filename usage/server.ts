@@ -1,5 +1,4 @@
 import {getUsagePacing} from "./portfolio-pacing"
-import { installUsageContext } from "./context-summary"
 import { recordRequest } from "./telemetry-store"
 import { startPassiveUsage, recordLedgerRequest } from "./passive-ledger"
 import { accountRegime } from "./calibration-store"
@@ -24,7 +23,6 @@ export default define({
     startPassiveUsage()
     await installRequestTelemetry(ctx,record=>{recordRequest(record);recordLedgerRequest(record)})
     await installContextEvents(ctx)
-    await installUsageContext(ctx)
     const tool = (ctx as { tool?: { transform?: Function } }).tool
     if (!tool?.transform) return
     await tool.transform((draft: { add: (tool: unknown) => void }) => {

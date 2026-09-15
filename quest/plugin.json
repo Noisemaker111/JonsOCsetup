@@ -5,7 +5,7 @@
   "server": "quest/server.ts",
   "tui": "quest/tui-active/quests.tsx",
   "assets": [
-    "quest/quest-cli.ts",
+    "quest/cli.mjs",
     "quest/quest.schema.json"
   ]
 }

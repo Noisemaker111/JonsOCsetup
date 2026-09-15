@@ -5,7 +5,6 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, read
 import { randomUUID } from 'node:crypto'
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
-import { taskState } from "../models/capacity-registry"
 import { canonicalWorkerTitle, workerIdentityFromEvent, type ReasoningEffort, type WorkerRuntime } from "./dispatch"
 
 /** Tests and one-off tools point this elsewhere; a test once wrote rows into the live ledger. */
@@ -482,7 +481,6 @@ export function recordSpawn(event: any, file = LEDGER_FILE) {
     role: validID(input.role) ? input.role : undefined,
     deliverables: Array.isArray(input.deliverables) ? input.deliverables.slice(0, 50).map(String) : undefined,
   }, file)
-  taskState(callID, parentID, callID, identity?.providerID ?? "other", "accepted")
 }
 
 export function recordLifecycle(parentID: string, callID: string, state: LedgerEvent["state"], childID?: string, file = LEDGER_FILE) {
@@ -499,7 +497,6 @@ export function recordSpawnResult(event: any, output?: unknown, file = LEDGER_FI
   if (childID) {
     const openCodeSessionId = verifiedNativeSession(output ?? event, parentID)
     appendLedger({ kind: "bound", parentID, callID, childID, runtime: "native", openCodeSessionId, runID: identity?.runID ?? callID }, file)
-    taskState(callID, parentID, callID, identity?.providerID ?? "other", "executing")
   }
 }
 
@@ -512,7 +509,6 @@ export function recordTerminal(parentID: string, childID: string, state: "comple
   if (validID(parentID) && validID(childID)) {
     const callID = readLedger(file).filter((event) => event.parentID === parentID && event.childID === childID).at(-1)?.callID ?? childID
     appendLedger({ kind: "terminal", parentID, callID, childID, state }, file)
-    taskState(childID, parentID, childID, "other", "terminal", state)
   }
 }
 

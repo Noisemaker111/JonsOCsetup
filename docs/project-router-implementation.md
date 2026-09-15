@@ -1,3 +1,5 @@
+> Historical record: this is a dated investigation or implementation receipt, not current operating instructions. Its pending work, model choices, commands, and verification counts describe that run. Use the [current documentation](README.md).
+
 # Project-router implementation receipt — 2026-09-08
 
 Quest `57ec514763d0e1ecec35c8bc29`; implementation worker, assigned isolated checkout.
@@ -26,7 +28,7 @@ or additional worker launch was performed.** Parent owns integration and final g
 - `quest/continuation.ts`, `quest/goal-lifecycle.ts`, `quest/tracker.ts`:
   explicit giver/worker intents, bounded live same-session continuation, proof checks,
   restart pause, scoped pause/cancel and deferred terminal ownership.
-- `quest/typed-tool.ts`, `quest/tool-schema.mjs`, `quest/tool-projection.ts`:
+- `quest/service.ts`, `quest/operations.mjs`, `quest/tool-projection.ts`:
   current/latest assignment enforcement and compact defaults with paginated evidence.
 - `quest/project.ts`, `quest/runtime.ts`: bounded Git identity reads and actual
   configured-command passing proofs.

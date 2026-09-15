@@ -1,3 +1,5 @@
+> Historical record: this is a dated investigation or implementation receipt, not current operating instructions. Its pending work, model choices, commands, and verification counts describe that run. Use the [current documentation](README.md).
+
 # Ownership guard follow-up and activation gate
 
 This follows merged PR13 on production `master`; the earlier adapter-lineage PR11 is not the release target. The merged revision did not contain the later cached-patch safety correction. This branch adds that correction plus the user-authorized automatic recovery improvements. Do not activate it before the reviewed follow-up is merged.

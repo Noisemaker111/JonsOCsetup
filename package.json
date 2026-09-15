@@ -1,6 +1,11 @@
 {
+  "name": "jons-quest",
+  "private": true,
+  "files": ["quest/cli.mjs", "quest/client.mjs", "quest/operations.mjs", "quest/mcp-client.mjs"],
+  "bin": { "quest": "quest/cli.mjs" },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.14",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@opencode-ai/plugin": "1.18.23",
     "@opentui/core": "^0.5.8",
     "@opentui/keymap": "^0.5.8",
@@ -14,10 +19,10 @@
   },
   "scripts": {
     "runtime:host": "node scripts/host-status.mjs",
+    "runtime:update-report": "node scripts/opencode-update-report.mjs",
     "runtime:start": "node scripts/opencode-runtime.mjs",
     "runtime:verify": "bun scripts/verify-runtime.ts",
-    "runtime:ship": "bun test && bun scripts/verify-runtime.ts",
-    "runtime:dispatch": "bun scripts/verify-dispatch.ts",
+    "runtime:ship": "bun scripts/verify-runtime.ts",
     "runtime:providers": "bun scripts/provider-audit.ts",
     "runtime:accounts": "bun scripts/accounts.ts",
     "runtime:usage": "bun usage/account-cli.ts",
@@ -25,6 +30,13 @@
     "ui:lab:paper": "bun ui-lab/paper.ts",
     "runtime:channel": "node scripts/runtime-channel.mjs",
     "setup:plan": "node scripts/install-setup.mjs",
-    "setup:install": "node scripts/install-setup.mjs --apply"
+    "setup:install": "node scripts/install-setup.mjs --apply",
+    "setup:sync": "node scripts/setup-sync.mjs",
+    "setup:link": "node scripts/link-setup.mjs",
+    "runtime:drive": "bun scripts/drive-opencode.ts",
+    "check:core": "node scripts/core-suite.mjs",
+    "check:repo": "node scripts/repo-hygiene.mjs",
+    "worktree:cleanup": "node scripts/worktree-cleanup.mjs",
+    "setup:hub": "node scripts/hub-source.mjs"
   }
 }

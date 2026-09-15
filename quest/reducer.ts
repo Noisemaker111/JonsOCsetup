@@ -2,7 +2,7 @@ import { bounded, redact } from "./privacy"
 import { normalizeState } from "./state-machine"
 import type { Quest, QuestEvent, QuestSession, SessionState } from "./types"
 import { dependentStageIDs } from "./stages"
-import { QUOTA_FAILOVER_PATTERN } from "./session-lineage"
+import { QUOTA_FAILOVER_PATTERN, terminalStepUpdates } from "./session-lineage"
 
 const terminalRank: Record<string, number> = { planned: 0, waiting: 1, executing: 2, blocked: 3, completed: 4, cancelled: 5, stale: 6, missing: 7, failed: 8 }
 const REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh", "max"])
@@ -58,8 +58,8 @@ export function reduceQuest(input: Quest, event: QuestEvent): Quest {
     }
     case "session-claimed": {
       const existing = findSession(q, p)
-      if (existing) { for (const [key, value] of Object.entries(sessionIdentity(p))) if (value !== undefined) (existing as any)[key] = value; existing.taskID = p.taskID ?? existing.taskID; existing.sessionID = p.sessionID ?? existing.sessionID; existing.model = redact(p.model ?? existing.model ?? "", 150) || undefined; existing.state = "executing"; existing.updatedAt = event.at }
-      else q.sessions.push({ ...sessionIdentity(p), callID: p.callID, taskID: p.taskID, sessionID: p.sessionID, role: redact(p.role ?? p.agentRole ?? "worker", 100), model: redact(p.model ?? "", 150) || undefined, harness: redact(p.harness ?? "", 100) || undefined, branch: redact(p.branch ?? "", 300) || undefined, worktree: redact(p.worktree ?? "", 500) || undefined, state: "executing", evidence: [], deliverables: p.deliverables ?? [], attempt: p.attempt ?? 1, resumedFrom: p.resumedFrom, resumeRoot: p.resumeRoot, updatedAt: event.at })
+      if (existing) { for (const [key, value] of Object.entries(sessionIdentity(p))) if (value !== undefined) (existing as any)[key] = value; existing.taskID = p.taskID ?? existing.taskID; existing.sessionID = p.sessionID ?? existing.sessionID; existing.model = redact(p.model ?? existing.model ?? "", 150) || undefined; existing.state = mergeSessionState(existing.state, p.state === "planned" ? "planned" : "executing"); existing.updatedAt = event.at }
+      else q.sessions.push({ ...sessionIdentity(p), callID: p.callID, taskID: p.taskID, sessionID: p.sessionID, role: redact(p.role ?? p.agentRole ?? "worker", 100), model: redact(p.model ?? "", 150) || undefined, harness: redact(p.harness ?? "", 100) || undefined, branch: redact(p.branch ?? "", 300) || undefined, worktree: redact(p.worktree ?? "", 500) || undefined, state: p.state === "planned" ? "planned" : "executing", evidence: [], deliverables: p.deliverables ?? [], attempt: p.attempt ?? 1, resumedFrom: p.resumedFrom, resumeRoot: p.resumeRoot, updatedAt: event.at })
       break
     }
     case "session-bound": {
@@ -70,6 +70,7 @@ export function reduceQuest(input: Quest, event: QuestEvent): Quest {
     }
     case "session-state": {
       const s = findSession(q, p)
+      if(s&&p.permissionDecision){const decision=p.permissionDecision;if(['once','reject'].includes(decision.reply)&&['sending','acknowledged','unknown'].includes(decision.state)&&['user','reviewer'].includes(decision.actor)&&typeof decision.requestID==='string')s.permissionDecisions=bounded([...(s.permissionDecisions??[]).filter(d=>d.requestID!==decision.requestID),{...decision,reason:redact(String(decision.reason??''),1500)}])}
       if(s && p.preserveTerminal && ["completed","failed","cancelled"].includes(s.state)){if(p.evidence)s.evidence=bounded([...s.evidence,redact(p.evidence)]);break}
       if (!s) q.unresolvedWork.push(`missing exact session link for ${p.callID ?? p.sessionID ?? "unknown"}`)
       else {
@@ -85,6 +86,10 @@ export function reduceQuest(input: Quest, event: QuestEvent): Quest {
         if (typeof p.agentRole === "string" && p.agentRole && !s.agentRole) s.agentRole = redact(p.agentRole, 100)
         if (typeof p.task === "string" && p.task && !s.task) s.task = redact(p.task, 500)
         if (p.evidence) s.evidence = bounded([...s.evidence, redact(p.evidence)]); if (p.heartbeatAt) s.lastHeartbeatAt = redact(p.heartbeatAt); if (p.leaseExpiresAt) s.leaseExpiresAt = redact(p.leaseExpiresAt); if (p.commandSummary) s.commandSummary = redact(p.commandSummary); if (p.result) s.result = redact(p.result); if (p.openCodeSessionId) { s.openCodeSessionId = redact(p.openCodeSessionId); s.sessionID = s.openCodeSessionId }; if (p.runtimeSessionId) s.runtimeSessionId = redact(p.runtimeSessionId); if (p.runID) s.runID = redact(p.runID); if (p.dependency) s.dependency = structuredClone(p.dependency); s.updatedAt = event.at }
+      for (const update of terminalStepUpdates(q)) {
+        const step = q.stages.find(step => step.id === update.stageID)!
+        step.status = update.status; step.note = update.evidence
+      }
       break
     }
     case "session-removed": {

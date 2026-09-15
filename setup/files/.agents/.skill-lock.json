@@ -250,6 +250,15 @@
       "pluginName": "mattpocock-skills",
       "installedAt": "2026-09-05T05:01:41.962Z",
       "updatedAt": "2026-09-05T05:01:41.962Z"
+    },
+    "skill-maker": {
+      "source": "Noisemaker111/JonsOCsetup",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/Noisemaker111/JonsOCsetup.git",
+      "skillPath": "skills/skill-maker/SKILL.md",
+      "skillFolderHash": "6e5e942d66986f73745bf7e397dfbcee142bdf12",
+      "installedAt": "2026-09-09T22:00:54.463Z",
+      "updatedAt": "2026-09-09T22:00:54.463Z"
     }
   },
   "dismissed": {}

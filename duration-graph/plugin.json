@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "name": "opencode-duration-graph",
+  "description": "Where the live session's wall clock went, as a TUI screen",
+  "tui": "duration-graph/tui-active/duration-graph.tsx",
+  "assets": [
+    "duration-graph/duration-graph.ts",
+    "context-graph/context-graph.ts"
+  ]
+}

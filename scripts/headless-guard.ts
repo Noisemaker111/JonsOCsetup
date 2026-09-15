@@ -10,8 +10,9 @@ const allow = new Set([
   "scripts/production-reliability-probe.ts",
   // The explicit service control uses detached Win32_Process.Create, not a shell window.
   "scripts/restart-opencode.ps1",
-  // Asserts on the restart script's Start-Process text; it spawns nothing itself.
-  "test/v2-runtime-rail.test.ts",
+  // Archived shell-forensics analyzers match command strings; neither starts processes.
+  "setup/files/.agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/scripts/analyze.py",
+  "setup/files/.agents/skills-disabled/2026-09-07-trim/claude/shell-forensics/scripts/extract.py",
 ])
 const extensions = /\.(?:ts|tsx|js|ps1|py|bat|cmd)$/i
 const unsafe = [

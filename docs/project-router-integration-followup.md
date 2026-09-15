@@ -1,3 +1,5 @@
+> Historical record: this is a dated investigation or implementation receipt, not current operating instructions. Its pending work, model choices, commands, and verification counts describe that run. Use the [current documentation](README.md).
+
 # Project-router bounded integration follow-up
 
 ## Scope and capability receipt — 2026-09-08
@@ -12,7 +14,7 @@ The selected OpenAI account was fresh/available (shared window 76% remaining).
 ## Implementation
 
 - Resolved source conflict markers in `models/dispatch-planner.ts`,
-  `quest/continuation.ts`, `quest/tool-schema.mjs`, and `quest/typed-tool.ts`.
+  `quest/continuation.ts`, `quest/operations.mjs`, and `quest/service.ts`.
 - Preserved burn controls, calibration/observed-route checks, parallel admission,
   cancellation, durable request deduplication, workflow tracking/task tags, and
   enriched change evidence. Retained exact selector errors, goal lifecycle and

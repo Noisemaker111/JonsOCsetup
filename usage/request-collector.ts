@@ -75,7 +75,7 @@ export async function installRequestTelemetry(ctx: any, save = recordRequest) {
       const body=await event.request.clone().json()
       const effort=body?.reasoning?.effort??body?.reasoning_effort
       if(typeof effort==="string")record.route.reasoning=effort
-      if(typeof body?.service_tier==="string")record.route.serviceTier=body.service_tier
+      record.route.serviceTier=typeof body?.service_tier==="string"?body.service_tier:"default"
     } catch { /* Missing request route options remain unknown. No request body is retained. */ }
     try { const result = await ctx.session.get({ sessionID: event.sessionID }); const session = result?.data ?? result; record.parentID = session?.parentID; record.questID = session?.metadata?.questID } catch { /* Missing relationship stays unknown. */ }
     try { const worker = questSessionContext(event.sessionID); if (worker) {record.questID ??= worker.questID; record.parentID ??= worker.parentID; record.route.reasoning ??= worker.reasoning; record.route.harness ??= worker.harness} } catch { /* Missing canonical link remains unknown. */ }

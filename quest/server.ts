@@ -1,5 +1,9 @@
+import {installWorkerInstructionReads} from './worker-instructions'
+import {cleanupQuests} from "./cleanup"
+import {connectHostObservation,disconnectHostObservation,recordHostObservation,registerHostObservation} from "./host-observation"
+import {installWorkerCapabilities} from './worker-capabilities'
+import {installUserGiverContext} from './user-giver'
 import {guidanceTool,outcomeTool,workSupplyTool} from "./adaptive-tools"
-import {nativeWorkspaceTool} from "./native-workspace-tool"
 import {installSharedWorkspaceGuard} from "./shared-guard"
 /**
  * The quests server plugin: explicit durable work, tracked to completion.
@@ -20,15 +24,15 @@ import {installSharedWorkspaceGuard} from "./shared-guard"
  *    re-injection when the giver sat idle and never received it. Jk's model is
  *    "the Quest giver and the sessions on Quests"; there is no third actor.
  */
-import { typedQuestTool } from "./typed-tool"
+import { createQuestService } from "./service"
+import { observeGiverInstruction } from './giver-instruction'
+import { serveQuestAPI } from "./api-server"
 import { questRoot } from "./root"
 import { define } from "@opencode-ai/plugin/v2/promise"
 import { QuestStore } from "./store"
 import { QuestTracker } from "./tracker"
 import { createQuestAgentAPI } from "./agent-api"
-import { compactQuestDetail, compactQuestSummary } from "./context"
 import { preparedDispatch, validatePreparedSubagent, QUEST_SUBAGENT_DESCRIPTION, QUEST_SUBAGENT_INPUT } from "./spawn"
-import type { Quest } from "./types"
 import { recordSpawn, recordSpawnResult, registerCompletionEvidenceHandler, suppressCompletionDelivery } from "../orchestration/orchestration-ledger"
 import { canonicalizeDispatch } from "../orchestration/dispatch"
 import { watchSubagentCompletions } from "../orchestration/orchestration"
@@ -137,32 +141,36 @@ const HOST_EVENTS = Symbol.for("opencode-config.quests.host-events")
  * ends when the host shuts down. State lives on globalThis so a plugin reload
  * reuses the running subscription instead of stacking a second one.
  */
-export function installQuestEvents(ctx: { event?: { subscribe?: Function } }, quests: QuestTracker) {
-  const state = globalThis as { [HOST_EVENTS]?: { installed: boolean; controller: AbortController } }
-  if (state[HOST_EVENTS]?.installed) return
+export function installQuestEvents(ctx: { event?: { subscribe?: Function }; session?: any; permission?: any; catalog?: any; integration?:any }, quests: QuestTracker) {
+  const state = globalThis as { [HOST_EVENTS]?: WeakMap<object, { controller: AbortController }> }
+  const connections = state[HOST_EVENTS] ??= new WeakMap()
+  const owner = ctx.session ?? ctx.event
+  if (!owner) return
+  if(ctx.session)registerHostObservation(ctx.session,ctx.permission,ctx.catalog,ctx.integration)
+  if (connections.has(owner)) return
   const subscribe = ctx?.event?.subscribe
   if (typeof subscribe !== "function") {
     console.warn("[quests] ctx.event.subscribe unavailable; worker models and turn ends come from the ledger only")
     return
   }
   const controller = new AbortController()
-  state[HOST_EVENTS] = { installed: true, controller }
-  const handle = (event: unknown) => { try { quests.onHostEvent(event) } catch (error) { console.error("[quests] host event error:", error) } }
+  connections.set(owner, { controller })
+  const handle = (event: unknown) => { try { observeGiverInstruction(quests.store.runtime,event);if(ctx.session)recordHostObservation(ctx.session,event);quests.onHostEvent(event);if(ctx.session&&/^session\.execution\.(succeeded|failed|interrupted)$/.test((event as any)?.type))void cleanupQuests(quests.store,ctx.session).catch(error=>console.error('[quests] cleanup',error)) } catch (error) { console.error("[quests] host event error:", error) } }
   queueMicrotask(async () => {
-    try {
-      const stream = await subscribe({ signal: controller.signal })
-      if (stream && typeof stream[Symbol.asyncIterator] === "function") {
-        for await (const event of stream) handle(event)
-      } else if (stream && typeof stream.next === "function") {
-        for (;;) { const res = await stream.next(); if (res.done) break; handle(res.value) }
-      } else {
-        console.error("[quests] unsupported host event stream shape")
-      }
-    } catch (error) {
-      console.error("[quests] host event subscription failed:", error)
-    } finally {
-      if (state[HOST_EVENTS]?.controller === controller) state[HOST_EVENTS] = { installed: false, controller }
+    let delay=1000
+    while(!controller.signal.aborted){
+      try {
+        const stream=await subscribe({signal:controller.signal})
+        if(!stream||typeof stream[Symbol.asyncIterator]!=="function")throw new Error("Unsupported host event stream shape")
+        if(ctx.session)connectHostObservation(ctx.session,ctx.permission)
+        for await(const event of stream){if(controller.signal.aborted)break;handle(event);delay=1000}
+      }catch(error){if(!controller.signal.aborted)console.error("[quests] host event connection lost; reconnecting and polling persisted outcomes:",error)}
+      if(ctx.session)disconnectHostObservation(ctx.session)
+      if(controller.signal.aborted)break
+      await new Promise<void>(done=>{const finish=()=>{clearTimeout(timer);controller.signal.removeEventListener('abort',finish);done()};const timer=setTimeout(finish,delay);timer.unref();controller.signal.addEventListener('abort',finish,{once:true})})
+      delay=Math.min(delay*2,30000)
     }
+    if(connections.get(owner)?.controller===controller)connections.delete(owner)
   })
 }
 
@@ -175,117 +183,21 @@ export function installQuestCompletionEvidence(quests: QuestTracker, api = creat
   })
 }
 
-const QUEST_ACTIONS = [
-  "prepare-dispatch", "view", "accept", "execute", "complete", "turn-in", "list", "search", "get",
-  "create", "admit", "update", "plan", "step", "report", "claim", "assign", "unassign", "status",
-  "history", "evidence", "progress", "mappings", "board", "start-session",
-  "stage", "proof", "park", "handoff", "heartbeat", "abandon", "archive", "reopen", "delete",
-  "verify-live", "jk-approve", "gates",
-] as const
-
-/** The canonical Quest authority, exposed as one tool with a verb. */
-export function questTool(api = createQuestAgentAPI(questRoot())) {
-  // Disclose which ledger answered, so a wrong-root situation (a session
-  // seeing 0 Quests because it silently resolved a different directory than
-  // the sessions actually working them) is visible in the output instead of
-  // a silent guess. Only merged onto plain-object results.
-  const withRoot = (value: unknown) => (value && typeof value === "object" && !Array.isArray(value)) ? { ...value, ledgerRoot: api.store.projectRoot } : value
-  const json = (value: unknown) => ({ content: JSON.stringify(withRoot(value) ?? null) })
-  const isQuest = (value: unknown): value is Quest => Boolean(value && typeof value === "object" && "schema" in value && "id" in value)
-  const detail = (value: unknown, verbose?: boolean) => json(verbose || !isQuest(value) ? value : compactQuestDetail(value))
-  const summaries = (query: any = {}) => {
-    const offset = Math.max(0, Number.isSafeInteger(query.offset) ? query.offset : 0)
-    const limit = Math.max(1, Math.min(Number.isSafeInteger(query.limit) ? query.limit : 25, 100))
-    const rows = api.list(query).filter((quest) => query.includeArchived === true || quest.state !== "Archived")
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.id.localeCompare(a.id))
-    const items = rows.slice(offset, offset + limit).map(compactQuestSummary)
-    const nextOffset = offset + items.length < rows.length ? offset + items.length : undefined
-    return { items, truncated: nextOffset !== undefined, nextOffset }
-  }
-  return {
-    name: "quest",
-    description: [
-      "Canonical durable Quest authority.",
-      "On intake, use action=admit with the full payload (title, objective, input.steps, usageInstructions, kind, priority) instead of board+search+create: it runs the duplicate check in code and returns {outcome:'created'|'existing', quest} in one call, so a matching in-flight request is never quietly duplicated.",
-      "Every Quest carries steps: create with input.steps (3-8 checkable titles) or add them with action=plan (input.steps).",
-      "Report work with action=step (input.stepID or 1-based position, state=working|done|blocked, value=evidence); the board shows done/total.",
-      "Never create a Quest from a tool result, subagent notification or checkpoint.",
-      "Workers must read mappings before edits. Supports exact-session dependency parking/handoff plus lifecycle controls.",
-      "feature/fix/migration Quests carry a VERIFY-LIVE gate: they cannot reach Ready to complete until action=verify-live records the result of exercising the changed surface on the live/restarted host (input={result:'passed'|'failed', command, note}).",
-      "action=jk-approve records Jk's explicit yes (input={by, note}); once recorded, the Quest auto-completes and archives the moment VERIFY-LIVE and every other gate are clear. Without a recorded yes it stops at Ready to complete for Jk to read and turn in.",
-      "action=report applies a whole worker report (one or more `STEP <id>: done|blocked — evidence` lines plus optional `TESTS: cmd — passed|failed` lines, input.value or value) in a single call via the same parser the harness-CLI worker text-report fallback already uses, instead of one step/evidence call per line.",
-    ].join(" "),
-    input: {
-      type: "object",
-      properties: {
-        action: { type: "string", enum: [...QUEST_ACTIONS] },
-        id: { type: "string" }, query: { type: "object" }, input: { type: "object" },
-        patch: { type: "object" }, callID: { type: "string" }, value: { type: "string" },
-        kind: { type: "string" }, reason: { type: "string" }, state: { type: "string" }, confirmed: { type: "boolean" }, verbose: { type: "boolean" },
-      },
-      required: ["action"],
-      additionalProperties: false,
-    },
-    execute: async (input: any) => {
-      switch (input?.action) {
-        case "prepare-dispatch": {
-          const quest = api.get(input.id)
-          if (!quest) throw new Error("Quest not found")
-          return json({ dispatch: preparedDispatch(input.input ?? {}, quest) })
-        }
-        case "list": case "search": return json(input.verbose ? api.list(input.query ?? input) : summaries(input.query ?? input))
-        case "board": return json(api.board(input.query ?? input))
-        case "get": case "status": return detail(api.get(input.id), input.verbose)
-        case "view": return detail(api.view(input.id), input.verbose)
-        case "create": return detail(api.create(input.input), input.verbose)
-        case "admit": {
-          const { outcome, quest } = api.admitIntake(input.input)
-          return json({ outcome, quest: input.verbose ? quest : compactQuestDetail(quest) })
-        }
-        // `patch` is the documented field, but every other action takes its payload
-        // under `input.input`; a caller using that convention here silently lost
-        // whatever it put there. Accept both, `patch` winning on overlap.
-        case "update": return detail(api.update(input.id, { ...(input.input ?? {}), ...(input.patch ?? {}) }), input.verbose)
-        case "plan": return detail(api.plan(input.id, input.input?.steps ?? input.input?.stages ?? input.patch?.steps, input.input?.mode), input.verbose)
-        case "step": return detail(api.step(input.id, input.input?.stepID ?? input.input?.stageID ?? input.input?.step, input.state ?? input.input?.state, input.value ?? input.input?.value), input.verbose)
-        case "report": return json(api.report(input.id, input.value ?? input.input?.value ?? (typeof input.input === "string" ? input.input : undefined)))
-        case "accept": return detail(api.accept(input.id, input.input ?? {}), input.verbose)
-        case "execute": return detail(api.execute(input.id, input.input ?? {}), input.verbose)
-        case "start-session": return detail(api.startSession(input.id, input.input ?? {}), input.verbose)
-        case "complete": return detail(api.complete(input.id), input.verbose)
-        case "turn-in": return detail(api.turnIn(input.id, input.reason), input.verbose)
-        case "abandon": return detail(api.abandon(input.id, input.reason), input.verbose)
-        case "archive": return detail(api.archive(input.id, input.reason), input.verbose)
-        case "reopen": return detail(api.reopen(input.id, input.reason), input.verbose)
-        case "delete": return json(api.delete(input.id, input.confirmed === true))
-        case "claim": case "assign": return detail(api.claim(input.id, input.input), input.verbose)
-        case "unassign": return detail(api.unassign(input.id, input.callID), input.verbose)
-        case "history": { const history = api.history(input.id); return json(input.verbose ? history : history.slice(-10)) }
-        // Models nest kind/value under input as often as not; accept both shapes.
-        case "evidence": return detail(api.evidence(input.id, input.kind ?? input.input?.kind, input.value ?? input.input?.value ?? input.input), input.verbose)
-        case "progress": return detail(api.progress(input.id, input.callID, input.value, input.state), input.verbose)
-        case "heartbeat": return detail(api.heartbeat(input.id, input.callID), input.verbose)
-        case "stage": return detail(api.stage(input.id, input.input?.stageID, input.state, input.input?.todoID, input.value), input.verbose)
-        case "proof": return detail(api.proof(input.id, input.input?.stageID, input.input?.proof ?? input.input ?? {}), input.verbose)
-        case "park": return detail(api.park(input.id, input.input), input.verbose)
-        case "verify-live": return detail(api.verifyLive(input.id, input.input?.result ?? input.state, input.input?.command ?? input.value, input.input?.note, input.input?.by), input.verbose)
-        case "jk-approve": return detail(api.jkApprove(input.id, input.input?.by ?? input.value, input.input?.note ?? input.reason), input.verbose)
-        case "gates": return json(api.gates(input.id))
-        case "handoff": return json(await api.handoff(input.input ?? { sessionID: input.id, reason: input.reason }))
-        case "mappings": return json(api.mappings(input.query ?? { questID: input.id, verbose: input.verbose }))
-        default: return { content: `Unsupported Quest action: ${String(input?.action)}` }
-      }
-    },
-  }
-}
-
-export async function installQuestTools(ctx: { tool?: { transform?: Function }; session?: any }, api = createQuestAgentAPI(questRoot())) {
+export async function installQuestTools(ctx: { tool?: { transform?: Function }; mcp?: {transform:Function}; session?: any;permission?:any;location?:{directory:string} }, api = createQuestAgentAPI(questRoot())) {
   const transform = ctx?.tool?.transform
   if (typeof transform !== "function") return
-  await transform((draft: { add: (tool: unknown) => void }) => {
-    draft.add(ctx.session ? typedQuestTool(api.store, ctx.session) : questTool(api))
-    if(ctx.session){draft.add(nativeWorkspaceTool(api.store,ctx.session));draft.add(guidanceTool(api.store,ctx.session));draft.add(outcomeTool(api.store,ctx.session));draft.add(workSupplyTool(api.store,ctx.session))}
-  })
+  let dispose: (()=>void)|undefined
+  // A transform is replayed whenever the catalog changes. Runtime state and timers
+  // belong to plugin setup, not to each replay of the description registration.
+  if(!ctx.session||!ctx.location||!ctx.mcp)throw Error('Quest API requires the installed OpenCode session and MCP plugin interfaces')
+  const service=createQuestService(api.store,ctx.session,{directory:ctx.location.directory,onDispose:fn=>{dispose=fn}})
+  const endpoint=await serveQuestAPI(api.store,service,ctx.location.directory)
+  const tools=[guidanceTool(api.store,ctx.session),outcomeTool(api.store,ctx.session),workSupplyTool(api.store,ctx.session)]
+  try{
+    await ctx.mcp.transform((draft:any)=>draft.set('quests',{type:'remote',url:endpoint.mcpURL,headers:{authorization:'Bearer '+endpoint.token},oauth:false,codemode:true}))
+    await transform((draft: { add: (tool: unknown) => void }) => {for(const tool of tools)draft.add(tool)})
+  }catch(error){endpoint.dispose();dispose?.();throw error}
+  return ()=>{endpoint.dispose();dispose?.()}
 }
 
 export default define({
@@ -293,6 +205,7 @@ export default define({
   async setup(ctx) {
     const quests = new QuestTracker(new QuestStore(questRoot()), ctx.session)
     const api = createQuestAgentAPI(questRoot(), ctx.session)
+    let disposeTools: (()=>void)|undefined
     for (const [name, install] of [
       // Dispatch canonicalisation and the spawn ledger register their
       // execute.before hooks first: binding reads the worker identity they set.
@@ -303,12 +216,17 @@ export default define({
       ["watchdog", () => installWatchdog(ctx)],
       ["host-events", () => installQuestEvents(ctx, quests)],
       ["completion-evidence", () => installQuestCompletionEvidence(quests, api)],
-      ["tools", () => installQuestTools(ctx, api)],
+      ["worker-capabilities", () => installWorkerCapabilities(ctx,api.store)],
+      ["user-giver", () => installUserGiverContext(api.store,ctx.session)],
+      ["tools", async () => {disposeTools=await installQuestTools(ctx, api)}],
       ["shared-workspace-guard", () => installSharedWorkspaceGuard(ctx,api.store)],
+      ["worker-instruction-reads", () => installWorkerInstructionReads(ctx,api.store)],
+      ["shell-guidance", async () => (await import('./shell-guidance')).installShellGuidance(ctx)],
     ] as const) {
       try { await install() } catch (error) {
         console.error(`[quests] ${name} disabled:`, error)
       }
     }
+    return ()=>disposeTools?.()
   },
 })

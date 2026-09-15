@@ -26,10 +26,9 @@ export const claudeCode: HarnessSpec = {
   ],
   // --session-id names a new session; --resume continues one we already know.
   // Passing the wrong one for the state is how "session not found" happens.
-  args: ({ model, sessionId, resumed, mcpConfigPath }) => [
+  args: ({ model, sessionId, resumed }) => [
     "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
     "--permission-mode", "bypassPermissions",
-    ...(mcpConfigPath ? ["--mcp-config", mcpConfigPath] : []),
     ...(model ? ["--model", model] : []),
     ...(sessionId ? [resumed ? "--resume" : "--session-id", sessionId] : []),
   ],
