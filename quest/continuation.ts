@@ -12,7 +12,9 @@ import { redact } from './privacy'
 import type { Quest, QuestStage } from './types'
 import {dispatchReservationFile} from '../models/dispatch-planner'
 import { verifySourceBinding } from './project'
-function verified(q:Quest,s:QuestStage){const command=(q.extensions.routerVerification as Record<string,string>|undefined)?.[s.id]??s.commandID;return !!command&&s.proofs.some(p=>p.command===command&&p.verified===true&&(p.result==='passed'||p.verdict==='PASS'))}
+// A bound command is a verification contract. An ordinary worker step does not
+// acquire an unspecified command requirement merely because it belongs to a goal.
+function verified(q:Quest,s:QuestStage){const command=(q.extensions.routerVerification as Record<string,string>|undefined)?.[s.id]??s.commandID;return !command||s.proofs.some(p=>p.command===command&&p.verified===true&&(p.result==='passed'||p.verdict==='PASS'))}
 const verificationSnapshot=(q:Quest,ids:string[])=>Object.fromEntries(ids.map(id=>[id,(q.extensions.routerVerification as Record<string,string>|undefined)?.[id]??q.stages.find(s=>s.id===id)?.commandID??null]))
 
 export type ContinuationRunOptions = RunQuest & { maxConcurrent?:number; stepModels?:Record<string,string> }
@@ -24,7 +26,7 @@ const active = (state:string)=>['planned','executing','waiting','blocked'].inclu
 export class QuestContinuation {
   readonly file:string
   private liveGoals=new Set<string>()
-  constructor(readonly store:QuestStore,readonly start:StartRun,readonly options:{runtimeGeneration?:string;goalMode?:boolean;routeBinding?:(selector:string)=>GoalRoute;workerPrompt?:(context:QuestContext,text:string,id:string,eventID?:string)=>Promise<void>;refresh?:typeof getAccountUsage;now?:()=>number;verifyContext?:(context:QuestContext)=>Promise<void>}={}) {this.file=runtimeQueuePath(store.runtime,'continuations',options.runtimeGeneration,'.json')}
+  constructor(readonly store:QuestStore,readonly start:StartRun,readonly options:{runtimeGeneration?:string;goalMode?:boolean;routeBinding?:(selector:string)=>GoalRoute|Promise<GoalRoute>;workerPrompt?:(context:QuestContext,text:string,id:string,eventID?:string)=>Promise<void>;refresh?:typeof getAccountUsage;now?:()=>number;verifyContext?:(context:QuestContext)=>Promise<void>}={}) {this.file=runtimeQueuePath(store.runtime,'continuations',options.runtimeGeneration,'.json')}
  private now(){return this.options.now?.()??Date.now()}
  private read():Intent[]{return existsSync(this.file)?JSON.parse(readFileSync(this.file,'utf8')):[]}
  private change<T>(fn:(rows:Intent[])=>T):T {const lock=acquireLock(this.store.runtime,'continuations');try{const rows=this.read(),result=fn(rows);mkdirSync(this.store.runtime,{recursive:true});const tmp=this.file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(rows));renameSync(tmp,this.file);return result}finally{lock.release()}}
@@ -67,7 +69,7 @@ export class QuestContinuation {
     if(row.verification&&JSON.stringify(row.verification)!==JSON.stringify(verificationSnapshot(q,row.steps.map(s=>s.id)))){stop('Verification contract changed; explicitly start a newly authorized goal');return}
     if(steps.some(s=>s.status==='blocked')){stop('Assigned step blocked; inspect its result');return}
     if(steps.some(s=>s.status==='done'&&!verified(q,s))){stop('Assigned result lacks a verified passing proof for its verification contract');return}
-    if(steps.every(s=>s.status==='done')){row.state='done';row.reason='Assigned verification passed';return}
+    if(steps.every(s=>s.status==='done')){row.state='done';row.reason='Assigned steps completed';return}
     if(row.attempt>=3){stop('Bounded worker goal turn budget exhausted; explicit resume after review required');return}
     row.state='claiming';claimed=structuredClone(row)
    })
@@ -110,7 +112,7 @@ export class QuestContinuation {
   if(!ids.length||ids.some(id=>!q.steps.some(s=>s.id===id&&s.state==='pending')))throw new QuestError('NO_ELIGIBLE_STEPS','Continuation requires pending authorized steps')
   if(input.stepModels!==undefined&&(!input.stepModels||typeof input.stepModels!=='object'||Array.isArray(input.stepModels)||Object.entries(input.stepModels).some(([id,model])=>!ids.includes(id)||typeof model!=='string'||!model.trim())))throw new QuestError('INVALID_INPUT','stepModels must map authorized step IDs to explicit models')
   if(this.options.goalMode&&ids.some(id=>!this.store.read(questID)!.stages.find(s=>s.id===id)?.commandID&&!input.stepModels?.[id])&&!input.model)throw new QuestError('EXPLICIT_MODEL_REQUIRED','Continuation requires an explicit model for worker steps')
-  const route=this.options.goalMode&&input.model?this.options.routeBinding?.(input.model):undefined
+  const route=this.options.goalMode&&input.model?await this.options.routeBinding?.(input.model):undefined
   this.change(rows=>{const prior=rows.find(x=>x.id===id);if(prior){if(!sameRequest(prior))throw new QuestError('REQUEST_CONFLICT','This continuation request already authorized different work');return;}if(readContinuations(this.store.runtime).some(x=>(x.questID===questID||this.options.goalMode&&x.goal&&x.context.sessionID===context.sessionID)&&!['done','stopped'].includes(x.state)))throw new QuestError('CONTINUATION_EXISTS','Inspect or cancel the existing continuation before replacing its authorization');rows.push({requestFingerprint,...(input.maxConcurrent!==undefined||input.stepModels?{maxConcurrent:input.maxConcurrent??1,stepModels:input.stepModels,admissions:[]}:{}),id,goal:this.options.goalMode===true,route,verification:this.options.goalMode?verificationSnapshot(this.store.read(questID)!,ids):undefined,questID,description:q.description,context,readOnly:input.readOnly,task:input.task,model:input.model,files:input.files,steps:q.steps.filter(s=>ids.includes(s.id)).map(s=>({id:s.id,title:s.title,detail:s.detail,needs:s.needs})),state:'waiting',attempt:0,refreshes:0,nextAt:0,reason:'Explicitly authorized continuation'})})
   if(this.options.goalMode)this.liveGoals.add(id)
   await this.tick();return {continuation:this.status(questID).find(x=>x.id===id)}

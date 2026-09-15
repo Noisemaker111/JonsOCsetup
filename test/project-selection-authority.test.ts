@@ -3,7 +3,7 @@
  * @core-observed Installed project_select accepted an unsupported directory field, returned clarify, then quest create saved in the fallback project. Router plugin storage and giver registry independently owned selection (2026-09-12).
  */
 import {test,expect} from 'bun:test'
-import {mkdtempSync,mkdirSync,rmSync} from 'node:fs'
+import {mkdtempSync,mkdirSync,rmSync,realpathSync} from 'node:fs'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {QuestStore} from '../quest/store'
@@ -13,6 +13,8 @@ import {RouterMemory} from '../project-router/memory'
 import {verifyTarget,resolveTargets} from '../project-router/resolution'
 import {installProjectRouter} from '../project-router/server'
 import {DiscoveryHost} from '../project-router/host'
+import {QuestContinuation} from '../quest/continuation'
+import {questsAPI} from '../quest/api'
 const sessionID='ses_selectioncheck'
 const fixture=()=>{
  const root=mkdtempSync(join(tmpdir(),'selection-authority-')),prior=process.env.OPENCODE_QUEST_ROOT
@@ -23,6 +25,49 @@ const fixture=()=>{
  const data=new Map<string,any>(),storage={get:async(k:string)=>data.get(k),set:async(k:string,v:any)=>{data.set(k,v)}}
  return {root,a,b,store,session,data,storage,close:()=>{if(prior===undefined)delete process.env.OPENCODE_QUEST_ROOT;else process.env.OPENCODE_QUEST_ROOT=prior;rmSync(root,{recursive:true,force:true})}}
 }
+test('registered prompt hook preserves goals for automatic notices and pauses on user steering',async()=>{
+ const f=fixture();let dispose:(()=>void)|undefined
+ try{
+  const project=verifyTarget(f.root),runID='notice-worker'
+  const context={sessionID,requestID:'goal-start',directory:f.root,project} as any
+  const {id}=questsAPI(f.store,context,async()=>({sessionID})).create({title:'Keep pursuing the assigned work',description:'Preserve the goal while handling automatic notices',steps:[{id:'work',title:'Complete assigned work'}]})
+  f.store.apply(id,'session-claimed',{callID:runID,runID,sessionID,role:'worker',deliverables:['work']},'test')
+  f.store.apply(id,'session-state',{callID:runID,state:'executing'},'test')
+  const continuation=new QuestContinuation(f.store,async()=>({sessionID}) as any,{goalMode:true})
+  continuation.startWorkerGoal(id,['work'],context,'configured/model#effort')
+  let prompt:Function|undefined
+  dispose=await installProjectRouter({storage:f.storage,tool:{transform:async()=>{}},session:{get:async()=>f.session,create:async()=>{},prompt:async()=>{},hook:async(name:string,fn:Function)=>{if(name==='prompt')prompt=fn}}},new DiscoveryHost('unused',async()=>{throw Error('No discovery needed')}))
+  for(const flag of ['questWorkerReturn','questWorkerPermission','questReview','projectRouterGoal','projectRouterReturn']){
+   await prompt!({sessionID,metadata:{[flag]:true}})
+   expect(continuation.goalStatus(sessionID)[0].state).toBe('running')
+  }
+  await prompt!({sessionID,metadata:{questWorkerPermission:false}})
+  expect(continuation.goalStatus(sessionID)[0].state).toBe('stopped')
+ }finally{dispose?.();f.close()}
+})
+test('worker goals require bound verification but do not invent a command contract',async()=>{
+ for(const bound of [false,true]){
+  const f=fixture()
+  try{
+   const context={sessionID,requestID:'completion',directory:realpathSync.native(f.root),project:verifyTarget(f.root)} as any
+   const {id}=questsAPI(f.store,context,async()=>({sessionID})).create({title:'Save the assigned result',description:'Record the completed native operation',steps:[{id:'work',title:'Complete assigned work'}]})
+   if(bound)f.store.apply(id,'patched',{extensions:{...f.store.read(id)!.extensions,routerVerification:{work:'configured-check'}}},'test')
+   f.store.apply(id,'session-claimed',{callID:'run',runID:'run',sessionID,role:'worker',deliverables:['work']},'test')
+   const goal=new QuestContinuation(f.store,async()=>({sessionID}),{goalMode:true})
+   goal.startWorkerGoal(id,['work'],context,'configured/model#effort')
+   f.store.apply(id,'stage-state',{stageID:'work',status:'done',evidence:'Actual operation completed'},'test')
+   f.store.apply(id,'session-state',{callID:'run',state:'completed'},'test')
+   await goal.workerEvent(sessionID,'terminal',true)
+   expect(goal.goalStatus(sessionID)[0].state).toBe(bound?'stopped':'done')
+   if(bound){
+    f.store.apply(id,'proof-added',{stageID:'work',proof:{id:'proof',command:'configured-check',verified:true,result:'passed',at:new Date().toISOString(),attempt:1}},'test')
+    await goal.resumeGoal(context)
+    expect(goal.goalStatus(sessionID)[0].state).toBe('done')
+   }
+  }finally{f.close()}
+ }
+})
+
 test('registered router tools return JSON values when discovery has optional nested fields',async()=>{
  const f=fixture();let dispose:(()=>void)|undefined
  try{

@@ -6,25 +6,24 @@ import { questRoot } from './root'
 import { projectIdentity, physicalDirectory, verifySourceBinding } from './project'
 import type { QuestHost } from './runtime'
 import { questDispatch } from './dispatch'
-import { configuredDispatchPolicyFile, resolveDispatchSelector, dispatchReservationFile } from '../models/dispatch-planner'
+import { configuredDispatchPolicyFile, dispatchReservationFile } from '../models/dispatch-planner'
 import { QuestError } from './api'
 import { routerWorker } from './router-public'
 import { configuredCommand, runKnownCommand } from './command-runtime'
 import { join } from 'node:path'
-import { readFileSync } from 'node:fs'
+import { goalRoute } from './goal-route'
 import { RouteReservations } from '../models/route-reservations'
 import { retainGoalTerminal, finishGoalTerminal, consumeGoalTerminal } from './goal-lifecycle'
 
 export function createGoalFacade(host: QuestHost) {
   const store = new QuestStore(questRoot())
-  const policy=()=>JSON.parse(readFileSync(configuredDispatchPolicyFile(),'utf8'))
-  const binding=(selector:string)=>{const result=resolveDispatchSelector(policy(),selector);if(!result.route)throw new QuestError(result.code,'Select an exact authorized route from project_route_status');const r=result.route;return {routeID:r.id,accountID:r.accountID,providerID:r.providerID,modelID:r.modelID,reasoning:r.reasoning,serviceTier:r.serviceTier}}
+  const binding=goalRoute
   const { start } = questDispatch(store, host)
   const continuation = new QuestContinuation(store, start, { goalMode: true, routeBinding:binding, verifyContext: async context => {
     const result = await host.get({ sessionID: context.sessionID }), session = result?.data ?? result
     verifyGiverBinding(store,context,session)
     const row=continuation.goalStatus(context.sessionID).at(-1)
-    if(row?.model){const route=binding(row.route?'route:'+row.route.routeID:row.model)
+    if(row?.model){const route=await binding(row.route?'route:'+row.route.routeID:row.model,row.route)
       if(row.route&&JSON.stringify(route)!==JSON.stringify(row.route))throw new QuestError('GOAL_ROUTE_CHANGED','Authorized account/service route changed')
       if(row.worker&&(session.model?.providerID!==route.providerID||session.model?.id!==route.modelID||session.model?.variant!==route.reasoning))throw new QuestError('GOAL_ROUTE_CHANGED','Explicit model/reasoning changed; inspect before resuming')
       if(row.worker){const run=store.read(row.questID)?.sessions.findLast(s=>s.openCodeSessionId===context.sessionID||s.sessionID===context.sessionID),reservation=run?.runID?new RouteReservations(dispatchReservationFile(store.runtime)).get(run.runID):undefined;if(!reservation||reservation.state!=='active'||reservation.accountID!==route.accountID||reservation.routeID!==route.routeID)throw new QuestError('GOAL_RESERVATION_CHANGED','Worker account ownership is no longer active')}
@@ -64,8 +63,8 @@ export function createGoalFacade(host: QuestHost) {
         if(!session.model?.variant)throw new QuestError('EXPLICIT_MODEL_REQUIRED','Select an explicit model/reasoning route')
         const q=store.read(input.questID??worker[0].questID),run=q?.sessions.findLast(s=>s.openCodeSessionId===trusted.sessionID||s.sessionID===trusted.sessionID),reservation=run?.runID?new RouteReservations(dispatchReservationFile(store.runtime)).get(run.runID):undefined
         if(!reservation||reservation.state!=='active')throw new QuestError('GOAL_RESERVATION_REQUIRED','Worker goal requires its live canonical route/account reservation')
-        const route=binding('route:'+reservation.routeID)
-        if(route.accountID!==reservation.accountID)throw new QuestError('GOAL_ROUTE_CHANGED','Reserved account differs from authorized route')
+        const route=await binding(model)
+        if(route.accountID!==reservation.accountID||route.routeID!==reservation.routeID)throw new QuestError('GOAL_ROUTE_CHANGED','Reserved account/service route differs from authorized route')
         const result=continuation.startWorkerGoal(input.questID??worker[0].questID,input.stepIDs??worker[0].stepIDs,context,model,route);retainGoalTerminal(store.runtime,trusted.sessionID);return result
       }
       if (input.action === 'status') return {trigger,goals:continuation.goalStatus(trusted.sessionID),pauseSemantics:'Worker pause retains its current workspace/account ownership for verified same-session resume; cancel releases after the observed terminal event. No new turns while paused.'}
