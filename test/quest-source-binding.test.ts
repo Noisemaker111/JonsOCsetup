@@ -11,6 +11,7 @@ import {editingSource,workerLedgerProject} from '../quest/source-binding'
 import {projectIdentity,physicalDirectory} from '../quest/project'
 import {QuestStore} from '../quest/store'
 import {QuestWorkspaces} from '../quest/workspaces'
+import {guidanceTool} from '../quest/adaptive-tools'
 
 test('research uses the reviewed repository, retains hub ledger identity and rejects a changed binding',()=>{
  const root=physicalDirectory(mkdtempSync(join(tmpdir(),'quest-hub-')))
@@ -35,5 +36,31 @@ test('research uses the reviewed repository, retains hub ledger identity and rej
   expect(()=>editingSource({project,directory:hub},policy,undefined,{readOnly:true})).toThrow('identity changed')
   writeFileSync(policy,JSON.stringify({sourceByProject:{}}))
   expect(editingSource({project,directory:hub},policy,undefined,{readOnly:true}).source).toBe(physicalDirectory(hub))
+ }finally{rmSync(root,{recursive:true,force:true})}
+})
+
+// September 15: the real self-saving worker resumed in its owned checkout, but
+// quest_guidance acknowledgement rejected the checkout as another project.
+test('guidance acknowledges through the native tool using the verified worker ledger project',async()=>{
+ const root=physicalDirectory(mkdtempSync(join(tmpdir(),'quest-guidance-binding-')))
+ try{
+  const hub=join(root,'hub'),repo=join(root,'repo');mkdirSync(hub);mkdirSync(repo)
+  expect(spawnSync('git',['init',repo],{windowsHide:true}).status).toBe(0)
+  const project=projectIdentity(hub),store=new QuestStore(hub)
+  const q=store.create({id:'b'.repeat(26),title:'Acknowledge delivered guidance',objective:'Keep worker and ledger identity bound',project,integrationOwner:'giver',stages:[]})
+  new QuestWorkspaces(store.runtime).createResearch({runID:'guided',questID:q.id,directory:repo,project:projectIdentity(repo)})
+  store.apply(q.id,'session-claimed',{callID:'guided',runID:'guided',sessionID:'worker',parentID:'giver',runtime:'native',state:'executing',model:'provider/model#high',scope:{worktree:repo,readOnly:true}},'check')
+  let workerDirectory=repo
+  const host={get:async({sessionID}:{sessionID:string})=>({id:sessionID,location:{directory:sessionID==='giver'?hub:workerDirectory},model:{providerID:'provider',id:'model',variant:'high'},agent:'worker'}),prompt:async(input:any)=>({id:input.id,sessionID:input.sessionID})}
+  const tool=guidanceTool(store,host as any)
+  const sent=(await tool.execute({action:'send',questID:q.id,runID:'guided',text:'Read the existing evidence.'},{sessionID:'giver',id:'send'})).output
+  expect(sent.state).toBe('submitted')
+  await expect(tool.execute({action:'acknowledge',questID:q.id,guidanceID:sent.id},{sessionID:'stranger',id:'foreign'})).rejects.toThrow()
+  workerDirectory=root
+  await expect(tool.execute({action:'acknowledge',questID:q.id,guidanceID:sent.id},{sessionID:'worker',id:'moved'})).rejects.toThrow('binding changed')
+  workerDirectory=repo
+  expect((await tool.execute({action:'acknowledge',questID:q.id,guidanceID:sent.id},{sessionID:'worker',id:'ack'})).output.state).toBe('acknowledged')
+  const reopened=guidanceTool(new QuestStore(hub),host as any)
+  expect((await reopened.execute({action:'status',questID:q.id},{sessionID:'worker',id:'reopen'})).output.guidance[0].state).toBe('acknowledged')
  }finally{rmSync(root,{recursive:true,force:true})}
 })
