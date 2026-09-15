@@ -1,5 +1,5 @@
 import {hostExecution,hostPermissions} from "./host-observation"
-import {interruptedPreflight} from './dispatch-intent'
+import {interruptedPreflight,interruptedBoundDispatch} from './dispatch-intent'
 import { observeWorker, observationFailure, boundedInspection } from './worker-observation.mjs'
 import { terminalStepUpdates } from './session-lineage'
 import { QuestTracker } from './tracker'
@@ -58,6 +58,10 @@ async function reconcile(store:QuestStore,host:any,questID:string) {
   // Only the preflight receipt above can settle an interrupted unbound launch.
   if(run.permissionDecisions?.some(d=>d.reply==='reject'&&d.state==='acknowledged'))try{await tracker.settlePermissionRejection(entry.quest!.id,run.runID!,host)}catch(error){observations[run.runID??run.callID]=observationFailure(error);continue}
   const currentRun=store.read(entry.quest!.id)?.sessions.find(s=>s.callID===run.callID)??run
+  const boundID=currentRun.openCodeSessionId??currentRun.sessionID
+  if(currentRun.state==='planned'&&boundID&&interruptedBoundDispatch(store.runtime,currentRun.runID??currentRun.callID,boundID)){
+   try{if(await tracker.settleInterruptedDispatch(entry.quest!.id,currentRun.runID??currentRun.callID,host)){observations[run.runID??run.callID]={state:'failed',reason:'Exited dispatch owner; owning host confirmed an empty idle session'};continue}}catch(error){observations[run.runID??run.callID]=observationFailure(error);continue}
+  }
   const observation=await inspectWorker(host,currentRun);observations[run.runID??run.callID]=observation
   if(observation.outcome&&observation.completedAt&&Date.parse(observation.completedAt)>=Date.parse(run.updatedAt))tracker.onHostEvent({type:'session.execution.'+observation.outcome,data:{sessionID:run.openCodeSessionId??run.sessionID,observedAt:observation.completedAt}})
  }
