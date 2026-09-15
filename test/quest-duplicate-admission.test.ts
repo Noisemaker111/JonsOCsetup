@@ -78,7 +78,7 @@ test('one unresolved Quest owns a request: a reworded retry is refused, other wo
  }finally{rmSync(root,{recursive:true,force:true})}
 })
 
-test('a dispatch that never bound a worker is settled, so the retry is another run of the same Quest',async()=>{
+test('a lost creation response stays protected until dispatch evidence proves whether work started',async()=>{
  const root=mkdtempSync(join(tmpdir(),'quest-dispatch-'))
  try{
   const store=new QuestStore(root)
@@ -86,11 +86,11 @@ test('a dispatch that never bound a worker is settled, so the retry is another r
   const transportFailure=async()=>{throw new Error('transport reset before the host answered')}
   await expect(questsAPI(store,context('call-2'),transportFailure as any).run(quest.id)).rejects.toThrow('call action=run on Quest '+quest.id)
   expect(store.read(quest.id)!.sessions.at(-1)!.state).toBe('planned')
-  // Left planned the step is ineligible forever, and a fresh duplicate Quest is the only move left.
+  // Missing response identity is uncertainty, not evidence of a failed creation.
   await expect(questsAPI(store,context('call-3'),started).run(quest.id)).rejects.toThrow('already has an active run')
   await reconcileWorkers(store,{get:async()=>undefined})
-  expect(store.read(quest.id)!.sessions.at(-1)!.state).toBe('failed')
-  expect((await questsAPI(store,context('call-4'),started).run(quest.id)).sessionID).toBe('ses_worker')
+  expect(store.read(quest.id)!.sessions.at(-1)!.state).toBe('planned')
+  await expect(questsAPI(store,context('call-4'),started).run(quest.id)).rejects.toThrow('already has an active run')
   expect(readAllQuests(root).length).toBe(1)
   // A recovered Markdown snapshot can lag its journal (including the created event).
   // It must not poison reconciliation, and thereby every later native dispatch.
