@@ -40,7 +40,7 @@ export function toolDetail(q: Quest, continuations: any[] = []) {
       const reason = step.status === 'done' ? 'Already done' : owners.length ? 'Owned by an active or unconfirmed run'
         : continuation ? 'Owned by a continuation' : dependencies.length ? 'Dependencies unfinished'
         : step.status !== 'pending' ? 'Review the saved note and outcome before returning this step to pending' : undefined
-      return { id: step.id, title: step.title, state: step.status, detail: step.detail, note: step.note,
+      return { id: step.id, title: step.title, state: step.status, detail: step.detail, note: step.note, commandID: step.commandID,
         needs: step.needs, ready: !reason, blockedBy: reason,
         runs: owners.map(outcome), lastOutcome: latest ? outcome(latest) : undefined }
     }),
