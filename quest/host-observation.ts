@@ -12,7 +12,9 @@ export function registerHostObservation(host: object, permission?: any, catalog?
 }
 /** Account discovery is machine-wide; inference must use this host's active integrations. */
 export async function hostModelIdentities(host:object):Promise<string[]> {
- const catalog=hosts.get(host)?.catalog
+ return availableModelIdentities(hosts.get(host)?.catalog)
+}
+export async function availableModelIdentities(catalog:any):Promise<string[]> {
  if(typeof catalog?.model?.list!=='function')throw Error('Connected host model catalog is unavailable; no reviewer dispatched')
  const response=await catalog.model.list(),models=response?.data??response
  if(!Array.isArray(models))throw Error('Connected host returned an invalid model catalog; no reviewer dispatched')
