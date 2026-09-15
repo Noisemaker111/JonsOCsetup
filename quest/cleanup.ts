@@ -60,7 +60,25 @@ export function installQuestCleanup(store:QuestStore,host:object){
  const existing=watching.get(host);if(existing)return existing
  const root=join(store.projectRoot,'.opencode');mkdirSync(root,{recursive:true})
  const gitWatchers=new Set<string>(),watchedRoots=new Set<string>(),mergeWatchers=new Set<ReturnType<typeof watch>>()
- const watchMerges=()=>{const dir=join(store.runtime,'workspaces');for(const file of existsSync(dir)?readdirSync(dir):[]){if(!file.endsWith('.json'))continue;try{const w=JSON.parse(readFileSync(join(dir,file),'utf8'));if(w.mode==='research'||watchedRoots.has(w.root)||!existsSync(w.root))continue;const common=resolve(w.root,git(w.root,['rev-parse','--git-common-dir']));if(gitWatchers.has(common)){watchedRoots.add(w.root);continue}const watcher=watch(common,{recursive:true},(_,file)=>{if(file&&/^(refs[/\\]|packed-refs$)/.test(String(file)))trigger()});mergeWatchers.add(watcher);watcher.unref();watcher.on('error',e=>console.error('[quests] merge cleanup watcher',e));gitWatchers.add(common);watchedRoots.add(w.root)}catch(e){console.error('[quests] cleanup watch',e)}}}
+ /**
+  * Only this repository's own refs decide whether a merge happened.
+  *
+  * Watching the whole common directory recursively also subscribed every `worktrees/<name>`
+  * administrative tree -- 237 of them on this machine, across two checkouts -- and then discarded
+  * everything they produced, because a per-worktree path arrives as `worktrees\<name>\refs\...`
+  * and never matched the refs pattern. The subscriptions were the entire cost.
+  */
+ const watchRefs=(common:string)=>{
+  const refs=join(common,'refs'),watchers:ReturnType<typeof watch>[]=[]
+  if(existsSync(refs))watchers.push(watch(refs,{recursive:true},()=>trigger()))
+  watchers.push(watch(common,{recursive:false},(_,file)=>{if(String(file??'')==='packed-refs')trigger()}))
+  return watchers
+ }
+ const watchMerges=()=>{const dir=join(store.runtime,'workspaces');for(const file of existsSync(dir)?readdirSync(dir):[]){if(!file.endsWith('.json'))continue;let root:string|undefined;try{const w=JSON.parse(readFileSync(join(dir,file),'utf8'));if(w.mode==='research'||watchedRoots.has(w.root)||!existsSync(w.root))continue;root=w.root;const common=resolve(w.root,git(w.root,['rev-parse','--git-common-dir']));if(gitWatchers.has(common))continue;for(const watcher of watchRefs(common)){mergeWatchers.add(watcher);watcher.unref();watcher.on('error',e=>console.error('[quests] merge cleanup watcher',e))}gitWatchers.add(common)}catch(e){console.error('[quests] cleanup watch',e)}
+  // One probe per root per host, whatever the probe did. A workspace root outside any repository
+  // failed here on every trigger and spawned git again each time; that retry belongs to the next
+  // host start, not to a loop driven by the cleanup it keeps waking.
+  finally{if(root)watchedRoots.add(root)}}}
  let pending:ReturnType<typeof setTimeout>|undefined
  const trigger=()=>{if(pending)return;pending=setTimeout(()=>{pending=undefined;watchMerges();void cleanupQuests(store,host).catch(e=>console.error('[quests] cleanup',e))},100);pending.unref()}
  const watcher=watch(root,{recursive:true},(_,file)=>{if(file&&/^quests(?:-archive)?[/\\].*\.md$/.test(String(file)))trigger()});watcher.unref();watcher.on('error',e=>console.error('[quests] cleanup watcher',e))
