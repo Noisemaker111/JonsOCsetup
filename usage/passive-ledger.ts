@@ -88,7 +88,7 @@ export async function collectPassive(options:{file?:string;root?:string;hostDB?:
  })()}finally{db.close()}
  if(!claimed)return {collected:false}
  try {
-  const from=Math.max(0,now-7*86400000,previous===null||parserVersion<2?0:previous-5*60000)
+  const from=Math.max(0,now-7*86400000,previous===null||parserVersion<3?0:previous-5*60000)
   const harvest=harvestCodexUsage({root:options.root,from,now}),stored=options.records?{records:options.records,diagnostics:[]}:readRequests()
   // Quota refresh shares the existing account cache and provider backoff across processes.
   await (options.accounts?Promise.resolve(options.accounts):getAccountUsage())
@@ -96,7 +96,7 @@ export async function collectPassive(options:{file?:string;root?:string;hostDB?:
   const nativeHost=readHostCounters({file:options.hostDB,from:Math.max(0,now-7*86400000,hostPrevious===null?0:hostPrevious-5*60000),to:now})
   const rows=[...ledgerRows(stored.records),...nativeHost.rows]
   for(const s of harvest.sessions)for(const p of s.points)rows.push({id:"codex:"+hash([s.id,p.at,p.model,p.tokens]),source:"codex",sessionID:s.id,parentID:s.parentID,at:p.at,startedAt:p.at,route:{providerID:"openai",modelID:p.model,reasoning:p.reasoning??undefined,harness:"codex"},kind:s.source,state:"completed",tokens:p.tokens})
-  const receipt={at:now,from,parserVersion:2,hostScanAt:nativeHost.available?now:hostPrevious,scannedFiles:harvest.scannedFiles,readFiles:harvest.readFiles,...harvest.coverage,calibrationDiagnostics:[...harvest.diagnostics,...stored.diagnostics,...(harvest.coverage.malformedLines?["Malformed rollout lines leave calibration coverage incomplete"]:[])],diagnostics:[...(previous!==null&&now-previous>7*86400000?["Collector outage exceeds seven-day backfill; earlier activity may be missing"]:[]),...harvest.diagnostics,...stored.diagnostics,...nativeHost.diagnostics,...(harvest.coverage.malformedLines?["Malformed rollout lines leave collection coverage incomplete"]:[])]}
+  const receipt={at:now,from,parserVersion:3,hostScanAt:nativeHost.available?now:hostPrevious,scannedFiles:harvest.scannedFiles,readFiles:harvest.readFiles,...harvest.coverage,calibrationDiagnostics:[...harvest.diagnostics,...stored.diagnostics,...(harvest.coverage.malformedLines?["Malformed rollout lines leave calibration coverage incomplete"]:[])],diagnostics:[...(previous!==null&&now-previous>7*86400000?["Collector outage exceeds seven-day backfill; earlier activity may be missing"]:[]),...harvest.diagnostics,...stored.diagnostics,...nativeHost.diagnostics,...(harvest.coverage.malformedLines?["Malformed rollout lines leave collection coverage incomplete"]:[])]}
   persistLedger({rows,observations,receipt,resolvedCounters:harvest.sessions.flatMap(s=>s.resolvedCounterAt.map(at=>({at,sessionID:s.id}))),gaps:harvest.sessions.flatMap(s=>s.gaps.map(g=>({...g,sessionID:s.id})))},file)
   return {collected:true,receipt}
  } finally {
