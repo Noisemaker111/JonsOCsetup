@@ -1,22 +1,39 @@
-import {existsSync, mkdirSync, readFileSync, readdirSync, realpathSync} from 'node:fs'
+import {existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync} from 'node:fs'
 import {dirname, join, resolve} from 'node:path'
 import {createHash} from 'node:crypto'
 import {createServer} from 'node:net'
 import {spawn} from 'node:child_process'
-import {tmpdir} from 'node:os'
+import {tmpdir, uptime} from 'node:os'
 import {pathToFileURL} from 'node:url'
+import {processSnapshot} from './process-evidence.mjs'
 
 function alive(pid) {
   if(!Number.isSafeInteger(pid)||pid<1)throw Error('Host receipt has an invalid process identity')
-  try {process.kill(pid,0);return true} catch(error){if(error.code==='ESRCH')return false;throw error}
+  try {process.kill(pid,0);return true} catch(error){if(error.code==='ESRCH')return false;if(error.code==='EPERM')return true;throw error}
 }
 function liveHost(questRoot) {
   if(!questRoot)return
   const registry=join(questRoot,'.opencode','.quest-runtime','quest-api')
   if(!existsSync(registry))return
+  const bootedAt=Date.now()-uptime()*1000
+  let snapshot
   for(const name of readdirSync(registry).filter(name=>name.endsWith('.json'))){
-    const row=JSON.parse(readFileSync(join(registry,name),'utf8'))
-    if(alive(row.pid))return row.pid
+    const path=join(registry,name)
+    // Discovery receipts are written when a backend starts. A backend from a
+    // prior boot cannot still own this database, even if its PID was reused.
+    // Preserve the record; current-boot invalid identities still fail closed.
+    const writtenAt=statSync(path).mtimeMs
+    if(writtenAt<bootedAt)continue
+    const row=JSON.parse(readFileSync(path,'utf8'))
+    if(!alive(row.pid))continue
+    snapshot??=processSnapshot()
+    if(snapshot.unavailable)throw Error(`Cannot establish prior host identity: ${snapshot.unavailable}`)
+    const process=snapshot.processes.find(entry=>entry.pid===row.pid)
+    if(!process)continue
+    // POSIX process age is reported in whole seconds; allow its measurement
+    // precision before concluding that a PID belongs to a newer process.
+    if(process.createdAt>writtenAt+1000)continue
+    return row.pid
   }
 }
 /** Windows pipes and Linux abstract sockets expire with their owning process. */

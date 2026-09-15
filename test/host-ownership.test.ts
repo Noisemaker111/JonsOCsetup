@@ -1,11 +1,11 @@
 // @core-prevents Concurrent standalone hosts mutate the same giver conversation and lose tool outputs.
 // @core-observed On September 15 two dev hosts opened the original giver; instructions flipped releases before two missing-tool-output failures.
 import {test,expect} from 'bun:test'
-import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs'
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync,utimesSync,readFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {claimHost} from '../scripts/host-ownership.mjs'
-import {spawnSync} from 'node:child_process'
+import {spawnSync,spawn} from 'node:child_process'
 
 test('a database has one launcher and becomes available after normal release',async()=>{
   const root=mkdtempSync(join(tmpdir(),'oc-host-owner-')),database=join(root,'host.db')
@@ -31,4 +31,29 @@ test('the production Node launcher releases kernel ownership after a process exi
     expect({status:result.status,error:result.error,stderr:result.stderr}).toEqual({status:0,error:undefined,stderr:''})
     expect(result.stdout).toContain('same database reopened')
   }finally {rmSync(root,{recursive:true,force:true})}
+})
+
+test('pre-boot discovery receipts survive recovery while current invalid receipts still block',async()=>{
+  const root=mkdtempSync(join(tmpdir(),'oc-preboot-host-')),questRoot=join(root,'quests'),registry=join(questRoot,'.opencode','.quest-runtime','quest-api'),database=join(root,'host.db')
+  mkdirSync(registry,{recursive:true})
+  const path=join(registry,'old.json'),payload=JSON.stringify({instance:'pre-pid-format',url:'http://127.0.0.1:1',token:'throwaway'})
+  writeFileSync(path,payload);utimesSync(path,new Date(0),new Date(0))
+  const reused=join(registry,'reused.json');writeFileSync(reused,JSON.stringify({version:2,pid:process.pid}));utimesSync(reused,new Date(0),new Date(0))
+  try {
+    const lease=await claimHost({database,questRoot});await lease.release()
+    expect(readFileSync(path,'utf8')).toBe(payload)
+    writeFileSync(path,payload)
+    await expect(claimHost({database,questRoot})).rejects.toThrow('invalid process identity')
+  }finally {rmSync(root,{recursive:true,force:true})}
+})
+
+test('a reused process ID does not own a receipt written before that process started',async()=>{
+  const root=mkdtempSync(join(tmpdir(),'oc-reused-host-')),questRoot=join(root,'quests'),registry=join(questRoot,'.opencode','.quest-runtime','quest-api')
+  mkdirSync(registry,{recursive:true})
+  const script=join(root,'wait.mjs');writeFileSync(script,'process.stdin.resume()')
+  const prior=new Date(Date.now()-2000),child=spawn('node',[script],{windowsHide:true,stdio:['pipe','ignore','pipe']})
+  await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject)})
+  const path=join(registry,'reused.json');writeFileSync(path,JSON.stringify({version:2,pid:child.pid}));utimesSync(path,prior,prior)
+  try {const lease=await claimHost({database:join(root,'host.db'),questRoot});await lease.release();expect(child.exitCode).toBeNull()}
+  finally {const exited=new Promise(resolve=>child.once('exit',resolve));child.stdin.end();await exited;rmSync(root,{recursive:true,force:true})}
 })
