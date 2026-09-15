@@ -3,7 +3,7 @@
  * @core-observed Installed project_select accepted an unsupported directory field, returned clarify, then quest create saved in the fallback project. Router plugin storage and giver registry independently owned selection (2026-09-12).
  */
 import {test,expect} from 'bun:test'
-import {mkdtempSync,mkdirSync,rmSync} from 'node:fs'
+import {mkdtempSync,mkdirSync,rmSync,realpathSync} from 'node:fs'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {QuestStore} from '../quest/store'
@@ -49,7 +49,7 @@ test('worker goals require bound verification but do not invent a command contra
  for(const bound of [false,true]){
   const f=fixture()
   try{
-   const context={sessionID,requestID:'completion',directory:f.root,project:verifyTarget(f.root)} as any
+   const context={sessionID,requestID:'completion',directory:realpathSync.native(f.root),project:verifyTarget(f.root)} as any
    const {id}=questsAPI(f.store,context,async()=>({sessionID})).create({title:'Save the assigned result',description:'Record the completed native operation',steps:[{id:'work',title:'Complete assigned work'}]})
    if(bound)f.store.apply(id,'patched',{extensions:{...f.store.read(id)!.extensions,routerVerification:{work:'configured-check'}}},'test')
    f.store.apply(id,'session-claimed',{callID:'run',runID:'run',sessionID,role:'worker',deliverables:['work']},'test')
