@@ -175,11 +175,14 @@ function retireReleasesLocked(repository){
   if(!existsSync(file)){results.push({root,removed:false,reason:'No release ownership receipt'});continue}
    const release=read(file),legacy=release.schema===1&&release.cleanupProtocol===undefined
    if(release.cleanupProtocol!==1&&!legacy){results.push({root,removed:false,reason:`Unsupported release cleanup protocol: ${release.cleanupProtocol}`});continue}
-  // A release built by trying a branch records the ref it belongs to. Judging it against
-  // origin/agents would keep an unmerged candidate forever, so its own ref decides -- and while it
-  // is still that ref's tip it is what the next try of that branch reuses, so it is kept.
-  const integration=release.integrationRef??'refs/remotes/origin/agents'
-  if(release.integrationRef){
+  // Once a candidate is integrated, its branch tip no longer pins a disposable preparation.
+  // Keep branch reuse for unmerged candidates; ownership, live leases and dirty work still
+  // pass through the same checks below. Missing ancestry evidence never authorizes removal.
+  const deliveredRef='refs/remotes/origin/agents'
+  let delivered=false
+  try{git(repository,['merge-base','--is-ancestor',release.commit,deliveredRef]);delivered=true}catch{}
+  const integration=delivered?deliveredRef:release.integrationRef??deliveredRef
+  if(release.integrationRef&&!delivered){
    let tip;try{tip=git(repository,['rev-parse','--verify',integration+'^{commit}'])}catch{tip=undefined}
    if(tip===release.commit){results.push({root,removed:false,reason:'Still the tip of '+integration+'; the next try of that ref reuses this preparation'});continue}
   }
