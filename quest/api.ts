@@ -182,7 +182,7 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
       try {
         q = getOwned(id)
         const workflow = questWorkflow(q)
-        input = { ...input, model: input.model ?? workflow.model, task: input.task ?? workflow.task }
+        input = { ...input, model: input.model ?? workflow.model, task: input.task ?? workflow.task, readOnly: input.readOnly ?? workflow.readOnly }
         if (q.state === "Archived") throw new QuestError("ARCHIVED", "Reopen the Quest before starting work")
         const prior = q.sessions.find(s => s.runID === runID)
         if (prior) {

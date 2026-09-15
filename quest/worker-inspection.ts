@@ -1,4 +1,5 @@
 import {hostExecution,hostPermissions} from "./host-observation"
+import {interruptedPreflight} from './dispatch-intent'
 import { observeWorker, observationFailure, boundedInspection } from './worker-observation.mjs'
 import { terminalStepUpdates } from './session-lineage'
 import { QuestTracker } from './tracker'
@@ -32,14 +33,14 @@ async function reconcile(store:QuestStore,host:any,questID:string) {
   }
   for(const run of current?.sessions??[]){
   if(!['planned','executing','waiting','blocked'].includes(run.state))continue
-  // A planned run that already reported a dispatch outcome and never bound a worker session has
-  // no identity to observe, so it can never leave 'planned'. Left there it holds its step
-  // ineligible forever, and the only move the Quest still offers is a duplicate of itself.
-  if(run.state==='planned'&&run.result&&!(run.openCodeSessionId??run.sessionID)){
-   observations[run.runID??run.callID]={state:'failed',reason:run.result}
-   store.apply(entry.quest!.id,'session-state',{callID:run.callID,state:'failed',result:run.result,evidence:'Dispatch reported an outcome without binding a worker session; settled as failed so this step can be dispatched again on this Quest'},'quest:reconcile')
+  const interruption=run.state==='planned'&&!(run.openCodeSessionId??run.sessionID)?interruptedPreflight(store.runtime,run.runID??run.callID):undefined
+  if(interruption){
+   observations[run.runID??run.callID]={state:'failed',reason:interruption}
+   store.apply(entry.quest!.id,'session-state',{callID:run.callID,state:'failed',result:interruption,evidence:interruption,preserveTerminal:true},'quest:interrupted-preflight')
    continue
   }
+  // A transport error without an identity does not prove worker creation failed.
+  // Only the preflight receipt above can settle an interrupted unbound launch.
   if(run.permissionDecisions?.some(d=>d.reply==='reject'&&d.state==='acknowledged'))try{await tracker.settlePermissionRejection(entry.quest!.id,run.runID!,host)}catch(error){observations[run.runID??run.callID]=observationFailure(error);continue}
   const currentRun=store.read(entry.quest!.id)?.sessions.find(s=>s.callID===run.callID)??run
   const observation=await inspectWorker(host,currentRun);observations[run.runID??run.callID]=observation
