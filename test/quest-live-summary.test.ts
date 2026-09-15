@@ -44,7 +44,7 @@ test('public reads and work supply distinguish native activity from retained own
   // The installed server plugin exposes session events, not the TUI's active-list API.
   delete host.active
   connectHostObservation(host)
-  recordHostObservation(host,{type:'session.status',data:{sessionID:'ses_worker',status:{type:'running'}}})
+  recordHostObservation(host,{type:'session.execution.started',data:{sessionID:'ses_worker'}})
   expect((await client.get({id:created.id})).running).toBe(1)
   const otherHost:any={}
   connectHostObservation(otherHost)
@@ -54,7 +54,7 @@ test('public reads and work supply distinguish native activity from retained own
   expect((await client.get({id:created.id})).activity).toMatchObject({running:0,unconfirmed:1,assigned:1})
   connectHostObservation(host)
   expect((await client.get({id:created.id})).running).toBe(0)
-  recordHostObservation(host,{type:'session.status',data:{sessionID:'ses_worker',status:{type:'running'}}})
+  recordHostObservation(host,{type:'session.execution.started',data:{sessionID:'ses_worker'}})
   expect((await client.get({id:created.id})).running).toBe(1)
   recordHostObservation(host,{type:'session.execution.succeeded',data:{sessionID:'ses_worker'}})
   expect((await client.get({id:created.id})).running).toBe(0)
