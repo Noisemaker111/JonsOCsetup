@@ -31,12 +31,13 @@ test('created workers remain planned until the native prompt is admitted, includ
   const start=startQuestRun(store,host,{policyFile,settingsFile,beforePrompt:async()=>{reachedReady();await readyGate},reserve:(async()=>({route:{accountID:'configured-account',providerID:model.providerID,modelID:model.id,reasoning:model.variant,agent:'worker',serviceTier:'default',harness:'native'},bootstrapByProject:{},decision:{summary:'User-selected route'},ledger:{settle(){}}})) as any})
   const context={project,directory:root,sessionID:'giver',requestID:'admission'}
   const api=questsAPI(store,context,start)
-  const q=api.create({title:'Inspect the maintained README',description:'Record its first heading',steps:[{id:'read',title:'Read the first heading'}]})
-  running=api.run(q.id,{readOnly:true,model:'configured-provider/configured-model#high',task:'utility'})
+  const q=api.create({title:'Inspect the maintained README',description:'Record its first heading',workflow:{readOnly:true},steps:[{id:'read',title:'Read the first heading'}]})
+  running=api.run(q.id,{model:'configured-provider/configured-model#high',task:'utility'})
   await atReady
   const saved=()=>new QuestStore(root).read(q.id)!
   expect(saved().sessions[0].sessionID).toBe('ses_admission_worker')
   expect(saved().sessions[0].state).toBe('planned')
+  expect(saved().sessions[0].scope?.readOnly).toBe(true)
   expect(saved().state).toBe('Waiting')
   await expect(questsAPI(store,{...context,requestID:'duplicate'},start).run(q.id,{readOnly:true,task:'utility'})).rejects.toThrow('already has an active run')
   releaseReady();await atPrompt
