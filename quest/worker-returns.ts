@@ -15,6 +15,7 @@ import type {QuestHost} from './runtime'
 type Notice={questID:string;runID:string;context:QuestContext;agent?:string;model?:unknown;state:'waiting'|'sending'|'accepted'|'unknown';error?:string;permissions?:Record<string,PermissionReview>}
 /** Direct Quest runs have a return address even when no project_route was used. */
 export class QuestWorkerReturns {
+ private unreadable=new Map<string,string>()
  constructor(readonly store:QuestStore,readonly host:QuestHost,readonly generation=devQueueGeneration()){}
  private directory(){return runtimeQueuePath(this.store.runtime,'worker-returns',this.generation)}
  private save(row:Notice,directory=this.directory()){const path=join(directory,row.runID+'.json');mkdirSync(directory,{recursive:true});const tmp=path+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(row));renameSync(tmp,path)}
@@ -34,7 +35,16 @@ export class QuestWorkerReturns {
   for(const name of readdirSync(directory).filter(n=>/^[a-f0-9]{26}\.json$/.test(n))){
    let lock;try{lock=acquireLock(this.store.runtime,'worker-return-'+name.slice(0,-5),{timeoutMs:0})}catch{continue}
    try{
-    const row:Notice=JSON.parse(readFileSync(join(directory,name),'utf8'));if(row.state==='accepted')continue
+    const path=join(directory,name)
+    let row:Notice
+    try{row=JSON.parse(readFileSync(path,'utf8'));this.unreadable.delete(path)}catch(error){
+     // A damaged historical receipt is uncertain evidence, not a reason to
+     // suppress every independent completion after it. Preserve it for recovery.
+     const reason=String(error)
+     if(this.unreadable.get(path)!==reason)console.error('[quests] unreadable worker return retained:',path,reason)
+     this.unreadable.set(path,reason);continue
+    }
+    if(row.state==='accepted')continue
     const q=this.store.read(row.questID),run=q?.sessions.find(s=>s.runID===row.runID)
     if(!q||!run)continue
     const terminal=['completed','failed','cancelled'].includes(run.state)

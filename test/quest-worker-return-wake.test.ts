@@ -3,7 +3,7 @@
  * @core-observed Cycle 2 of the September 13 economical-routing gate promoted two worker returns 2 ms apart after one execution claim, then recorded no assistant response before its unchanged 240 s deadline.
  */
 import { expect, test } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { questsAPI } from "../quest/api"
@@ -64,7 +64,13 @@ test("each terminal worker return queues and explicitly wakes its own giver turn
       store.apply(quest.id, "session-state", { callID: runID, state: "completed", result: `worker ${index + 1} completed` }, "test")
     }
 
+    const damagedDirectory=join(store.runtime,'worker-returns')
+    mkdirSync(damagedDirectory,{recursive:true})
+    const damagedPath=join(damagedDirectory,'0'.repeat(26)+'.json'), damaged=Buffer.alloc(618)
+    writeFileSync(damagedPath,damaged)
     await returns.tick()
+    await new QuestWorkerReturns(store,host,'reopened-wake-test').tick()
+    expect(readFileSync(damagedPath)).toEqual(damaged)
 
     expect(prompts).toHaveLength(2)
     expect(prompts.map((prompt) => ({
