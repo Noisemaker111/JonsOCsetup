@@ -25,3 +25,12 @@ export function interruptedPreflight(runtime:string,runID:string):string|undefin
  try{process.kill(record.pid,0);return}catch(error){if((error as NodeJS.ErrnoException).code!=='ESRCH')return}
  return `Dispatch owner ${record.pid} on ${record.host} exited during preflight, before any worker creation or command launch. Intent recorded at ${record.at}. Retained workspace and run evidence; retry this Quest after its preparation requirements are satisfied.`
 }
+
+/** A dead launch owner is necessary, but the native host must also confirm an empty idle session. */
+export function interruptedBoundDispatch(runtime:string,runID:string,sessionID:string):string|undefined{
+ let record:Intent
+ try{record=JSON.parse(readFileSync(path(runtime,runID),'utf8'))}catch{return}
+ if(record.version!==1||record.runID!==runID||record.host!==hostname()||record.sessionID!==sessionID||!['created','prompting'].includes(record.phase)||!Number.isSafeInteger(record.pid)||record.pid<1)return
+ try{process.kill(record.pid,0);return}catch(error){if((error as NodeJS.ErrnoException).code!=='ESRCH')return}
+ return `Dispatch owner ${record.pid} on ${record.host} exited during ${record.phase}. Intent recorded at ${record.at}.`
+}

@@ -39,3 +39,34 @@ test('an actual exited launch process is reconciled only before creation, preser
   }
  }finally{rmSync(root,{recursive:true,force:true})}
 },30000)
+
+test('an exited bound dispatch requires native idle and an empty history before settling the same run',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'quest-bound-admission-'))
+ try{
+  const fixture=resolve('test/fixtures/interrupted-admission.ts')
+  expect(spawnSync('git',['init',root],{windowsHide:true}).status).toBe(0)
+  const child=spawnSync(process.execPath,[fixture,root,'prompting'],{windowsHide:true,encoding:'utf8'})
+  expect(child.stderr).toBe('');expect(child.status).toBe(0)
+  const {id}=JSON.parse(readFileSync(join(root,'prompting.json'),'utf8')),store=new QuestStore(root)
+  const before=store.read(id)!,run=before.sessions[0]
+  expect(run.sessionID).toBe('ses_bound');expect(run.state).toBe('planned')
+  const host={get:async()=>({id:'ses_bound',location:{directory:run.scope!.worktree},agent:run.agentRole,model:{providerID:run.providerID,id:run.modelID,variant:run.reasoningEffort}}),wait:async()=>{},context:async()=>[{role:'user'}]}
+  const intentPath=join(store.runtime,'dispatch-intents',run.runID+'.json'),intent=readFileSync(intentPath,'utf8')
+  writeFileSync(intentPath,JSON.stringify({...JSON.parse(intent),pid:process.pid}))
+  await reconcileWorkers(store,{...host,context:async()=>[]},id)
+  expect(new QuestStore(root).read(id)!.sessions[0].state).toBe('planned')
+  writeFileSync(intentPath,intent)
+  await reconcileWorkers(store,host,id)
+  expect(new QuestStore(root).read(id)!.sessions[0].state).toBe('planned')
+  await reconcileWorkers(store,{...host,wait:async()=>{throw Error('Host unavailable')},context:async()=>[]},id)
+  expect(new QuestStore(root).read(id)!.sessions[0].state).toBe('planned')
+  await reconcileWorkers(store,{...host,context:async()=>[]},id)
+  const saved=new QuestStore(root).read(id)!
+  expect(saved.sessions).toHaveLength(1);expect(saved.sessions[0].state).toBe('failed')
+  expect(saved.sessions[0].result).toContain('idle with no recorded messages')
+  expect(saved.sessions[0].scope).toEqual(run.scope);expect(saved.sessions[0].sessionID).toBe(run.sessionID)
+  const retry=questsAPI(store,{project:projectIdentity(root),sessionID:'giver',requestID:'bound-retry'},async()=>({sessionID:'ses_retry'}))
+  await retry.run(id,{readOnly:true,task:'utility'})
+  expect(new QuestStore(root).read(id)!.sessions[1].resumedFrom).toBe(run.callID)
+ }finally{rmSync(root,{recursive:true,force:true})}
+},30000)

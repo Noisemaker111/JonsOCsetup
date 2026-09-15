@@ -12,6 +12,7 @@ import { readAllQuests } from "./index"
 import { parseWorkerReport } from "./report"
 import { deferGoalTerminal } from './goal-lifecycle'
 import {dispatchReservationFile} from '../models/dispatch-planner'
+import {physicalDirectory} from './project'
 import { findStep } from "./steps"
 import { workerIdentityFromEvent } from "../orchestration/dispatch"
 import type { CompletionEvidence } from "../orchestration/orchestration-ledger"
@@ -361,6 +362,23 @@ export class QuestTracker {
     const fresh=this.store.read(questID)?.sessions.find(s=>s.runID===runID)
     if(!fresh||(fresh.openCodeSessionId??fresh.sessionID)!==sessionID||!ACTIVE_SESSION.has(fresh.state)||!fresh.permissionDecisions?.some(d=>d.requestID===decision.requestID&&d.reply==='reject'&&d.state==='acknowledged'))return
     return this.settleWorker(sessionID,'cancelled','Permission rejected by '+decision.actor+'. Owning host confirmed execution idle. '+decision.reason,'quest:permission-rejection')
+  }
+  async settleInterruptedDispatch(questID:string,runID:string,host:any) {
+    const run=this.store.read(questID)?.sessions.find(s=>(s.runID??s.callID)===runID)
+    const sessionID=run?.openCodeSessionId??run?.sessionID
+    if(run?.state!=='planned'||!sessionID||typeof host.wait!=='function'||typeof host.context!=='function'||typeof host.get!=='function')return
+    const {interruptedBoundDispatch}=await import('./dispatch-intent')
+    const reason=interruptedBoundDispatch(this.store.runtime,runID,sessionID)
+    if(!reason)return
+    await boundedInspection(signal=>host.wait({sessionID},{signal}))
+    const response=await boundedInspection(signal=>host.get({sessionID},{signal})),session=response?.data??response
+    const context=await boundedInspection(()=>host.context({sessionID})),messages=context?.data??context
+    if(session?.id!==sessionID||session?.outcome||!Array.isArray(messages)||messages.length)return
+    if(typeof run.scope?.worktree!=='string'||typeof session.location?.directory!=='string'||physicalDirectory(session.location.directory)!==physicalDirectory(run.scope.worktree))return
+    if(session.agent!==run.agentRole||session.model?.providerID!==run.providerID||session.model?.id!==run.modelID||run.reasoningEffort&&session.model?.variant!==run.reasoningEffort)return
+    const fresh=this.store.read(questID)?.sessions.find(s=>(s.runID??s.callID)===runID)
+    if(fresh?.state!=='planned'||(fresh.openCodeSessionId??fresh.sessionID)!==sessionID||interruptedBoundDispatch(this.store.runtime,runID,sessionID)!==reason)return
+    return this.settleWorker(sessionID,'failed',reason+' Owning host confirmed the bound session is idle with no recorded messages. Dispatch did not complete; retained session, workspace and retry lineage.','quest:interrupted-dispatch')
   }
   private settleWorker(sessionID:string,terminal:'completed'|'failed'|'cancelled',result:string,actor:string,observedAt?:string) {
     const ref=this.sessionIndex(0).get(sessionID)
