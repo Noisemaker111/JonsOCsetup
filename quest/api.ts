@@ -18,7 +18,7 @@ export class QuestError extends Error {
 }
 export type QuestContext = { project: ProjectIdentity; /** Internal host-derived location; never tool input. */ directory?: string; /** Verified user-giver origin, separate from the selected worker project. */ giverDirectory?: string; sessionID: string; requestID: string; /** Persisted user instruction identity, not the per-response assistant ID. */ turnID?: string }
 export type CreateQuest = { workflow?: QuestWorkflow; title: string; description: string; steps: { title: string; detail?:string; needs?: string[]; id?: string; commandID?: string }[]; reward?: string }
-export type UpdateQuest = { workflow?: QuestWorkflow; title?: string; description?: string; reward?: string; steps?: { id: string; state: QuestStageStatus; title?: string; detail?: string; needs?: string[]; note?: string }[]; artifacts?: { name: string; path?: string; uri?: string; label?: string }[]; archive?: { reason?: string; accepted: boolean } | null }
+export type UpdateQuest = { workflow?: QuestWorkflow; title?: string; description?: string; reward?: string; steps?: { id: string; state: QuestStageStatus; title?: string; detail?: string; needs?: string[]; note?: string; commandID?: string | null }[]; artifacts?: { name: string; path?: string; uri?: string; label?: string }[]; archive?: { reason?: string; accepted: boolean } | null }
 /** `task` is what kind of work this dispatch is: coding, review, planning or utility. It is the
  *  only thing that can name a class the dispatch does not enforce, and it decides how much
  *  published accuracy the route may trade for a cheaper reasoning effort. Omitting it is safe --
@@ -126,12 +126,18 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
         const stages = structuredClone(q.stages), seen = new Set<string>()
         const stepResults=structuredClone((q.extensions.stepResults??{}) as Record<string,{runIDs:string[];state:string;recordedAt:string}>)
         for (const update of input.steps) {
-          keys(update, ["id", "state", "title", "detail", "needs", "note"])
+          keys(update, ["id", "state", "title", "detail", "needs", "note", "commandID"])
           if (!["pending", "working", "blocked", "done"].includes(update.state)) throw new QuestError("INVALID_INPUT", "Step state is required: pending, working, blocked or done")
           let step = stages.find(s => s.id === update.id)
           text(update.id, "Step id")
           if (seen.has(update.id)) throw new QuestError("INVALID_INPUT", "Duplicate step id")
           if (!step) { text(update.title, "New step title"); step = stagesFromSteps([{ id: update.id, title: update.title! }])[0]; stages.push(step) }
+          if (update.commandID !== undefined) {
+            const commandID = update.commandID === null ? undefined : text(update.commandID, "Configured command id")
+            if (commandID !== step.commandID && q.sessions.some(run => ["planned", "executing", "waiting", "blocked"].includes(run.state) && run.deliverables.includes(step.id))) throw new QuestError("STEP_RUNNING", "The step has an active or unconfirmed run. Reconcile it before changing its configured command.")
+            if (commandID === undefined) delete step.commandID
+            else step.commandID = commandID
+          }
           if (update.title !== undefined) step.title = text(update.title, "Step title")
           if (update.detail !== undefined) { if (typeof update.detail !== "string") throw new QuestError("INVALID_INPUT", "Step detail must be text"); step.detail = update.detail }
           if (update.needs !== undefined) { if (!Array.isArray(update.needs) || update.needs.some(n => typeof n !== "string")) throw new QuestError("INVALID_INPUT", "Dependencies must be step IDs"); step.needs = update.needs }

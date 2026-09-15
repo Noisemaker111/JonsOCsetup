@@ -17,11 +17,11 @@ const fields = {
   }, ['section']),
   create: object({
     workflow, title: text, description: text, reward: text,
-    steps: { type: 'array', minItems: 1, maxItems: 30, items: object({ id: text, title: text, detail: text, needs: strings, commandID: text }, ['title']) },
+    steps: { type: 'array', minItems: 1, maxItems: 30, items: object({ id: text, title: text, detail: text, needs: strings, commandID: { type: 'string', description: 'An existing configured command identifier. Omit for agent work; strings such as none are command names, not absence.' } }, ['title']) },
   }, ['title', 'description', 'steps']),
   update: object({
     workflow, title: text, description: text, reward: text, cancelContinuation: { type: 'boolean' },
-    steps: { type: 'array', items: object({ id: text, title: text, state: { type: 'string', enum: ['pending', 'working', 'blocked', 'done'] }, detail: text, note: text, needs: strings }, ['id', 'state']) },
+    steps: { type: 'array', items: object({ id: text, title: text, state: { type: 'string', enum: ['pending', 'working', 'blocked', 'done'] }, detail: text, note: text, needs: strings, commandID: { type: ['string', 'null'], description: 'Giver only: replace a configured command identifier, or set null to clear it for agent work. Omission preserves the binding. Cannot change an active or unconfirmed run.' } }, ['id', 'state']) },
     artifacts: { type: 'array', items: object({ name: text, path: text, uri: text, label: text }, ['name']) },
     archive: { anyOf: [object({ accepted: { type: 'boolean' }, reason: text }, ['accepted']), { type: 'null' }] },
   }),
@@ -38,7 +38,7 @@ const fields = {
   }),
 }
 const record = properties => ({ type: 'object', properties, additionalProperties: true })
-const stepResult = record({ id: text, title: text, state: text, detail: text, note: text, needs: strings, ready: { type: 'boolean' }, blockedBy: text })
+const stepResult = record({ id: text, title: text, state: text, detail: text, note: text, commandID: text, needs: strings, ready: { type: 'boolean' }, blockedBy: text })
 const summary = record({ id: text, title: text, revision: { type: 'integer' }, state: text, nextAction: text, running: { type: 'integer' }, updatedAt: text, project: record({ id: text, root: text }), progress: record({ done: { type: 'integer' }, total: { type: 'integer' } }) })
 const detail = record({ ...summary.properties, description: text, reward: text, workflow, steps: { type: 'array', items: stepResult }, artifacts: { type: 'array', items: record({ name: text, path: text, uri: text }) }, continuation: { type: 'array', items: record({ id: text, state: text, reason: text, stepIDs: strings }) }, waited: record({ changed: { type: 'boolean' }, milliseconds: { type: 'number' }, steering: text }) })
 const page = record({ id: text, section: text, data: {}, offset: { type: 'integer' }, totalItems: { type: 'integer' }, nextOffset: { type: ['integer', 'null'] } })
