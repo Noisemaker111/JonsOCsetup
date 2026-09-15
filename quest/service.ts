@@ -23,6 +23,7 @@ import type { QuestHost } from "./runtime"
 import {toolSummary,toolDetail,toolSection,toolStatus,toolPlan} from './tool-projection'
 import {activeRuns,awaitQuestChange,observedState,runSummary,waitSteering,DEFAULT_WAIT_SECONDS,MAX_WAIT_SECONDS} from './wait'
 import {giverInstruction} from './giver-instruction'
+import {readQuestActivity,withQuestActivity} from './activity'
 const validator=new AjvJsonSchemaValidator()
 const validators=new Map(Object.entries(questOperations).map(([name,op])=>[name,validator.getValidator(op.input)]))
 const unwrap=(value:any)=>value?.data??value
@@ -147,6 +148,14 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
     else if(method==='plan')result=toolPlan(q,continuation.status(q.id))
     else if(method==='report')result={...toolSummary(q),steps:q.stages.filter(s=>s.id===(args as any).stepID).map(s=>({id:s.id,state:s.status,note:s.note}))}
     else result=toolDetail(q,continuation.status(q.id))
+   }
+   if(input.action==='list'){
+    const records=result.items.map((item:any)=>store.read(item.id)!)
+    const activity=await readQuestActivity(host,records)
+    result={...result,items:result.items.map((item:any,index:number)=>withQuestActivity(records[index],item,activity))}
+   }else if(!input.inspect&&result?.id&&result.state){
+    const q=store.read(result.id)
+    if(q)result=withQuestActivity(q,result,await readQuestActivity(host,[q]))
    }
    if(waited)result={...result,waited}
    collectWorkflowOutcomes(store)

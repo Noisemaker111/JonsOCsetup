@@ -301,6 +301,15 @@ board Active filter requires a confirmed running observation, never a saved
 executing record. Native data events trigger bounded worker inspection; periodic
 reads recover missed events after reconnect. Unknown ownership remains retained.
 
+Public Quest reads and the giver's work inventory take one bounded native activity
+snapshot per operation, using the connected host events when the server plugin
+does not expose the TUI's active-list API. `running`/`active` count only confirmed native executions;
+`activity.unconfirmed` and `unconfirmedRuns` retain assignments whose execution
+cannot be confirmed. `recordedState` and `recordedExecuting` expose the saved ledger
+separately. A saved Working record without a confirmed execution displays Waiting
+(or Needs attention for a blocked step), without releasing its worker or making its
+step eligible for duplicate dispatch. Reopening the record repeats the observation.
+
 The obsolete favorite/profile scheduler and capacity.json lane/task registry are removed.
 Quest admission uses dispatch-planner and RouteReservations; native session controls
 own manual selection. No provider substitution occurs during harness agent setup.

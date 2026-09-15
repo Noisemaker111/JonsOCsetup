@@ -52,7 +52,8 @@ export function recordHostObservation(host: object, event: any) {
  const state = hosts.get(host), id = event?.data?.sessionID
  if (!state?.connected || !id) return
   if (/^session\.execution\.(succeeded|failed|interrupted)$/.test(event.type)||event.type==='session.status'&&event.data.status?.type==='idle')for(const wait of state.toolWaits?.get(id)??[])wait.abort(new Error('Worker execution ended while waiting for workspace access'))
- if (event.type === 'session.status') {
+ if (event.type === 'session.execution.started') state.sessions.set(id, { active: true, at: new Date().toISOString() })
+ else if (event.type === 'session.status') {
   const status = event.data.status?.type
   if (status === 'running' || status === 'idle') state.sessions.set(id, { active: status === 'running', at: new Date().toISOString() })
   else state.sessions.delete(id)
