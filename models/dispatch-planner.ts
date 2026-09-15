@@ -116,7 +116,9 @@ export async function dispatchPlanInput(input:{model?:string;policyFile:string;n
  if(unbilled.length)throw new Error("Dispatch policy must identify billing for connected accounts: "+unbilled.join(", "))
  const observedRoutes=policy.outcomesFile?measuredOutcomeRoutes(policy.routes,JSON.parse(readFileSync(isAbsolute(policy.outcomesFile)?policy.outcomesFile:join(dirname(input.policyFile),policy.outcomesFile),"utf8")) as MeasuredOutcomes).routes:policy.routes
  const routes=withRouteEconomics(calibratedRoutes(observedRoutes,readCalibrations().calibrations,Object.fromEntries(snapshot.accounts.map(a=>[a.id,accountRegime(a)])),policy.calibration,now),live.catalog,policy.economy,now,classification.task)
- const request={...policy.request,now:new Date(now).toISOString(),explicitRouteID}
+ // Admission happens after the live catalog and pacing refresh. Using the
+ // earlier catalog timestamp makes our own fresh pacing record look future-dated.
+ const request={...policy.request,now:new Date(input.now??Date.now()).toISOString(),explicitRouteID}
  const diagnostics=[...live.diagnostics,describeDemand(classification,request),"Comparable prices for "+routes.filter(r=>r.economics).length+" routes; estimates are not actual account charges"]
  return {policy,request,routes,accounts,snapshot,live,classification,diagnostics,explicitRouteID}
 }
