@@ -10,7 +10,14 @@ import {hostPermissionDomain,hostModelIdentities} from './host-observation'
 import {reviewerSettings,reviewerSettingsKey,reservePermissionReview} from './reviewer-settings'
 import type {QuestStore} from './store'
 
-export type PermissionReview={state:'reviewing'|'decided'|'escalated'|'unknown';authorizationKey:string;reason:string;model?:string;reply?:'once'|'reject';notification?:'sending'|'accepted'|'unknown'}
+export type PermissionReview={state:'reviewing'|'retrying'|'decided'|'escalated'|'unknown';authorizationKey:string;reason:string;model?:string;reply?:'once'|'reject';notification?:'sending'|'accepted'|'unknown';attempt?:number;retryAt?:number}
+/** Only an explicit provider capacity rejection is safe to retry automatically. */
+export function permissionCapacityFailure(error:unknown){return /server_is_overloaded|servers are currently overloaded/i.test(String(error))}
+export function permissionReviewDue(previous:PermissionReview|undefined,authorizationKey:string,now=Date.now()){
+ if(!previous)return true
+ if(previous.state==='retrying')return previous.authorizationKey!==authorizationKey||Number.isFinite(previous.retryAt)&&now>=previous.retryAt!
+ return previous.state==='escalated'&&previous.authorizationKey!==authorizationKey
+}
 const unwrap=(value:any)=>value?.data??value
 /** Runtime notices and worker/tool output cannot become user authorization. */
 export function permissionUserInstructions(messages:any[]){return messages.filter(m=>m.type==='user'&&!Object.keys(m.metadata??{}).length&&typeof m.text==='string').map(m=>({id:m.id,text:m.text}))}
@@ -37,12 +44,15 @@ export class PermissionReviewer {
    }
    const before=await snapshot(),request=before.view.requests.find((r:any)=>r.requestID===input.requestID&&r.requestKey===input.requestKey)
    if(!request)return
-   if(input.previous&&(input.previous.state!=='escalated'||input.previous.authorizationKey===before.key))return
-   let record:PermissionReview={state:'reviewing',authorizationKey:before.key,reason:'Reviewing the exact pending action'}
+   if(!permissionReviewDue(input.previous,before.key))return
+   const attempt=input.previous?.authorizationKey===before.key?(input.previous.attempt??0)+1:1
+   let record:PermissionReview={state:'reviewing',authorizationKey:before.key,attempt,reason:'Reviewing the exact pending action'}
    const save=(change:Partial<PermissionReview>)=>{record={...record,...change};input.save(record);return record}
    save({})
    let reserved:Awaited<ReturnType<typeof reservePermissionReview>>|undefined
    let replyAttempted=false
+   let capacityRejected=false
+   const reviewID='permission-'+digest(input.giverID+input.requestKey+before.key)+(attempt>1?'-'+attempt:'')
    try{
     if(!before.authority.instructions.length&&!before.authority.start)throw Error('Original user authorization is unavailable; the assignment alone cannot authorize access')
     const directory=join(this.store.runtime,'permission-reviewers'),file=join(directory,input.giverID+'.json')
@@ -51,7 +61,6 @@ export class PermissionReviewer {
     const previous=pin
     if(pin?.settingsKey!==settingsKey)pin=undefined
     if(pin&&!settings.model&&!before.availableModels.includes(pin.model.split('#')[0]))pin=undefined
-    const reviewID='permission-'+digest(input.giverID+input.requestKey+before.key)
     reserved=await reservePermissionReview(this.store.runtime,reviewID,settings,pin,before.availableModels)
     const route=reserved.route
     if(route.harness!=='native'||route.serviceTier!=='default')throw Error('Permission reviewer requires the exact supported native model service')
@@ -82,6 +91,7 @@ export class PermissionReviewer {
     try{collectWorkflowOutcomes(this.store);recordWorkflowSupport(workflowFile(),input.runID,scope);tracked=true}catch(error){console.error('[quests] reviewer task attribution unavailable',error)}
     let response:any
     try{response=unwrap(await this.host.generate({sessionID:pin.reviewerSessionID,prompt}))}
+    catch(error){capacityRejected=permissionCapacityFailure(error);throw error}
     finally{if(tracked)try{recordWorkflowSupport(workflowFile(),input.runID,{...scope,completedAt:Date.now()})}catch(error){console.error('[quests] reviewer task attribution did not close',error)}}
     await verifySession()
     reserved.ledger.settle(reviewID,{state:'settled',completedAt:new Date().toISOString()});reserved=undefined
@@ -94,7 +104,8 @@ export class PermissionReviewer {
     const result=await service.reply(input.giverID,{questID:input.questID,runID:input.runID,requestID:input.requestID,requestKey:input.requestKey,reply:decision.decision,reason:decision.reason},'reviewer',pin.model)
     return save({state:'decided',reply:decision.decision,reason:result.settlementError??decision.reason})
    }catch(error){
-    if(reserved)reserved.ledger.settle('permission-'+digest(input.giverID+input.requestKey+before.key),{state:'unknown'})
+    if(reserved)reserved.ledger.settle(reviewID,{state:'unknown'})
+    if(capacityRejected&&!replyAttempted)return save({state:'retrying',retryAt:Date.now()+60_000*attempt,reason:'Provider overloaded; the same selected reviewer will retry automatically. No permission was granted. '+redact(String(error),1000)})
     return save({state:replyAttempted?'unknown':'escalated',reason:(replyAttempted?'Permission reply outcome is uncertain; inspect before any retry: ':'Permission review could not finish: ')+redact(String(error),1000)})
    }
   }finally{lock.release()}
