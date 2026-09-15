@@ -374,3 +374,5 @@ exit. The selected release and immediate rollback release remain pinned. Run cap
 are retained outside the release under the channel registry before removal. Old
 releases without lifetime records and crashed/unacknowledged launches remain intact
 for explicit ownership review. Stable releases are never retired by this mechanism.
+
+Quest coordination locks publish an immutable owner file with an exclusive hard link. A process failure before publication leaves only an unused staging file; a failure afterward leaves a complete owner that can be checked for liveness. Heartbeats update the file timestamp without truncating its ownership data. Existing directory locks are still recognized. An empty or unreadable legacy lock stays blocked because it does not identify a process whose death can be established; do not erase it as a recovery shortcut.

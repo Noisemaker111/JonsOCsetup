@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { existsSync, linkSync, mkdirSync, readFileSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { randomBytes } from "node:crypto"
 import { setTimeout as delay } from "node:timers/promises"
@@ -13,25 +13,32 @@ export class LockBusyError extends Error {
 }
 
 export function acquireLock(runtimeRoot: string, name: string, options: { timeoutMs?: number; staleMs?: number; isAlive?: (pid: number, start: string) => boolean } = {}): HeldLock {
-  const path = join(runtimeRoot, "locks", `${name}.lock`), owner = join(path, "owner.json"), started = Date.now(), nonce = randomBytes(12).toString("hex")
+  const path = join(runtimeRoot, "locks", `${name}.lock`), started = Date.now(), nonce = randomBytes(12).toString("hex")
   const timeout = options.timeoutMs ?? 15_000, stale = options.staleMs ?? 30_000, isAlive = options.isAlive ?? ((pid: number, start: string) => pid === process.pid ? start === START : alive(pid))
   mkdirSync(join(runtimeRoot, "locks"), { recursive: true })
+  // Publish a complete immutable owner atomically. A crash between mkdir and
+  // writing owner.json used to leave an unknowable lock that could never recover.
+  // A hard link cannot replace an existing file or a legacy lock directory.
+  const candidate = join(runtimeRoot, "locks", `.owner-${process.pid}-${nonce}.json`)
+  const owner = () => statSync(path).isDirectory() ? join(path, "owner.json") : path
+  writeFileSync(candidate, JSON.stringify({ pid: process.pid, processStart: START, nonce }), { flag: "wx" })
+  try {
   while (true) {
     try {
-      mkdirSync(path)
-      const heartbeat = () => writeFileSync(owner, JSON.stringify({ pid: process.pid, processStart: START, nonce, heartbeat: Date.now() }), "utf8")
-      heartbeat()
-      return { path, nonce, heartbeat, release: () => { try { const current = JSON.parse(readFileSync(owner, "utf8")); if (current.nonce === nonce) rmSync(path, { recursive: true, force: true }) } catch {} } }
+      linkSync(candidate, path)
+      const heartbeat = () => { const current = JSON.parse(readFileSync(owner(), "utf8")); if (current.nonce === nonce) { const now = new Date(); utimesSync(path, now, now) } }
+      return { path, nonce, heartbeat, release: () => { try { const current = JSON.parse(readFileSync(owner(), "utf8")); if (current.nonce === nonce) rmSync(path, { recursive: true, force: true }) } catch {} } }
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST" && !existsSync(path)) throw error
       try {
-        const data = JSON.parse(readFileSync(owner, "utf8")), age = Date.now() - Number(data.heartbeat ?? statSync(path).mtimeMs)
+        const data = JSON.parse(readFileSync(owner(), "utf8")), age = Date.now() - Number(data.heartbeat ?? statSync(path).mtimeMs)
         if (age > stale && !isAlive(Number(data.pid), String(data.processStart))) rmSync(path, { recursive: true, force: true })
       } catch { /* Unknown owner is not safely breakable until timeout. */ }
       if (Date.now() - started >= timeout) throw new LockBusyError(name)
       sleep(5)
     }
   }
+  } finally { unlinkSync(candidate) }
 }
 
 export function withLocks<T>(runtimeRoot: string, names: string[], action: () => T): T {
