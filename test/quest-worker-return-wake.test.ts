@@ -10,6 +10,7 @@ import { questsAPI } from "../quest/api"
 import { physicalDirectory, projectIdentity } from "../quest/project"
 import { QuestStore } from "../quest/store"
 import { QuestWorkerReturns } from "../quest/worker-returns"
+import { saveUserGiver } from "../quest/giver-registry.mjs"
 
 test("each terminal worker return queues and explicitly wakes its own giver turn", async () => {
   // Native sessions bind the physical directory. Windows runner TEMP can use
@@ -77,4 +78,36 @@ test("each terminal worker return queues and explicitly wakes its own giver turn
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+test.each(['before admission', 'after admission'])('failed worker notification retries %s with the same native message identity', async (failure) => {
+  const root = physicalDirectory(mkdtempSync(join(tmpdir(), 'quest-return-retry-'))), store = new QuestStore(root)
+  const giver = {id:'ses_return_retry',agent:'quest-giver',model:{providerID:'provider',id:'model'},location:{directory:root}}
+  const project = projectIdentity(root), runID = 'c'.repeat(26), admitted = new Map<string, any>(), attempts:any[] = []
+  const host = {get:async()=>giver,prompt:async(input:any)=>{
+    attempts.push(input)
+    if(attempts.length===1&&failure==='before admission')throw Error('Database admission unavailable')
+    // Installed native Session.prompt reconciles the stable ID before admission.
+    if(!admitted.has(input.id))admitted.set(input.id,input)
+    if(attempts.length===1)throw Error('Acknowledgement unavailable after admission')
+    return admitted.get(input.id)
+  }} as any
+  try {
+    saveUserGiver(store.runtime,{state:'bound',sessionID:giver.id,directory:root,model:giver.model})
+    const quest=store.create({id:'d'.repeat(26),title:'Return the failed inspection',objective:'Surface a failed worker without duplicating its notification',contractVersion:2,project,integrationOwner:giver.id,stages:[{id:'probe',title:'Inspect the configured host',status:'pending',needs:[]}]})
+    const context={project,directory:root,giverDirectory:root,sessionID:giver.id,requestID:'start'}
+    const returns=new QuestWorkerReturns(store,host,'retry-test')
+    await returns.watch({quest,runID,stepIDs:['probe'],context})
+    store.apply(quest.id,'session-claimed',{callID:runID,runID,sessionID:'ses_failed_worker',parentID:giver.id,role:'worker',deliverables:['probe']},'test')
+    store.apply(quest.id,'session-state',{callID:runID,state:'failed',result:'Provider rejected an incomplete tool response'},'test')
+    await returns.tick()
+    // Reopening the coordinator must recover persisted uncertainty, not only memory.
+    await new QuestWorkerReturns(store,host,'retry-test').tick()
+    await new QuestWorkerReturns(store,host,'retry-test').tick()
+    expect(attempts).toHaveLength(2)
+    expect(new Set(attempts.map(p=>p.id)).size).toBe(1)
+    expect(admitted.size).toBe(1)
+    expect(attempts.every(p=>p.resume===true&&p.delivery==='queue')).toBe(true)
+    expect(store.read(quest.id)?.sessions[0]?.state).toBe('failed')
+  } finally {rmSync(root,{recursive:true,force:true})}
 })
