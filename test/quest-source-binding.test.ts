@@ -13,6 +13,37 @@ import {QuestStore} from '../quest/store'
 import {QuestWorkspaces} from '../quest/workspaces'
 import {guidanceTool} from '../quest/adaptive-tools'
 import {installSharedWorkspaceGuard} from '../quest/shared-guard'
+import {questsAPI} from '../quest/api'
+import {startQuestRun} from '../quest/runtime'
+
+// September 15: native hub dispatch rejected an absolute source scope before
+// creation, but kept the run planned and blocked a corrected same-Quest retry.
+test('rejected source admission is saved failed and the same Quest can retry',async()=>{
+ const root=physicalDirectory(mkdtempSync(join(tmpdir(),'quest-source-retry-')))
+ try{
+  const hub=join(root,'hub'),repo=join(root,'repo');mkdirSync(hub);mkdirSync(repo)
+  expect(spawnSync('git',['init',repo],{windowsHide:true}).status).toBe(0)
+  const project=projectIdentity(hub),store=new QuestStore(hub),policyFile=join(root,'policy.json'),settingsFile=join(root,'settings.json')
+  writeFileSync(policyFile,JSON.stringify({sourceByProject:{[project.id]:{directory:repo,root:repo,projectRoot:hub,scopePrefix:'config'}}}))
+  writeFileSync(settingsFile,JSON.stringify({version:1,workspaceMode:'worktree'}))
+  let creates=0,prompts=0
+  const sessions=new Map<string,any>([['giver',{id:'giver',location:{directory:hub}}]])
+  const host={get:async({sessionID}:any)=>sessions.get(sessionID),create:async(input:any)=>{creates++;const worker={...input,id:'ses_source_retry'};sessions.set(worker.id,worker);return worker},prompt:async()=>{prompts++;return{id:'msg_source_retry'}}}
+  await installSharedWorkspaceGuard({session:host,tool:{transform:async()=>{}}},store)
+  const start=startQuestRun(store,host,{policyFile,settingsFile,beforePrompt:async()=>{},reserve:(async()=>({route:{accountID:'configured-account',providerID:'configured-provider',modelID:'configured-model',reasoning:'high',agent:'worker',serviceTier:'default',harness:'native'},bootstrapByProject:{},decision:{summary:'User-selected route'},ledger:{settle(){}}}))as any})
+  const context={project,directory:hub,sessionID:'giver',requestID:'invalid-source'}
+  const api=questsAPI(store,context,start),q=api.create({title:'Read mapped source',description:'Read the configured source',workflow:{readOnly:true},steps:[{id:'read',title:'Read README'}]})
+  await expect(api.run(q.id,{files:[join(repo,'README.md')],model:'configured-provider/configured-model#high'})).rejects.toThrow('outside the configured source binding')
+  const failed=new QuestStore(hub).read(q.id)!.sessions[0]
+  expect(failed.state).toBe('failed');expect(failed.sessionID).toBeUndefined()
+  expect(creates).toBe(0);expect(prompts).toBe(0)
+  await questsAPI(store,{...context,requestID:'corrected-source'},start).run(q.id,{model:'configured-provider/configured-model#high'})
+  const saved=new QuestStore(hub).read(q.id)!
+  expect(saved.sessions).toHaveLength(2);expect(saved.sessions[0].state).toBe('failed')
+  expect(saved.sessions[1].state).toBe('executing');expect(saved.sessions[1].resumedFrom).toBe(failed.runID)
+  expect(creates).toBe(1);expect(prompts).toBe(1)
+ }finally{rmSync(root,{recursive:true,force:true})}
+})
 
 test('research uses the reviewed repository, retains hub ledger identity and rejects a changed binding',()=>{
  const root=physicalDirectory(mkdtempSync(join(tmpdir(),'quest-hub-')))
