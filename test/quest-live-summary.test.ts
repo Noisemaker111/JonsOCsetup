@@ -12,6 +12,7 @@ import {createQuestService} from '../quest/service'
 import {serveQuestAPI} from '../quest/api-server'
 import {createQuestClient} from '../quest/client.mjs'
 import {workSupplyTool} from '../quest/adaptive-tools'
+import {connectHostObservation,disconnectHostObservation,recordHostObservation} from '../quest/host-observation'
 
 test('public reads and work supply distinguish native activity from retained ownership after reload',async()=>{
  const root=physicalDirectory(mkdtempSync(join(tmpdir(),'quest-live-summary-'))),store=new QuestStore(root)
@@ -40,5 +41,23 @@ test('public reads and work supply distinguish native activity from retained own
    expect(supply.output.items[0]).toMatchObject({active:record.running,unknown:record.activity.unconfirmed,assigned:1})
    expect(new QuestStore(root).read(created.id)!.sessions[0].state).toBe('executing')
   }
+  // The installed server plugin exposes session events, not the TUI's active-list API.
+  delete host.active
+  connectHostObservation(host)
+  recordHostObservation(host,{type:'session.status',data:{sessionID:'ses_worker',status:{type:'running'}}})
+  expect((await client.get({id:created.id})).running).toBe(1)
+  const otherHost:any={}
+  connectHostObservation(otherHost)
+  recordHostObservation(otherHost,{type:'session.execution.succeeded',data:{sessionID:'ses_worker'}})
+  expect((await client.get({id:created.id})).running).toBe(1)
+  disconnectHostObservation(host)
+  expect((await client.get({id:created.id})).activity).toMatchObject({running:0,unconfirmed:1,assigned:1})
+  connectHostObservation(host)
+  expect((await client.get({id:created.id})).running).toBe(0)
+  recordHostObservation(host,{type:'session.status',data:{sessionID:'ses_worker',status:{type:'running'}}})
+  expect((await client.get({id:created.id})).running).toBe(1)
+  recordHostObservation(host,{type:'session.execution.succeeded',data:{sessionID:'ses_worker'}})
+  expect((await client.get({id:created.id})).running).toBe(0)
+  expect(new QuestStore(root).read(created.id)!.sessions[0].state).toBe('executing')
  }finally{dispose();endpoint?.dispose();rmSync(root,{recursive:true,force:true})}
 })

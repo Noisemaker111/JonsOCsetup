@@ -302,7 +302,8 @@ executing record. Native data events trigger bounded worker inspection; periodic
 reads recover missed events after reconnect. Unknown ownership remains retained.
 
 Public Quest reads and the giver's work inventory take one bounded native activity
-snapshot per operation. `running`/`active` count only confirmed native executions;
+snapshot per operation, using the connected host events when the server plugin
+does not expose the TUI's active-list API. `running`/`active` count only confirmed native executions;
 `activity.unconfirmed` and `unconfirmedRuns` retain assignments whose execution
 cannot be confirmed. `recordedState` and `recordedExecuting` expose the saved ledger
 separately. A saved Working record without a confirmed execution displays Waiting

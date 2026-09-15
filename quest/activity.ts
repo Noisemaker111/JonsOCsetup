@@ -1,5 +1,6 @@
 import { boundedInspection } from './worker-observation.mjs'
 import { latestSessionAttempts } from './session-lineage'
+import { hostExecution } from './host-observation'
 import type { Quest, QuestSession } from './types'
 
 export const ownedRuns = (q: Quest) => latestSessionAttempts(q.sessions).filter(run => ['planned', 'executing', 'waiting', 'blocked'].includes(run.state))
@@ -13,7 +14,14 @@ const nativeID = (run: QuestSession) => {
 export async function readQuestActivity(host: any, quests: Quest[]): Promise<ActivitySnapshot> {
  const checkedAt = new Date().toISOString()
  if (!quests.some(q => ownedRuns(q).some(nativeID))) return { checkedAt }
- if (typeof host.active !== 'function') return { checkedAt, reason: 'Host does not expose active executions; ownership retained' }
+ if (typeof host.active !== 'function') {
+  const active: Record<string, unknown> = {}
+  for (const q of quests) for (const run of ownedRuns(q)) {
+   const id = nativeID(run)
+   if (id && hostExecution(host, id) === true) active[id] = true
+  }
+  return { active, checkedAt, reason: 'Connected host events do not confirm execution for these assignments; ownership retained' }
+ }
  try {
   const response = await boundedInspection(signal => host.active({ signal }))
   const active = response?.data ?? response
