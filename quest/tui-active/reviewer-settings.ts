@@ -11,8 +11,14 @@ export async function choosePermissionReviewer(context:any){
   if(choice==='choose'){
    const plan=await reviewerCandidates({...current,model:undefined}),allowed=new Set(plan.request.allowedRouteIDs)
    const routes=plan.routes.filter(r=>allowed.has(r.id)&&r.verified)
-   const selected=await dialog.select({title:'Choose permission reviewer',options:routes.map(r=>({value:'route:'+r.id,title:r.providerID+'/'+r.modelID+'#'+r.reasoning,description:(plan.snapshot.accounts.find(a=>a.id===r.accountID)?.provider??'Unknown account')+' · '+(plan.accounts.find(a=>a.id===r.accountID)?.billing??'unknown billing')}))})
+   let selected=await dialog.select({title:'Choose permission reviewer',options:[{value:'enter',title:'Enter an exact model',description:'provider/model#reasoning or an account-specific route selector'},...routes.map(r=>({value:'route:'+r.id,title:r.providerID+'/'+r.modelID+'#'+r.reasoning,description:(plan.snapshot.accounts.find(a=>a.id===r.accountID)?.provider??'Unknown account')+' · '+(plan.accounts.find(a=>a.id===r.accountID)?.billing??'unknown billing')}))]})
    if(!selected)return
+   if(selected==='enter'){
+    selected=await dialog.prompt({title:'Permission reviewer model',placeholder:'provider/model#reasoning',value:current.model??''})
+    if(typeof selected!=='string'||!selected.trim())return
+    selected=selected.trim()
+    await reviewerCandidates({...current,model:selected})
+   }
    setReviewerSettings({...current,model:selected})
   }else if(['economy','cash','latency','quota'].includes(choice))setReviewerSettings({version:1,preference:choice})
   await dialog.alert({title:'Permission reviewer saved',message:'Your selection applies to the next review and survives restart. An active review will recheck the changed setting before replying.'})

@@ -18,21 +18,21 @@ export function setReviewerSettings(value:ReviewerSettings,file=reviewerSettings
  try{mkdirSync(dirname(file),{recursive:true});const tmp=file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(value,null,2)+'\n');renameSync(tmp,file);return reviewerSettings(file)}finally{lock.release()}
 }
 export const reviewerSettingsKey=(settings:ReviewerSettings)=>digest(JSON.stringify(settings))
-export async function reviewerCandidates(settings=reviewerSettings()){
+export async function reviewerCandidates(settings=reviewerSettings(),availableModels?:string[]){
  const plan=await dispatchPlanInput({task:'utility',model:settings.model,policyFile:configuredDispatchPolicyFile()})
- const routes=plan.routes.filter(r=>r.harness==='native'&&r.serviceTier==='default')
+ const routes=plan.routes.filter(r=>r.harness==='native'&&r.serviceTier==='default'&&(!availableModels||availableModels.includes(r.providerID+'/'+r.modelID)))
  const request={...plan.request,primaryRouteID:undefined,fallback:undefined,preference:settings.preference==='quota'?'capacity' as const:settings.preference}
  return {...plan,routes,request}
 }
-export async function reservePermissionReview(runtime:string,runID:string,settings:ReviewerSettings,pin?:{model:string;selector?:string;accountID:string}){
+export async function reservePermissionReview(runtime:string,runID:string,settings:ReviewerSettings,pin:{model:string;selector?:string;accountID:string}|undefined,availableModels:string[]){
  let plan:Awaited<ReturnType<typeof reviewerCandidates>>
- try{plan=await reviewerCandidates({...settings,model:pin?.selector??pin?.model??settings.model})}
+ try{plan=await reviewerCandidates({...settings,model:pin?.selector??pin?.model??settings.model},availableModels)}
  catch(error){
   // Older pins stored a generated explicit-choice route ID that exists only in
   // that planning call. Resolve the same model again, retaining its account pin.
   // Ambiguous, prohibited or unavailable model choices still fail closed.
   if(!pin?.selector||pin.selector===pin.model||!String(error).includes('AUTHORIZED_ROUTE_UNAVAILABLE:'))throw error
-  plan=await reviewerCandidates({...settings,model:pin.model})
+  plan=await reviewerCandidates({...settings,model:pin.model},availableModels)
  }
  if(pin)plan.routes=plan.routes.filter(r=>r.accountID===pin.accountID)
  const ledger=new RouteReservations(dispatchReservationFile(runtime)),result=ledger.reserve(runID,plan)

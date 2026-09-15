@@ -1,13 +1,22 @@
 /** Live observations belong to the connected session client, never a process-wide singleton. */
-type State = { connected: boolean; sessions: Map<string, { active: boolean; at: string }>; permission?: any; toolWaits?:Map<string,Set<AbortController>> }
+type State = { connected: boolean; sessions: Map<string, { active: boolean; at: string }>; permission?: any; catalog?: any; toolWaits?:Map<string,Set<AbortController>> }
 const KEY = Symbol.for('opencode-config.quest.host-observations')
 const registry = globalThis as typeof globalThis & { [KEY]?: WeakMap<object, State> }
 const hosts = registry[KEY] ??= new WeakMap<object, State>()
-export function registerHostObservation(host: object, permission?: any) {
+export function registerHostObservation(host: object, permission?: any, catalog?: any) {
  let state = hosts.get(host)
  if (!state) { state = { connected: false, sessions: new Map() }; hosts.set(host, state) }
  if (permission) state.permission = permission
+ if (catalog) state.catalog = catalog
  return state
+}
+/** Account discovery is machine-wide; inference must use this host's active integrations. */
+export async function hostModelIdentities(host:object):Promise<string[]> {
+ const catalog=hosts.get(host)?.catalog
+ if(typeof catalog?.model?.list!=='function')throw Error('Connected host model catalog is unavailable; no reviewer dispatched')
+ const response=await catalog.model.list(),models=response?.data??response
+ if(!Array.isArray(models))throw Error('Connected host returned an invalid model catalog; no reviewer dispatched')
+ return [...new Set(models.filter(m=>typeof m.providerID==='string'&&typeof m.id==='string').map(m=>m.providerID+'/'+m.id))].sort()
 }
 export function connectHostObservation(host: object, permission?: any) {
  const state = registerHostObservation(host, permission)
