@@ -1,5 +1,5 @@
-import { readFileSync, readdirSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { homedir, uptime } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { questOperations } from './operations.mjs'
@@ -15,9 +15,17 @@ export async function discoverQuestAPI({ registry = process.env.QUEST_API_REGIST
   catch { throw new QuestAPIError('UNAVAILABLE', 'Open the Quest Giver in oc before using the Quest API.') }
   const unavailable = []
   let outdated = 0
+  // A receipt is written when a backend starts, so one written before this boot describes a
+  // service that no longer exists -- whatever its recorded PID now belongs to. Windows reassigns
+  // those PIDs freely: of 260 receipts on the machine this was found on, 212 predated the boot,
+  // and probing them spent the whole discovery budget on EPERM and hung sockets belonging to
+  // unrelated processes, so a Quest Giver that was serving normally reported UNAVAILABLE.
+  const bootedAt = Date.now() - uptime() * 1000
   const candidates = await Promise.all(files.map(async name => {
     try {
-      const endpoint = JSON.parse(readFileSync(join(registry, name), 'utf8'))
+      const path = join(registry, name)
+      if (statSync(path).mtimeMs < bootedAt) return
+      const endpoint = JSON.parse(readFileSync(path, 'utf8'))
       if (endpoint.version !== 2) { outdated++; return }
       if (!Number.isSafeInteger(endpoint.pid) || endpoint.pid <= 0) return
       try { process.kill(endpoint.pid, 0) } catch (error) { if (error.code === 'ESRCH') return; throw error }
