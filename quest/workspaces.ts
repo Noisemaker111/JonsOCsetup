@@ -260,6 +260,11 @@ export class QuestWorkspaces {
       const changed=selectedFiles()!==paths?"file list":run(["write-tree"])!==tree?"content":git(source,["rev-parse","HEAD"]).trim()!==head?"HEAD":JSON.stringify(worktreeExclusions(source))!==JSON.stringify(excluded)?"worktree registration":undefined
       if(changed)throw new Error("Source changed during workspace snapshot ("+changed+"); retry after edits settle")
       if(!target)return tree
+      // A retained index can equal an already integrated revision even when its
+      // checkout HEAD is older. Replaying that old patch onto later edits creates
+      // conflicts and can restore superseded code. Exact reachable tree identity
+      // proves this whole snapshot was incorporated; neither checkout is changed.
+      if(git(target,["log","--format=%T","HEAD"]).split(/\r?\n/).includes(tree))return tree
       const diff = spawnSync("git", ["-C", source, "diff", "--binary", "--full-index", base, tree, "--"], { windowsHide: true, maxBuffer: 32 * 1024 * 1024 })
       if (diff.status !== 0) throw new Error("Could not read dependency snapshot")
       if (!diff.stdout.length) return tree
