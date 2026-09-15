@@ -1,6 +1,7 @@
 /**
  * @core-prevents a release lease left open by a killed launch pinning its release for the life of the machine, pre-lease worktrees accumulating forever, and their opposite: retiring a release while a host that launch spawned is still running out of it
  * @core-observed On 2026-09-11 four dead-launcher leases permanently pinned releases; on 2026-09-14 fifty releases from the historical source checkout still occupied the channel tree because they predated leases, including thirty-three with complete process-owner records and no live holder that retirement refused before judging the evidence.
+ * On 2026-09-15 fifteen integrated preparations were retained solely because their task branches still pointed at them.
  */
 import {test,expect} from 'bun:test'
 import {spawnSync} from 'node:child_process'
@@ -35,6 +36,31 @@ const retire=(home:string,repository=home,env:Record<string,string>={})=>{
 const leaseOf=(file:string)=>JSON.parse(readFileSync(file,'utf8'))
 /** A pid that is provably gone: the process is waited for before its number is used. */
 const deadPid=()=>spawnSync('node',['-e','process.exit(0)'],{windowsHide:true}).pid as number
+
+test('integrated branch tips retire without deleting branches or admitting unmerged, dirty or live releases',()=>{
+ const home=realpathSync.native(mkdtempSync(join(tmpdir(),'release-integrated-tip-')))
+ try{
+  const owner=join(home,'source');mkdirSync(owner);git(owner,['init']);git(owner,['config','user.email','test@example.invalid']);git(owner,['config','user.name','Test'])
+  writeFileSync(join(owner,'.gitignore'),'channel-release.json\nrun/\n');writeFileSync(join(owner,'source'),'integrated\n');git(owner,['add','.']);git(owner,['commit','-m','integrated'])
+  git(owner,['remote','add','origin','https://example.invalid/owner/repository.git'])
+  const delivered=git(owner,['rev-parse','HEAD']);git(owner,['update-ref','refs/remotes/origin/agents',delivered]);git(owner,['branch','delivered-tip',delivered])
+  writeFileSync(join(owner,'source'),'not integrated\n');git(owner,['commit','-am','unmerged']);const pending=git(owner,['rev-parse','HEAD']);git(owner,['branch','pending-tip',pending])
+  const registry=join(home,'.config/opencode/.channels'),roots:Record<string,string>={}
+  for(const name of ['delivered','pending','dirty','live']){
+   const commit=name==='pending'?pending:delivered,root=join(registry,'releases','dev-'+name);roots[name]=root;git(owner,['worktree','add','--detach',root,commit])
+   writeFileSync(join(root,'channel-release.json'),JSON.stringify({schema:1,cleanupProtocol:1,channel:'dev',root,commit,integrationRef:'refs/heads/'+(name==='pending'?'pending-tip':'delivered-tip')}))
+  }
+  writeFileSync(join(roots.dirty,'source'),'keep this change\n')
+  const lease=join(registry,'release-users','live.json');mkdirSync(join(registry,'release-users'),{recursive:true});writeFileSync(lease,JSON.stringify({root:roots.live,pid:process.pid,startedAt:new Date().toISOString()}))
+  const launch=join(roots.live,'run/runtime/live');mkdirSync(launch,{recursive:true});writeFileSync(join(launch,'owner.json'),JSON.stringify({releaseLease:lease,pid:process.pid,sequence:1}))
+  const result=retire(home,owner)
+  expect(result.find((r:any)=>r.root===roots.delivered),JSON.stringify(result)).toMatchObject({removed:true});expect(existsSync(roots.delivered)).toBe(false)
+  expect(git(owner,['rev-parse','refs/heads/delivered-tip'])).toBe(delivered)
+  expect(reason(result,roots.pending)).toContain('Still the tip');expect(existsSync(roots.pending)).toBe(true)
+  expect(reason(result,roots.dirty)).toContain('Uncommitted');expect(readFileSync(join(roots.dirty,'source'),'utf8')).toBe('keep this change\n')
+  expect(reason(result,roots.live)).toContain(String(process.pid));expect(existsSync(roots.live)).toBe(true);expect(leaseOf(lease).endedAt).toBeUndefined()
+ }finally{rmSync(home,{recursive:true,force:true})}
+})
 
 test('a release lease is closed only when the machine shows nothing that launch started is still running',()=>{
  const homes:string[]=[];let orphan=0,inside=0
