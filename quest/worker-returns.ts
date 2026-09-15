@@ -17,21 +17,28 @@ type Notice={questID:string;runID:string;context:QuestContext;agent?:string;mode
 export class QuestWorkerReturns {
  constructor(readonly store:QuestStore,readonly host:QuestHost,readonly generation=devQueueGeneration()){}
  private directory(){return runtimeQueuePath(this.store.runtime,'worker-returns',this.generation)}
- private save(row:Notice){const path=join(this.directory(),row.runID+'.json');mkdirSync(this.directory(),{recursive:true});const tmp=path+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(row));renameSync(tmp,path)}
+ private save(row:Notice,directory=this.directory()){const path=join(directory,row.runID+'.json');mkdirSync(directory,{recursive:true});const tmp=path+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(row));renameSync(tmp,path)}
  async watch(input:Parameters<StartRun>[0]){
   const parent=await this.host.get({sessionID:input.context.sessionID}),session=parent?.data??parent
   const lock=acquireLock(this.store.runtime,'worker-return-'+input.runID)
   try{if(existsSync(join(this.directory(),input.runID+'.json')))return;this.save({questID:input.quest.id,runID:input.runID,context:input.context,agent:session?.agent,model:session?.model,state:'waiting'})}finally{lock.release()}
  }
  async tick(permissionDirectory?:string){
-  if(!existsSync(this.directory()))return
-  for(const name of readdirSync(this.directory()).filter(n=>/^[a-f0-9]{26}\.json$/.test(n))){
+  if(!existsSync(this.store.runtime))return
+  // Completed outcomes survive a host generation change. Their stable native
+  // message IDs and shared locks allow delivery without adopting worker execution.
+  const directories=permissionDirectory?[this.directory()]:readdirSync(this.store.runtime).filter(n=>/^worker-returns(?:-[a-f0-9]{24})?$/.test(n)).map(n=>join(this.store.runtime,n))
+  for(const directory of directories){
+  if(!existsSync(directory))continue
+  const save=(row:Notice)=>this.save(row,directory)
+  for(const name of readdirSync(directory).filter(n=>/^[a-f0-9]{26}\.json$/.test(n))){
    let lock;try{lock=acquireLock(this.store.runtime,'worker-return-'+name.slice(0,-5),{timeoutMs:0})}catch{continue}
    try{
-    const row:Notice=JSON.parse(readFileSync(join(this.directory(),name),'utf8'));if(row.state==='accepted')continue
+    const row:Notice=JSON.parse(readFileSync(join(directory,name),'utf8'));if(row.state==='accepted')continue
     const q=this.store.read(row.questID),run=q?.sessions.find(s=>s.runID===row.runID)
     if(!q||!run)continue
     const terminal=['completed','failed','cancelled'].includes(run.state)
+    if(directory!==this.directory()&&!terminal)continue
     if(!terminal&&row.state!=='waiting')continue
     // Permission domains belong to a plugin location. Worker locations may review
     // their own active assignment, but never coordinate or deliver board results.
@@ -42,27 +49,27 @@ export class QuestWorkerReturns {
     }
     if(!terminal&&(!['executing','waiting','blocked'].includes(run.state)||run.harness||run.runtime==='claude-code'))continue
     const parent=await this.host.get({sessionID:row.context.sessionID}),session=parent?.data??parent
-    try{verifyGiverBinding(this.store,row.context,session)}catch(error){row.error=String(error);this.save(row);continue}
-     if(JSON.stringify(session?.model)!==JSON.stringify(row.model)){row.error='Giver model changed; return retained for inspection';this.save(row);continue}
+    try{verifyGiverBinding(this.store,row.context,session)}catch(error){row.error=String(error);save(row);continue}
+     if(JSON.stringify(session?.model)!==JSON.stringify(row.model)){row.error='Giver model changed; return retained for inspection';save(row);continue}
     if(!terminal){
      const sessionID=workerSessionID(run);if(!sessionID)continue
      const response=await hostPermissions(this.host,sessionID),pending=response?.data??response
      for(const request of Array.isArray(pending)?pending:[]){
       if(request.sessionID!==sessionID||!request.id)continue
       const key=permissionKey(request);row.permissions??={}
-      const review=await new PermissionReviewer(this.store,this.host).review({giverID:row.context.sessionID,questID:q.id,runID:row.runID,requestID:request.id,requestKey:key,previous:row.permissions[key],save:value=>{row.permissions![key]=value;this.save(row)}})??row.permissions[key]
+      const review=await new PermissionReviewer(this.store,this.host).review({giverID:row.context.sessionID,questID:q.id,runID:row.runID,requestID:request.id,requestKey:key,previous:row.permissions[key],save:value=>{row.permissions![key]=value;save(row)}})??row.permissions[key]
       if(review&&['escalated','unknown'].includes(review.state)&&review.notification!=='accepted'){
-       review.notification='sending';this.save(row)
+       review.notification='sending';save(row)
        try{
         await this.host.prompt({sessionID:row.context.sessionID,id:'msg_questpermission'+key+review.authorizationKey,delivery:'queue',text:'Permission review needs a new decision for '+q.title+'. '+review.reason+'\nThe review is unresolved. Prose cannot approve or reject native access; there is no giver permission-reply tool. Do not search for one or claim a decision without an acknowledged permission record. Report the recorded blocker and ask only for genuinely missing user authorization or context. New user instructions or a clarified assignment trigger a fresh review. The user can also use Review permission. Do not redispatch the worker.',metadata:{questWorkerPermission:true,questID:q.id,runID:row.runID}})
         review.notification='accepted'
        }catch(error){review.notification='unknown';row.error=String(error)}
-       this.save(row)
+       save(row)
       }
      }
      continue
     }
-    row.state='sending';this.save(row)
+    row.state='sending';save(row)
     try{
      // Each independent terminal outcome retains its queued giver response.
      // Native prompt reconciles this stable ID before admission, including after
@@ -71,8 +78,9 @@ export class QuestWorkerReturns {
      row.state='accepted'
      delete row.error
     }catch(error){row.state='unknown';row.error=String(error)}
-    this.save(row)
+    save(row)
    }finally{lock.release()}
+  }
   }
  }
 }

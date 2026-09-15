@@ -84,7 +84,8 @@ test.each(['before admission', 'after admission'])('failed worker notification r
   const root = physicalDirectory(mkdtempSync(join(tmpdir(), 'quest-return-retry-'))), store = new QuestStore(root)
   const giver = {id:'ses_return_retry',agent:'quest-giver',model:{providerID:'provider',id:'model'},location:{directory:root}}
   const project = projectIdentity(root), runID = 'c'.repeat(26), admitted = new Map<string, any>(), attempts:any[] = []
-  const host = {get:async()=>giver,prompt:async(input:any)=>{
+  let lookups=0
+  const host = {get:async()=>{lookups++;return giver},prompt:async(input:any)=>{
     attempts.push(input)
     if(attempts.length===1&&failure==='before admission')throw Error('Database admission unavailable')
     // Installed native Session.prompt reconciles the stable ID before admission.
@@ -99,10 +100,12 @@ test.each(['before admission', 'after admission'])('failed worker notification r
     const returns=new QuestWorkerReturns(store,host,'retry-test')
     await returns.watch({quest,runID,stepIDs:['probe'],context})
     store.apply(quest.id,'session-claimed',{callID:runID,runID,sessionID:'ses_failed_worker',parentID:giver.id,role:'worker',deliverables:['probe']},'test')
+    await new QuestWorkerReturns(store,host,'next-generation').tick()
+    expect(lookups).toBe(1) // Another generation cannot manage this active run.
     store.apply(quest.id,'session-state',{callID:runID,state:'failed',result:'Provider rejected an incomplete tool response'},'test')
     await returns.tick()
     // Reopening the coordinator must recover persisted uncertainty, not only memory.
-    await new QuestWorkerReturns(store,host,'retry-test').tick()
+    await new QuestWorkerReturns(store,host,'next-generation').tick()
     await new QuestWorkerReturns(store,host,'retry-test').tick()
     expect(attempts).toHaveLength(2)
     expect(new Set(attempts.map(p=>p.id)).size).toBe(1)
