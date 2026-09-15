@@ -55,7 +55,7 @@ export function parseCodexUsage(lines: Iterable<string>): HarvestSession | null 
 type RolloutCursor={identity:string;mtime:number;offset:number;tail:string;decoder:StringDecoder;parser:ReturnType<typeof usageParser>;anchor:Buffer}
 const cursors=new Map<string,RolloutCursor>()
 /** Rollouts are append-only. Retain numeric parser state and an unfinished line, never a full transcript. */
-function readRollout(path:string){
+async function readRolloutSnapshot(path:string){
  const fd=openSync(path,'r')
  try{
   const stat=fstatSync(fd),identity=[stat.dev,stat.ino,stat.birthtimeMs].join(':'),previous=cursors.get(path)
@@ -69,6 +69,7 @@ function readRollout(path:string){
    let start=0,end:number
    while((end=cursor.tail.indexOf('\n',start))!==-1){cursor.parser.accept(cursor.tail.slice(start,end));start=end+1}
    cursor.tail=cursor.tail.slice(start)
+   await new Promise<void>(resolve=>setImmediate(resolve))
   }
   cursor.mtime=stat.mtimeMs;if(parsedBytes){cursor.anchor=Buffer.alloc(Math.min(256,cursor.offset));bytesRead+=readSync(fd,cursor.anchor,0,cursor.anchor.length,cursor.offset-cursor.anchor.length)}cursors.set(path,cursor)
   const snapshot=cursor.parser.copy();let pendingTail=false
@@ -76,11 +77,18 @@ function readRollout(path:string){
   return {session:snapshot.session,bytesRead,parsedBytes,pendingTail}
  }catch(error){cursors.delete(path);throw error}finally{closeSync(fd)}
 }
+const reading=new Map<string,ReturnType<typeof readRolloutSnapshot>>()
+async function readRollout(path:string){
+ let pending=reading.get(path)
+ if(!pending){pending=readRolloutSnapshot(path).finally(()=>reading.delete(path));reading.set(path,pending)}
+ const result=await pending
+ return {...result,session:structuredClone(result.session)}
+}
 export function sumHarvest(points: HarvestPoint[]): HarvestTokens {
   return points.reduce((a,p)=>({input:a.input+p.tokens.input,cacheRead:a.cacheRead+p.tokens.cacheRead,cacheWrite:a.cacheWrite+p.tokens.cacheWrite,output:a.output+p.tokens.output,reasoning:a.reasoning+p.tokens.reasoning}),{input:0,cacheRead:0,cacheWrite:0,output:0,reasoning:0})
 }
 /** Read-only, on demand. No transcript content, credentials, or inferred account IDs leave this adapter. */
-export function harvestCodexUsage(options: {root?:string;from?:number;to?:number;now?:number} = {}) {
+export async function harvestCodexUsage(options: {root?:string;from?:number;to?:number;now?:number} = {}) {
   const now=options.now??Date.now(),from=options.from??now-4*3600000,to=options.to??now
   if (![from,to,now].every(Number.isFinite) || from>to || to>now || to-from>7*86400000) throw new Error("Harvest needs a past time range of at most seven days")
   const root=options.root??join(process.env.CODEX_HOME??join(homedir(),".codex"),"sessions"),diagnostics:string[]=[],files:{path:string;mtime:number;size:number}[]=[]
@@ -100,7 +108,7 @@ export function harvestCodexUsage(options: {root?:string;from?:number;to?:number
   let bytesRead=0,parsedBytes=0,readFiles=0
   for(const file of files) {
     try {
-      const read=readRollout(file.path);bytesRead+=read.bytesRead;parsedBytes+=read.parsedBytes;if(read.bytesRead)readFiles++;if(read.pendingTail)diagnostics.push("A rollout has an unfinished trailing record; completed counters remain available");const s=read.session;if(!s)continue
+      const read=await readRollout(file.path);bytesRead+=read.bytesRead;parsedBytes+=read.parsedBytes;if(read.bytesRead)readFiles++;if(read.pendingTail)diagnostics.push("A rollout has an unfinished trailing record; completed counters remain available");const s=read.session;if(!s)continue
       s.gaps=s.gaps.filter(g=>g.at>=from&&g.at<=to);s.points=s.points.filter(p=>p.at>=from&&p.at<=to);s.quota=s.quota.filter(p=>p.at>=from&&p.at<=to)
       if(!s.points.length&&!s.quota.length&&!s.gaps.length&&!s.resolvedCounterAt.length)continue
       const previous=byID.get(s.id)

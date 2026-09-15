@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {harvestCodexUsage} from '../usage/codex-harvest'
 
-test('large rollouts, appended partial records and replaced files retain only reconciled counters',()=>{
+test('large rollouts, appended partial records and replaced files retain only reconciled counters',async()=>{
  const root=mkdtempSync(join(tmpdir(),'codex-stream-')),file=join(root,'rollout.jsonl'),now=Date.now(),start=now-60000
  const line=(type:string,payload:object,at=start)=>JSON.stringify({timestamp:new Date(at).toISOString(),type,payload})
  const header=(id:string)=>line('session_meta',{id,source:'cli'})+'\n'+line('turn_context',{model:'verification-model',effort:'high'})+'\n'
@@ -18,27 +18,32 @@ test('large rollouts, appended partial records and replaced files retain only re
   writeFileSync(file,header('first')+point(1)+'\n')
   const padding=line('response_item',{content:'ordinary transcript text '.repeat(4096)})+'\n'
   for(let i=0;i<750;i++)appendFileSync(file,padding)
-  const initial=harvestCodexUsage({root,from:start,to:now,now})
+  let turns=0;const timer=setInterval(()=>turns++,1)
+  const initial=await harvestCodexUsage({root,from:start,to:now,now}).finally(()=>clearInterval(timer))
+  expect(turns).toBeGreaterThan(0)
   expect(initial.parsedBytes).toBeGreaterThan(64*1024*1024)
   expect(initial.coverage.reconciledRequests).toBe(1)
   expect(initial.sessions[0].totals).toEqual({input:80,cacheRead:20,cacheWrite:0,output:8,reasoning:2})
   const second=point(2),split=Math.floor(second.length/2)
   appendFileSync(file,second.slice(0,split))
-  const partial=harvestCodexUsage({root,from:start,to:now,now})
+  const partial=await harvestCodexUsage({root,from:start,to:now,now})
   expect(partial.coverage.reconciledRequests).toBe(1)
   expect(partial.parsedBytes).toBe(Buffer.byteLength(second.slice(0,split)))
   expect(partial.diagnostics.some(d=>d.includes('unfinished trailing record'))).toBe(true)
   appendFileSync(file,second.slice(split)+'\n')
-  const complete=harvestCodexUsage({root,from:start,to:now,now})
+  const complete=await harvestCodexUsage({root,from:start,to:now,now})
   expect(complete.coverage.reconciledRequests).toBe(2)
   expect(complete.parsedBytes).toBe(Buffer.byteLength(second.slice(split)+'\n'))
-  expect(harvestCodexUsage({root,from:start+2,to:now,now}).sessions[0].requests).toBe(1)
-  expect(harvestCodexUsage({root,from:start,to:now,now}).sessions[0].requests).toBe(2)
-  expect(harvestCodexUsage({root,from:start,to:now,now}).parsedBytes).toBe(0)
+  const [narrow,wide]=await Promise.all([harvestCodexUsage({root,from:start+2,to:now,now}),harvestCodexUsage({root,from:start,to:now,now})])
+  expect(narrow.sessions[0].requests).toBe(1)
+  expect(wide.sessions[0].requests).toBe(2)
+  expect((await harvestCodexUsage({root,from:start+2,to:now,now})).sessions[0].requests).toBe(1)
+  expect((await harvestCodexUsage({root,from:start,to:now,now})).sessions[0].requests).toBe(2)
+  expect((await harvestCodexUsage({root,from:start,to:now,now})).parsedBytes).toBe(0)
   writeFileSync(file,header('truncated')+point(1)+'\n')
-  expect(harvestCodexUsage({root,from:start,to:now,now}).sessions[0].id).toBe('truncated')
+  expect((await harvestCodexUsage({root,from:start,to:now,now})).sessions[0].id).toBe('truncated')
   const replacement=join(root,'replacement');writeFileSync(replacement,header('replacement')+point(1)+'\n'+point(2)+'\n');renameSync(replacement,file)
-  const replaced=harvestCodexUsage({root,from:start,to:now,now})
+  const replaced=await harvestCodexUsage({root,from:start,to:now,now})
   expect(replaced.sessions[0].id).toBe('replacement')
   expect(replaced.sessions[0].requests).toBe(2)
  }finally{rmSync(root,{recursive:true,force:true})}

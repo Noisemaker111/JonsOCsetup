@@ -7,7 +7,7 @@ const args=process.argv.slice(2),value=(flag:string)=>{const i=args.indexOf(flag
 const output=resolve(value("--out")??"run/usage-evidence"),from=value("--from")?Date.parse(value("--from")!):Date.now()-4*3600000
 mkdirSync(output,{recursive:true})
 const accountFile=join(output,"account-usage.json")
-const accounts=await getAccountUsage({file:accountFile,refresh:true}),now=Date.now(),harvest=harvestCodexUsage({from,now})
+const accounts=await getAccountUsage({file:accountFile,refresh:true}),now=Date.now(),harvest=await harvestCodexUsage({from,now})
 const official=[...readQuotaObservations(ACCOUNT_USAGE_FILE+".observations").observations,...readQuotaObservations(accountFile+".observations").observations]
 const openai=accounts.accounts.filter(a=>a.provider==="openai")
 // Never combine accounts or independent quota pools into one chart line.

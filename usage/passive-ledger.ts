@@ -89,7 +89,7 @@ export async function collectPassive(options:{file?:string;root?:string;hostDB?:
  if(!claimed)return {collected:false}
  try {
   const from=Math.max(0,now-7*86400000,previous===null||parserVersion<3?0:previous-5*60000)
-  const harvest=harvestCodexUsage({root:options.root,from,now}),stored=options.records?{records:options.records,diagnostics:[]}:readRequests()
+  const harvest=await harvestCodexUsage({root:options.root,from,now}),stored=options.records?{records:options.records,diagnostics:[]}:readRequests()
   // Quota refresh shares the existing account cache and provider backoff across processes.
   await (options.accounts?Promise.resolve(options.accounts):getAccountUsage())
   const observations=options.observations??readQuotaObservations(ACCOUNT_USAGE_FILE+".observations").observations
