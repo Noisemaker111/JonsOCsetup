@@ -117,6 +117,7 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
     const runID=waitRequest?.runID
     const before=store.read(input.id)
     if(before){
+     if(activeRuns(before,runID).some(run=>(run.openCodeSessionId??run.sessionID)===context.sessionID))throw new QuestError('WORKER_SELF_WAIT','A worker cannot wait for its own run to finish. Continue the assigned work, or inspect quest_guidance status and end this turn if queued guidance is pending. Report and get the saved step result when ready; the giver receives the terminal update automatically.')
      const fingerprint=observedState(before,runID)
      const blocking=activeRuns(before,runID).length>0
      let outcome={changed:false,quest:before as any,milliseconds:0}

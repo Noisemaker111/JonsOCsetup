@@ -48,6 +48,11 @@ test("public reads return unchanged active snapshots without waiting for their o
       expect(result.waited).toBeUndefined()
       expect(store.read(q.id)!.sessions[0].state).toBe('executing')
     }
+    // September 15: a mapped worker waited 120 seconds for its own run while guidance stayed queued.
+    for(const input of [{id:q.id},{id:q.id,runID:'run'}]) {
+      await expect(service.call('wait',input,{sessionID:'ses_worker',id:'self-wait'})).rejects.toMatchObject({code:'WORKER_SELF_WAIT'})
+    }
+    expect(store.read(q.id)!.sessions[0].state).toBe('executing')
   } finally {
     if(questID)store.apply(questID,'session-state',{callID:'run',state:'completed'},'check')
     dispose();endpoint?.dispose();rmSync(root,{recursive:true,force:true})
