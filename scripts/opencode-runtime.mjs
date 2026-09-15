@@ -1,6 +1,7 @@
 import {git as cleanupGit} from '../quest/cleanup-git.mjs'
 import {useRelease,releaseUse,retireReleases} from './release-retirement.mjs'
 import { inspectHostExecutable } from '../project-router/executable.mjs'
+import {claimHost,waitForHostExit} from './host-ownership.mjs'
 /** Managed OpenCode2 terminal. Only this supervisor's exact standalone child is stopped. */
 import JSON5 from "json5"
 import * as pty from "node-pty"
@@ -20,6 +21,7 @@ const root = resolve(option("--config-root") ?? (basename(dirname(sourceRoot)) =
 const json = process.argv.includes("--json")
 const attached = !json
 const cwd = resolve(option("--cwd") ?? process.cwd())
+let hostOwnership
 const releaseLease=useRelease(root)
 const control = join(root, "run", "runtime", `launch-${Date.now()}-${process.pid}`)
 mkdirSync(control, { recursive: true })
@@ -123,6 +125,7 @@ async function restart(request) {
   const pointer = await prepare()
   sessionID = request.sessionID ?? sessionID
   await stopChild()
+  await waitForHostExit(process.env.OPENCODE_QUEST_ROOT)
   launch(pointer)
   emit({ type: "restarted", generation: pointer.activeGeneration, sessionID, sequence })
 }
@@ -132,6 +135,7 @@ async function finish(code = 0) {
   clearInterval(watcher)
   try { await stopChild() } catch (error) { emit({ type: "error", message: String(error) }); code = 1 }
   if(!terminal){releaseUse(releaseLease);try{const repository=dirname(resolve(root,cleanupGit(root,['rev-parse','--git-common-dir'])));retireReleases(repository)}catch(error){emit({type:'cleanup-retained',reason:String(error)})}}
+  await hostOwnership?.release()
   process.exit(code)
 }
 const watcher = setInterval(async () => {
@@ -162,4 +166,4 @@ if (json) {
 } else if (!process.stdin.isTTY) throw new Error("runtime:start requires a terminal; use runtime:verify for headless tests")
 // Attached leaves stdin alone on purpose. Reading it here would take the keystrokes, the raw
 // mode and the resize notifications that the host must own to draw at the real geometry.
-try { launch(await prepare()) } catch (error) { emit({ type: "error", message: String(error) }); await finish(1) }
+try { hostOwnership=await claimHost({database:process.env.OPENCODE_DB,questRoot:process.env.OPENCODE_QUEST_ROOT});launch(await prepare()) } catch (error) { emit({ type: "error", message: String(error) }); await finish(1) }

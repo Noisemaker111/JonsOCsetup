@@ -134,7 +134,8 @@ try {
  if($sessionAt -lt 0){$sessionAt=[Array]::IndexOf($nativeArgs,'-s')}
  if($sessionAt -ge 0 -and $sessionAt+1 -lt $nativeArgs.Count){$selection.sessionID=$nativeArgs[$sessionAt+1]}
  [Environment]::SetEnvironmentVariable($selectionName,($selection | ConvertTo-Json -Compress),'Process')
- & $plan.host.executable @nativeArgs
+ if($plan.hostOwnershipScript){ & node $plan.hostOwnershipScript -- $plan.host.executable @nativeArgs }
+ else { & $plan.host.executable @nativeArgs }
  $hostExit=$LASTEXITCODE
 } finally {
  Pop-Location
