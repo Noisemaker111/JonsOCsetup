@@ -8,6 +8,7 @@ import { Onboarding } from './onboarding'
 import { routeFeedback } from '../quest/route-public'
 import {RouterMemory} from './memory'
 import { goalCommand } from './goal-command'
+import { automaticQuestPrompt } from '../quest/giver-instruction'
 
 const string = { type: 'string', minLength: 1, maxLength: 2000 }
 const selectors = { type: 'array', minItems: 1, maxItems: 10, items: string }
@@ -170,7 +171,7 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
     const result = await goals.control(request as any, { sessionID, requestID: 'goal-command:' + (prompt.id ?? crypto.randomUUID()) })
     await ctx.session.synthetic({ sessionID, text: JSON.stringify(result), metadata: { projectRouterGoal: true } })
   } }))
-  await ctx.session.hook?.('prompt',async(event:any)=>{if(event.metadata?.projectRouterGoal!==true&&event.metadata?.projectRouterReturn!==true&&event.metadata?.questWorkerReturn!==true)await goals.steer(event.sessionID)})
+  await ctx.session.hook?.('prompt',async(event:any)=>{if(!automaticQuestPrompt(event.metadata))await goals.steer(event.sessionID)})
   const abort=new AbortController()
   if(ctx.event?.subscribe)void(async()=>{try{const stream=await ctx.event.subscribe({signal:abort.signal});goals.trigger('live');for await(const event of stream){
     if(!/^session\.execution\.(succeeded|failed|interrupted)$/.test(event.type))continue

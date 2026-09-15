@@ -4,7 +4,7 @@ import {join} from 'node:path'
 import {acquireLock} from './locking'
 
 type State={pending:Record<string,boolean>;delivered?:{id:string;at:number};unknownAt?:number}
-const automatic=(metadata:any)=>metadata?.questWorkerReturn===true||metadata?.questWorkerPermission===true||metadata?.questReview===true||metadata?.projectRouterGoal===true
+export const automaticQuestPrompt=(metadata:any)=>metadata?.questWorkerReturn===true||metadata?.questWorkerPermission===true||metadata?.questReview===true||metadata?.projectRouterGoal===true||metadata?.projectRouterReturn===true
 const key=(sessionID:string)=>createHash('sha256').update(sessionID).digest('hex')
 const file=(runtime:string,sessionID:string)=>join(runtime,'giver-instructions',key(sessionID)+'.json')
 function read(runtime:string,sessionID:string):State{
@@ -26,7 +26,7 @@ export function observeGiverInstruction(runtime:string,event:any){
  const at=typeof event.created==='number'?event.created:Date.parse(event.created)
  if(!Number.isFinite(at))return
  change(runtime,sessionID,state=>{
-  if(event.type==='session.inbox.enqueued'){state.pending[inboxID]=item?.type==='user'&&!automatic(item.payload?.metadata);return}
+  if(event.type==='session.inbox.enqueued'){state.pending[inboxID]=item?.type==='user'&&!automaticQuestPrompt(item.payload?.metadata);return}
   if(event.type==='session.inbox.cancelled'){delete state.pending[inboxID];return}
   if(state.delivered?.id===inboxID)return
   const human=state.pending[inboxID];delete state.pending[inboxID]
@@ -39,7 +39,7 @@ export function giverInstruction(runtime:string,sessionID:string,messages:any[],
  const assistant=messages[assistantIndex]
  for(let i=assistantIndex-1;i>=0;i--){
   const message=messages[i]
-  if(message?.type!=='user'||automatic(message.metadata)||typeof message.id!=='string')continue
+  if(message?.type!=='user'||automaticQuestPrompt(message.metadata)||typeof message.id!=='string')continue
   const at=Number(message.time?.created)
   if(Number.isFinite(at))change(runtime,sessionID,state=>{if((state.delivered?.at??0)<=at)state.delivered={id:message.id,at}})
   return message.id
