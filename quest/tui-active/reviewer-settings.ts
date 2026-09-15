@@ -10,7 +10,7 @@ export async function choosePermissionReviewer(context:any){
   const choice=await dialog.select({title:'Permission reviewer\n'+(current.model??'Automatic selection: '+current.preference)+'\nUses your accounts, pricing, usage and recorded speed.\nChanges apply to the next review, including this session.',options:[{value:'economy',title:'Automatic · economical capable model'},{value:'cash',title:'Automatic · measured cash per success'},{value:'latency',title:'Automatic · prefer speed'},{value:'quota',title:'Automatic · prefer available quota'},{value:'choose',title:'Choose an exact model and reasoning level'}]})
   if(!choice)return
   if(choice==='choose'){
-   const availableModels=await availableModelIdentities(context.client)
+   const availableModels=await availableModelIdentities(context.client,context.client.integration)
    const plan=await reviewerCandidates({...current,model:undefined},availableModels),allowed=new Set(plan.request.allowedRouteIDs)
    const routes=plan.routes.filter(r=>allowed.has(r.id)&&r.verified)
    let selected=await dialog.select({title:'Choose permission reviewer',options:[{value:'enter',title:'Enter an exact model',description:'provider/model#reasoning or an account-specific route selector'},...routes.map(r=>({value:'route:'+r.id,title:r.providerID+'/'+r.modelID+'#'+r.reasoning,description:(plan.snapshot.accounts.find(a=>a.id===r.accountID)?.provider??'Unknown account')+' · '+(plan.accounts.find(a=>a.id===r.accountID)?.billing??'unknown billing')}))]})

@@ -14,8 +14,9 @@ import {QuestWorkerReturns} from '../quest/worker-returns'
 
 test('reviewer availability belongs to the connected host, never another host account catalog',async()=>{
  const first={},second={},unregistered={}
- registerHostObservation(first,undefined,{model:{list:async()=>({data:[{providerID:'broker',id:'chosen'}]})}})
- registerHostObservation(second,undefined,{model:{list:async()=>[{providerID:'direct',id:'chosen'}]}})
+ const catalog={model:{list:async()=>({data:[{providerID:'broker',id:'chosen'},{providerID:'direct',id:'chosen'}]})},provider:{list:async()=>[{id:'broker'},{id:'direct',activation:'enabled',integrationID:'direct'}]}}
+ registerHostObservation(first,undefined,catalog,{list:async()=>[{id:'direct',connections:[]}]})
+ registerHostObservation(second,undefined,{...catalog,model:{list:async()=>[{providerID:'direct',id:'chosen'}]}},{list:async()=>[{id:'direct',connections:[{type:'env',name:'CONFIGURED_KEY'}]}]})
  expect(await hostModelIdentities(first)).toEqual(['broker/chosen'])
  expect(await hostModelIdentities(second)).toEqual(['direct/chosen'])
  await expect(hostModelIdentities(unregistered)).rejects.toThrow('catalog is unavailable')
