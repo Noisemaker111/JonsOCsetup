@@ -82,6 +82,34 @@ test('workspace snapshots preserve tracked ignored files without importing ignor
  }
 })
 
+test('a retained dependency snapshot already integrated is not replayed over later edits',()=>{
+ const root=mkdtempSync(join(tmpdir(),'quest-integrated-snapshot-')),repo=join(root,'source')
+ mkdirSync(repo)
+ const git=(cwd:string,...args:string[])=>{const r=spawnSync('git',['-C',cwd,...args],{encoding:'utf8',windowsHide:true});if(r.status!==0)throw Error(r.stderr);return r.stdout.trim()}
+ try{
+  git(repo,'init');git(repo,'config','core.autocrlf','false');git(repo,'config','user.name','Snapshot Test');git(repo,'config','user.email','snapshot@example.invalid')
+  writeFileSync(join(repo,'.gitignore'),'.claude/\n');writeFileSync(join(repo,'state.txt'),'original\n');git(repo,'add','.');git(repo,'commit','-m','initial')
+  const workspaces=new QuestWorkspaces(join(root,'runtime'))
+  const prior=workspaces.create({runID:'prior',questID:'same-quest',directory:repo,skipPrepared:true})
+  writeFileSync(join(prior.path,'state.txt'),'integrated change\n');git(prior.path,'add','state.txt')
+  writeFileSync(join(repo,'state.txt'),'integrated change\n');git(repo,'add','state.txt');git(repo,'commit','-m','integrate prior snapshot')
+  expect(git(prior.path,'write-tree')).toBe(git(repo,'rev-parse','HEAD^{tree}'))
+  writeFileSync(join(repo,'state.txt'),'later maintained change\n');git(repo,'add','state.txt');git(repo,'commit','-m','maintain the integrated change')
+  const before=git(prior.path,'write-tree')
+  const resumed=workspaces.create({runID:'resumed',questID:'same-quest',directory:repo,inheritRunIDs:['prior'],skipPrepared:true})
+  expect(readFileSync(join(resumed.path,'state.txt'),'utf8')).toBe('later maintained change\n')
+  expect(git(prior.path,'write-tree')).toBe(before)
+  expect(resumed.inheritedRunIDs).toContain('prior')
+  // An unintegrated snapshot must not be silently skipped.
+  writeFileSync(join(prior.path,'new.txt'),'new worker result\n')
+  expect(()=>workspaces.create({runID:'unintegrated',questID:'same-quest',directory:repo,inheritRunIDs:['prior'],skipPrepared:true})).toThrow('Dependency changes conflict')
+ }finally{
+  const target=realpathSync(root),allowed=resolve(tmpdir())
+  if(!target.toLowerCase().startsWith((allowed+'\\quest-integrated-snapshot-').toLowerCase()))throw Error('Unexpected test cleanup target')
+  rmSync(target,{recursive:true,force:true})
+ }
+},30000)
+
 import {permissionReplyInput,permissionSummary,permissionKey} from '../quest/worker-permissions'
 test('giver decisions cannot approve another worker, changed requests, or persistent access',()=>{
  const session={...run,runID:'run',callID:'call',state:'executing',sessionID:'ses_worker'}
@@ -166,3 +194,4 @@ test('generic dispatched worker is selectable by the native composer and has no 
  expect(config.agents.worker.mode).not.toBe('subagent')
  expect(config.agents.worker.model).toBeUndefined()
 })
+
