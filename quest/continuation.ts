@@ -25,6 +25,7 @@ type Intent = { readOnly?:boolean; task?:string; requestFingerprint?:string; max
 const active = (state:string)=>['planned','executing','waiting','blocked'].includes(state)
 /** Only explicit run.continue requests enter this queue. Never infer authorization from logs. */
 export class QuestContinuation {
+ private retiredForeign=false
   readonly file:string
   private liveGoals=new Set<string>()
   constructor(readonly store:QuestStore,readonly start:StartRun,readonly options:{runtimeGeneration?:string;goalMode?:boolean;routeBinding?:(selector:string)=>GoalRoute|Promise<GoalRoute>;workerPrompt?:(context:QuestContext,text:string,id:string,eventID?:string)=>Promise<void>;refresh?:typeof getAccountUsage;now?:()=>number;verifyContext?:(context:QuestContext)=>Promise<void>}={}) {this.file=runtimeQueuePath(store.runtime,'continuations',options.runtimeGeneration,'.json')}
@@ -118,7 +119,37 @@ export class QuestContinuation {
   if(this.options.goalMode)this.liveGoals.add(id)
   await this.tick();return {continuation:this.status(questID).find(x=>x.id===id)}
  }
-  async tick(){for(const intent of this.read().filter(x=>!x.worker&&(x.goal?this.options.goalMode&&this.liveGoals.has(x.id):!this.options.goalMode)&&['waiting','running'].includes(x.state)&&x.nextAt<=this.now()))await (intent.admissions?this.advanceParallel(intent.id):this.advance(intent.id))}
+  /**
+   * Retire intents left by a runtime generation that is no longer running.
+   *
+   * Schedulers read only their own generation's file, deliberately, but ownership and conflict
+   * checks read every generation. A generation changes whenever the code does, so each restart on
+   * new code stranded the previous generation's running intents: nothing would ever advance them,
+   * and they went on owning their steps. Thirty-six such files had accumulated and six steps read
+   * "Owned by a continuation" with no scheduler anywhere that could move them. One host owns a
+   * database, so an intent in another generation's file has no scheduler at all.
+   */
+  private retireForeignGenerations(){
+   if(this.retiredForeign)return
+   this.retiredForeign=true
+   for(const file of continuationFiles(this.store.runtime)){
+    if(file===this.file)continue
+    let rows:any[]
+    try{rows=JSON.parse(readFileSync(file,'utf8'))}catch{continue}
+    if(!Array.isArray(rows))continue
+    let changed=false
+    for(const row of rows){
+     if(['stopped','done'].includes(row?.state))continue
+     row.state='stopped'
+     row.reason='Left by a runtime generation that is no longer running, so no scheduler owns it. Authorize the continuation again to resume this work.'
+     changed=true
+    }
+    if(!changed)continue
+    try{const tmp=file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(rows));renameSync(tmp,file)}
+    catch(error){console.error('[quests] could not retire continuations from an older generation',error)}
+   }
+  }
+  async tick(){this.retireForeignGenerations();for(const intent of this.read().filter(x=>!x.worker&&(x.goal?this.options.goalMode&&this.liveGoals.has(x.id):!this.options.goalMode)&&['waiting','running'].includes(x.state)&&x.nextAt<=this.now()))await (intent.admissions?this.advanceParallel(intent.id):this.advance(intent.id))}
  /** Claims are serialized on disk; refresh and launch never hold the ledger lock. */
  private async advanceParallel(id:string){
   for(let turn=0;turn<16;turn++){
