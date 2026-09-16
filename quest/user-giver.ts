@@ -25,9 +25,29 @@ export async function bindUserGiver(store:QuestStore,host:any,sessionID:string){
  const lock=acquireLock(store.runtime,'user-giver',{timeoutMs:0})
  try{const prior=readUserGiver(store.runtime);if(prior&&prior.sessionID!==sessionID)throw new QuestError('SINGLE_GIVER_REQUIRED','Continue in your existing Quest Giver: '+(prior.sessionID??'creation outcome unknown; inspect before retrying'));saveUserGiver(store.runtime,{...prior,state:'bound',sessionID,directory:physicalDirectory(row.location.directory),model:row.model});return row}finally{lock.release()}
 }
+/**
+ * Keep the registered location on the conversation the giver is actually open in.
+ *
+ * Only the giver's own location coordinates the board: that check is what stops a worker's
+ * checkout from also reconciling, consuming start requests and advancing continuations. The
+ * location was recorded once, when the giver was first bound, and never again — while the launcher
+ * decides where it opens and opens it in the maintained source. Those two drifted apart and the
+ * board lost its coordinator entirely: nothing reconciled a finished run, no saved `quest start`
+ * was ever consumed, and no continuation moved. Thirteen Quests sat still with workers that had
+ * ended hours earlier still holding their steps.
+ *
+ * The host's session location is the authority, the registration is a record of it, so follow it.
+ */
+function followGiverLocation(store:QuestStore,prior:any,row:any){
+ const at=row?.location?.directory
+ if(typeof at!=='string'||!at)return
+ const current=physicalDirectory(at)
+ if(prior.directory&&physicalDirectory(prior.directory)===current)return
+ saveUserGiver(store.runtime,{...prior,directory:current})
+}
 export async function ensureUserGiver(store:QuestStore,host:any,currentID?:string,directory=process.cwd()){
  const prior=readUserGiver(store.runtime)
- if(prior){if(prior.state!=='bound')throw new QuestError('GIVER_OUTCOME_UNKNOWN','Giver creation is uncertain; inspect the existing session before retrying');const row=unwrap(await host.get({sessionID:prior.sessionID}));if(row?.id!==prior.sessionID)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different giver');rootConversation(store,row);return row}
+ if(prior){if(prior.state!=='bound')throw new QuestError('GIVER_OUTCOME_UNKNOWN','Giver creation is uncertain; inspect the existing session before retrying');const row=unwrap(await host.get({sessionID:prior.sessionID}));if(row?.id!==prior.sessionID)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different giver');rootConversation(store,row);followGiverLocation(store,prior,row);return row}
  if(currentID){const row=unwrap(await host.get({sessionID:currentID}));if(row?.id!==currentID)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different session');if(row?.agent==='quest-giver'&&!worker(store,row.id)&&!row.parentID)return bindUserGiver(store,host,row.id)}
  const ids=[...new Set(readAllQuests(store.projectRoot,{includeArchived:true}).flatMap(r=>r.quest?.integrationOwner?.startsWith('ses_')?[r.quest.integrationOwner]:[]))]
  const candidates:any[]=[]
