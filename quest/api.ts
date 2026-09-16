@@ -9,7 +9,9 @@ import { acquireLock } from "./locking"
 import { redact } from "./privacy"
 import { normalizeRequestText, questRequestFingerprint, unresolved, unresolvedDuplicate } from "./duplicates"
 import { namingProblems } from "./naming"
-import type { ProjectIdentity } from "./project"
+import { existsSync } from "node:fs"
+import { join } from "node:path"
+import { projectIdentity, type ProjectIdentity } from "./project"
 import type { Quest, QuestStageStatus } from "./types"
 import { TASK_CLASSES } from "../models/task-demand"
 
@@ -18,7 +20,7 @@ export class QuestError extends Error {
 }
 export type QuestContext = { project: ProjectIdentity; /** Internal host-derived location; never tool input. */ directory?: string; /** Verified user-giver origin, separate from the selected worker project. */ giverDirectory?: string; sessionID: string; requestID: string; /** Persisted user instruction identity, not the per-response assistant ID. */ turnID?: string }
 export type CreateQuest = { workflow?: QuestWorkflow; title: string; description: string; steps: { title: string; detail?:string; needs?: string[]; id?: string; commandID?: string }[]; reward?: string }
-export type UpdateQuest = { workflow?: QuestWorkflow; title?: string; description?: string; reward?: string; steps?: { id: string; state: QuestStageStatus; title?: string; detail?: string; needs?: string[]; note?: string; commandID?: string | null; verification?: { command: string; exitCode: number; artifact?: string } }[]; artifacts?: { name: string; path?: string; uri?: string; label?: string }[]; archive?: { reason?: string; accepted: boolean } | null }
+export type UpdateQuest = { workflow?: QuestWorkflow; projectRoot?: string; title?: string; description?: string; reward?: string; steps?: { id: string; state: QuestStageStatus; title?: string; detail?: string; needs?: string[]; note?: string; commandID?: string | null; verification?: { command: string; exitCode: number; artifact?: string } }[]; artifacts?: { name: string; path?: string; uri?: string; label?: string }[]; archive?: { reason?: string; accepted: boolean } | null }
 /** `task` is what kind of work this dispatch is: coding, review, planning or utility. It is the
  *  only thing that can name a class the dispatch does not enforce, and it decides how much
  *  published accuracy the route may trade for a cheaper reasoning effort. Omitting it is safe --
@@ -108,7 +110,7 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
       return questView(q)
     },
     update(id: string, input: UpdateQuest) {
-      keys(input, ["title", "description", "reward", "steps", "artifacts", "archive", "workflow"])
+      keys(input, ["title", "description", "reward", "steps", "artifacts", "archive", "workflow", "projectRoot"])
       const q = getOwned(id)
       // Admission alone left the record renameable: driven against the create-only guard, the giver
       // took the refusal, created a readable Quest, then patched it back to the refused wording.
@@ -117,6 +119,16 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
       if (rewritten.length) throw new QuestError("UNREADABLE_QUEST", "Nothing was saved. " + rewritten.join(" ") + " Retry the update with wording the Quest can be read by.")
       const patch: Record<string, unknown> = {}
       if (input.workflow !== undefined) patch.extensions = { ...q.extensions, workflow: parseWorkflow(input.workflow) }
+      if (input.projectRoot !== undefined) {
+        // A Quest recorded against a directory that is not a checkout can never dispatch a worker:
+        // admission fails with "Cannot establish selected Git checkout" and there was no supported
+        // way to move it. One sat on the installed configuration directory, which the hub defines as
+        // runtime storage and forbids re-initialising as a repository, so the Quest was unreachable
+        // by any route or model. Moving it is the fix; moving it somewhere equally unusable is not.
+        const identity = projectIdentity(text(input.projectRoot, "Project root"))
+        if (!existsSync(join(identity.root, ".git"))) throw new QuestError("PROJECT_NOT_A_CHECKOUT", identity.root + " is not a Git checkout, so a worker would still have nothing to bind. Name the maintained source project.")
+        patch.project = identity
+      }
       for (const key of ["title", "description", "reward"] as const) if (input[key] !== undefined) {
         if (typeof input[key] !== "string" || (key !== "reward" && !input[key]!.trim())) throw new QuestError("INVALID_INPUT", key + " must be text")
         patch[key] = input[key]
