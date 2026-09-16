@@ -35,6 +35,8 @@ export const HOST_COLS = 200
 export const HOST_ROWS = 50
 /** The host sidebar column, measured from screenshots (~372 px wide). */
 export const SIDEBAR_COLS = 40
+/** Jk's OpenCode window is its own Windows Terminal window, ~974 px of the 1920 px screen: about 97 columns. */
+export const STATUS_COLS = 97
 
 /** Host theme as seen in screenshots: near-black ground, gray composer panel, yellow accent. */
 const HOST = { bg: HOST_PALETTE.bg, panel: HOST_DIALOG_PALETTE.bg, text: HOST_PALETTE.fg, muted: "#8a8a8a", accent: "#f2cf45", orange: "#e9a23b" }
@@ -93,7 +95,7 @@ function HostSidebar(props: { children: any }) {
 
 async function surfaces(): Promise<Surface[]> {
   const { QuestBoard } = await import("../quest/tui-active/quest-board")
-  const { Sidebar } = await import("../quest/tui-active/quests")
+  const { Sidebar, QuestStatus } = await import("../quest/tui-active/quests")
   const { UsageDialog } = await import("../usage/tui-active/usage")
   const board = (id: string, title: string, source: string, note: string, quest?: string, ledger: Ledger = "seeded"): Surface => ({
     id, title, source, note, width: HOST_COLS, height: HOST_ROWS, settle: 300, ledger, palette: QUEST_PALETTE, fixtureOnly: id !== "board",
@@ -117,6 +119,16 @@ async function surfaces(): Promise<Surface[]> {
       id: "sidebar-empty", title: "Sidebar · empty ledger", source: "quest/tui-active/quests.tsx (Sidebar fallback)",
       note: "Same slot with no Quests: the state in the host screenshot.",
       width: SIDEBAR_COLS, height: 8, ledger: "empty", palette: HOST_PALETTE, fixtureOnly: true, render: (context) => <HostSidebar><Sidebar context={context} /></HostSidebar>,
+    },
+    {
+      id: "status", title: "Composer status rows · Quests · N open", source: "quest/tui-active/quests.tsx (QuestStatus)",
+      note: "The two rows under the composer, at the width of Jk's actual OpenCode window rather than a full-screen terminal — which is where the title has to be shortened and where a retried run showed up twice.",
+      width: STATUS_COLS, height: 4, settle: 400, palette: HOST_PALETTE, render: (context) => <QuestStatus context={context} />,
+    },
+    {
+      id: "status-narrow", title: "Composer status rows · narrow window", source: "quest/tui-active/quests.tsx (QuestStatus)",
+      note: "The same rows with the window dragged narrow, which is where a long Quest title has to be shortened. The cut belongs on a word boundary; the renderer's own truncation takes it out of the middle of a word.",
+      width: 60, height: 4, settle: 400, palette: HOST_PALETTE, fixtureOnly: true, render: (context) => <QuestStatus context={context} />,
     },
     {
       id: "usage", title: "/usage dialog", source: "usage/tui-active/usage.tsx (UsageDialog, ConversationTelemetry, UsageTable) + usage/tui-usage-format.ts",

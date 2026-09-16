@@ -5,6 +5,7 @@ import { ensureUserGiver, userGiverID } from "../user-giver"
 import { QuestStore } from "../store"
 import { questRoot } from "../root"
 import { useWorkerObservations } from "./worker-observation"
+import { ownedRuns } from "../activity"
 /** @jsxImportSource @opentui/solid */
 import {workspaceSettings,setWorkspaceMode} from "../workspace-settings"
 import { Plugin } from "../../tui-legacy"
@@ -17,7 +18,7 @@ import { giverHomeEntry } from "../tui-navigation"
 import type { Quest, QuestSession } from "../types"
 import { watchQuests } from "../watcher"
 import { progressGlyph, questProgress } from "../steps"
-import { C, QuestBoard, activate, openWorkerSession, projectRoot, quests, workerLabel, workerTask } from "./quest-board"
+import { C, QuestBoard, activate, fitTitle, openWorkerSession, projectRoot, quests, workerLabel, workerTask } from "./quest-board"
 
 /**
  * Snapshot of the route live right now, shaped the way the host's own router
@@ -162,22 +163,48 @@ function useQuests(context: any) {
 /** Quest status occupies its own composer rows; the host footer keeps its native controls. */
 export function QuestStatus(props: { context: any }) {
   const all = useQuests(props.context)
-  const observation=useWorkerObservations(props.context,()=>all().flatMap(q=>q.sessions))
-  const lines=()=>all().flatMap(quest=>quest.sessions.map(session=>({quest,session}))).sort((a,b)=>Number(observation(b.session).state==='blocked')-Number(observation(a.session).state==='blocked')||b.session.updatedAt.localeCompare(a.session.updatedAt)).slice(0,2)
+  // Owned runs, not every session ever recorded: a retried run keeps its earlier attempts, and
+  // rendering the lineage rather than its current attempt printed the same worker twice on adjacent
+  // rows. It also decides what gets inspected, so listing finished and superseded sessions had this
+  // status bar polling the host for workers that ended hours ago.
+  const runs=()=>all().flatMap(quest=>ownedRuns(quest).map(session=>({quest,session})))
+  const observation=useWorkerObservations(props.context,()=>runs().map(row=>row.session))
+  // Measure the row box, not the terminal: these rows sit in the composer, which is narrower than the
+  // screen and narrower again when a sidebar is open. Terminal width would over-budget the title and
+  // hand the shortening back to the renderer, which is what puts the cut inside a word.
+  let box: { width?: number } | undefined
+  const [width,setWidth]=createSignal(props.context?.renderer?.width??120)
+  const measure=()=>{const value=box?.width;if(typeof value==="number"&&value>0)setWidth(value)}
+  onMount(()=>{
+    // The box has no laid-out width until the first frame, so measure once mount returns as well.
+    measure()
+    const settle=setTimeout(measure,0)
+    const renderer=props.context?.renderer
+    renderer?.on?.("resize",measure);onCleanup(()=>{clearTimeout(settle);renderer?.off?.("resize",measure)})
+  })
+  const lines=()=>runs().sort((a,b)=>Number(observation(b.session).state==='blocked')-Number(observation(a.session).state==='blocked')||b.session.updatedAt.localeCompare(a.session.updatedAt)).slice(0,2)
   const counts = async () => {
     const picked=await props.context.ui.dialog.select({title:all.error()??"Quest counts · all projects",options:QUEST_FILTERS.filter(f=>f.id!=="all").map(f=>({value:f.id,title:`${filterQuests(all(),f.id,observation).length} ${f.label}`}))})
     if(picked)openBoard(props.context,undefined,picked)
   }
-  return <box flexDirection="column" width="100%" flexShrink={0} minWidth={0}>
+  return <box ref={box} flexDirection="column" width="100%" flexShrink={0} minWidth={0}>
     <box flexDirection="row" flexShrink={1} minWidth={0} gap={1}>
       <Show when={hasQuestReturn(props.context)}><text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>returnToQuest(props.context))}>↩ Quest</text></Show>
       <text fg={C.yellow} wrapMode="none" truncate flexShrink={1} onMouseUp={(event:any)=>activate(event,()=>openBoard(props.context))}>Quests · {filterQuests(all(),"open").length} open</text>
       <text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>void counts())}>▾</text>
     </box>
-    <For each={lines()}>{row=><box flexDirection="row" gap={1} minWidth={0}>
-      <Show when={activeSessionID(props.context)===userGiverID()&&observation(row.session).permissions?.length}><text fg={C.yellow} flexShrink={0} onMouseUp={(event:any)=>activate(event,()=>void reviewWorkerPermissions(props.context,row.quest.id,row.session.runID??row.session.callID))}>Review permission</text></Show>
-      <text fg={C.muted} wrapMode="none" truncate flexShrink={1} onMouseUp={(event:any)=>activate(event,()=>void openWorkerSession(props.context,row.session))}>↳ Open worker · {observation(row.session).state} · {row.quest.title}</text>
-    </box>}</For>
+    <For each={lines()}>{row=>{
+      // fitTitle cuts on a word boundary. Leaving it to the renderer took the shortening out of the
+      // middle of a word instead, which is how "…across Codex" reached the footer as "…ross Codex".
+      const label=()=>{
+        const prefix=`↳ Open worker · ${observation(row.session).state} · `
+        return prefix+fitTitle(row.quest.title,Math.max(12,width()-prefix.length-1))
+      }
+      return <box flexDirection="row" gap={1} minWidth={0}>
+        <Show when={activeSessionID(props.context)===userGiverID()&&observation(row.session).permissions?.length}><text fg={C.yellow} flexShrink={0} onMouseUp={(event:any)=>activate(event,()=>void reviewWorkerPermissions(props.context,row.quest.id,row.session.runID??row.session.callID))}>Review permission</text></Show>
+        <text fg={C.muted} wrapMode="none" truncate flexShrink={1} onMouseUp={(event:any)=>activate(event,()=>void openWorkerSession(props.context,row.session))}>{label()}</text>
+      </box>
+    }}</For>
   </box>
 }
 
