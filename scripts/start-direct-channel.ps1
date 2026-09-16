@@ -27,16 +27,17 @@ $channel='dev'; $ref=$null; $defaulted=$false; $here=$false; $fresh=$false; $mod
 for($i=0;$i -lt $Arguments.Count;$i++){
  $a=$Arguments[$i]
  switch -Regex ($a) {
-  '^--?stable$'  {$channel='stable'}
-  '^--?dev$'     {$channel='dev'}
-  '^--?gated$'   {$want='gated'}
-  '^--?branch$'  {$want='branch'}
-  '^--?here$'    {$here=$true}
-  '^--?fresh$'   {$fresh=$true}
-  '^--?model$'   {$i++;if($i -ge $Arguments.Count){throw 'Name the model route: oc <branch> --model <exact-route>'};$model=$Arguments[$i]}
-  '^--?default$' {$i++;if($i -ge $Arguments.Count){throw 'Choose what plain oc opens: oc --default branch|gated'};$setDefault=$Arguments[$i]}
-  '^-'           {$hostArgs+=$a}
-  default        {if($null -eq $ref){$ref=$a}else{$hostArgs+=$a}}
+  '^--?stable$'  {$channel='stable';break}
+  '^--?dev$'     {$channel='dev';break}
+  '^--?gated$'   {$want='gated';break}
+  '^--?branch$'  {$want='branch';break}
+  '^--?here$'    {$here=$true;break}
+  '^--?fresh$'   {$fresh=$true;break}
+  '^--?model$'   {$i++;if($i -ge $Arguments.Count){throw 'Name the model route: oc <branch> --model <exact-route>'};$model=$Arguments[$i];break}
+  '^--?default$' {$i++;if($i -ge $Arguments.Count){throw 'Choose what plain oc opens: oc --default branch|gated'};$setDefault=$Arguments[$i];break}
+  '^--?cwd$'     {$i++;if($i -ge $Arguments.Count){throw '--cwd needs a directory'};$hostArgs+=@('--cwd',$Arguments[$i]);break}
+  '^-'           {$hostArgs+=$a;break}
+  default        {if($null -eq $ref){$ref=$a}else{$hostArgs+=$a};break}
  }
 }
 # Flipping the default is a setting, not a launch.
