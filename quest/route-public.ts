@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs'
 import { configuredDispatchPolicyFile, resolveDispatchSelector } from '../models/dispatch-planner'
 import { getAccountUsage } from '../usage/account-api'
 import { liveDispatchRoutes } from '../models/live-routes'
+import { describeSelection } from '../models/access-policy'
 import { ledgerLockStatus } from '../orchestration/orchestration-ledger'
-export async function routeFeedback(model?: string, hostCapable = true) {
+export async function routeFeedback(model?: string, hostCapable = true, sessionID?: string) {
   if (!hostCapable) return { code: 'HOST_CAPABILITY_MISSING', action: 'Open a fresh session with a verified plugin generation' }
   let policy: any
   try { policy = JSON.parse(readFileSync(configuredDispatchPolicyFile(), 'utf8')) } catch { return { code: 'AUTHORIZED_ROUTE_UNAVAILABLE', action: 'Inspect the configured route policy; quota availability does not add a route' } }
@@ -12,7 +13,10 @@ export async function routeFeedback(model?: string, hostCapable = true) {
   // the failure message for an unresolvable selector sends the reader straight here.
   let discoveryError:string|undefined
   try { const live = await liveDispatchRoutes(policy, snapshot); policy = { ...policy, routes: [...live.curated, ...live.derived], request: { ...policy.request, allowedRouteIDs: [...new Set([...(policy.request.allowedRouteIDs ?? []), ...live.derived.map((r: any) => r.id)])] } } } catch(error) { discoveryError=error instanceof Error?error.message:String(error) }
-  const scope={scope:'dispatch-candidates',catalogComplete:false,discoveryError,automatic:{preference:policy.request.preference,task:policy.request.task,byTask:policy.request.byTask},note:'These are worker dispatch candidates, not all host models or supported efforts. Chat model selection is separate. Omit workflow.model for automatic selection; an exact worker selector includes reasoning.'}
+  // This conversation's own chat route is reported beside the worker candidates: a deliberate
+  // selection is the answer to "why is this session not on the launch default", so it is shown as
+  // recorded provenance rather than left for the reader to infer from the candidate list.
+  const scope={scope:'dispatch-candidates',catalogComplete:false,discoveryError,session:describeSelection(sessionID),automatic:{preference:policy.request.preference,task:policy.request.task,byTask:policy.request.byTask},note:'These are worker dispatch candidates, not all host models or supported efforts. Chat model selection is separate. Omit workflow.model for automatic selection; an exact worker selector includes reasoning.'}
   if(!model)return {...scope,code:'AUTOMATIC_ROUTING',candidates:resolveDispatchSelector(policy,'',snapshot).candidates,action:'Start the saved Quest without a model override to use its configured automatic routing'}
   const selection=resolveDispatchSelector(policy,model,snapshot)
   if(!selection.route)return {...scope,...selection,action:'For an explicit worker choice include its reasoning; for automatic selection omit workflow.model. No replacement selected'}
