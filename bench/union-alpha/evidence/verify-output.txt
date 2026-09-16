@@ -1,0 +1,8 @@
+catalog verification - 2026-09-16T22:59:12.075Z - bun 1.3.14
+OK   openrouter lists id stealth/union-alpha
+OK   openrouter name Union Alpha
+OK   openrouter context_length 262144
+OK   openrouter max_completion_tokens 131072
+OK   openrouter prompt/completion price 0/0
+OK   zen lists id union-alpha
+result=PASS
