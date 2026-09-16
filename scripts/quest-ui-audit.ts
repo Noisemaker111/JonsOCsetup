@@ -392,8 +392,7 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
       await shot("07-selection-retains-scroll")
       for(let i=0;i<25;i++)await send("\x1b[<64;"+(COLS-8)+";"+(ROWS-8)+"M",40)
       await shot("07-blocked-quest")
-      if(has("--source-capture")){await send("f",200);await waitForScreen(render,t=>t.includes("Quest state filter"),5000,"ready filter picker");await clickText("Ready for review")}
-      else await clickText("2 Turn in")
+      await send("f",200);await waitForScreen(render,t=>t.includes("Quest state filter"),5000,"ready filter picker");await clickText("Ready for review")
       await waitForScreen(render,t=>t.includes("2 matching"),5000,"review-ready filter")
       if(has("--source-capture") && COLS<100)await enter(200)
       await shot("08-review-ready")
@@ -403,8 +402,7 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
         const entries=(await import(pathToFileURL(join(root,"quest/index.ts")).href)).readAllQuests(questFixture!.store.projectRoot,{includeArchived:true})
         if(entries.filter((entry:any)=>entry.quest?.state==="Archived").length!==1)throw Error("Dismissal changed archive")
       }
-      if(has("--source-capture")){await send("f",200);await waitForScreen(render,t=>t.includes("Quest state filter"),5000,"archived filter picker");await clickText("Archived")}
-      else await clickText("1 Archived")
+      await send("f",200);await waitForScreen(render,t=>t.includes("Quest state filter"),5000,"archived filter picker");await clickText("Archived")
       if(has("--source-capture")&&COLS<100)await enter(200);await waitForScreen(render,t=>t.includes("Reopen Quest"),5000,"archived Quest")
       await shot("09-archived")
       await send("\x1b",300)
