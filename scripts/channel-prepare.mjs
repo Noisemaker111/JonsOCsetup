@@ -270,7 +270,10 @@ export function findPrepared(commit, registry = registryRoot, repository) {
       // historical process evidence. Current pointers still protect one already in use.
       if (release.channel !== 'dev' || release.commit !== commit || release.cleanupProtocol !== 1) continue
       const pointer = read(join(root, 'plugin-activation.json'))
-      if (pointer.evidence?.ok !== true || pointer.evidence.sourceCommit !== commit) continue
+      // Reuse on the same terms the release was accepted on. Requiring `ok` here meant a release
+      // prepared while an account had nothing left could never be reused, so every launch rebuilt
+      // the same commit — the expensive half of a slow `oc`, for a reason that was never the code's.
+      if ((pointer.evidence?.accepted ?? pointer.evidence?.ok) !== true || pointer.evidence.sourceCommit !== commit) continue
       if (!existsSync(join(root, 'generations', pointer.activeGeneration, 'plugin-set.json'))) continue
       if (git(root, ['rev-parse', 'HEAD']) !== commit) continue
       if (owner && !sameRepository(repositoryOwner(root), owner)) continue
