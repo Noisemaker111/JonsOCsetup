@@ -98,7 +98,12 @@ $plan=$planText | ConvertFrom-Json
 # New launches start in the maintained source. Existing sessions retain their saved identity.
 # --here and explicit --cwd continue to select the caller's directory.
 $explicitCwd=$hostArgs -contains '--cwd'
-$launchAt=if($here -or $explicitCwd){(Get-Location).Path}else{$defaultDirectory}
+# Opening the registered giver means opening it where it lives. Only the giver's own location runs
+# the board polls, and there is one host at the directory opened here, so launching anywhere else
+# leaves the board with no coordinator: nothing reconciles a finished run, no saved start request is
+# consumed, and no continuation advances. --here and an explicit --cwd still win, and a launch with
+# no registered giver still opens the maintained source.
+$launchAt=if($here -or $explicitCwd){(Get-Location).Path}elseif($plan.giverDirectory -and (Test-Path -LiteralPath $plan.giverDirectory)){$plan.giverDirectory}else{$defaultDirectory}
 $b=$plan.banner
 if($b.candidate -and $defaulted){
  # The ordinary case now: plain `oc` on the latest merged code. Say what it is, quietly.

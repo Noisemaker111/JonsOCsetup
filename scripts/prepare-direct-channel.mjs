@@ -53,6 +53,14 @@ const giver=readUserGiver(join(env.OPENCODE_QUEST_ROOT??homedir(),'.opencode','.
 if(giver&&giver.state!=='bound')throw Error('Your giver creation is uncertain; inspect it before opening another conversation')
 const banner={candidate:candidate??undefined,ref:dev.ref,resolvedRef:dev.resolved,subject:dev.subject,commit:dev.commit,behind:commitsBehind(repository,dev.commit),model:channel==='dev'?dev.model:undefined,preparedAt:dev.preparedAt,activatedCommit:selectedDev?.commit,activatedRoot:selectedDev?.root}
 const hostOwnershipScript=join(dev.root,'scripts/host-ownership.mjs')
-const plan={channel,releaseLease,retirementScript:join(dev.root,'scripts/release-retirement.mjs'),...(existsSync(hostOwnershipScript)?{hostOwnershipScript}:{}),host:inspectHostExecutable(),generation,sourceCommit:pointer.evidence.sourceCommit,banner,env,...(giver?.sessionID?{giverSessionID:giver.sessionID}:{})}
+// Where the giver conversation lives, so the launcher can open it there.
+//
+// Only the giver's own location coordinates the board: that is what keeps a worker's checkout from
+// also reconciling runs, consuming start requests and advancing continuations. There is one host
+// process and one plugin instance, at the directory the launcher opened, so opening the giver
+// anywhere else means no location is the giver's and the comparison can never pass. The board then
+// has no coordinator at all — which is what had happened: the giver was created in the hub, the
+// launcher opened it in the maintained source, and no poll had run since.
+const plan={channel,releaseLease,retirementScript:join(dev.root,'scripts/release-retirement.mjs'),...(existsSync(hostOwnershipScript)?{hostOwnershipScript}:{}),host:inspectHostExecutable(),generation,sourceCommit:pointer.evidence.sourceCommit,banner,env,...(giver?.sessionID?{giverSessionID:giver.sessionID,...(giver.directory?{giverDirectory:giver.directory}:{})}:{})}
 writeFileSync(join(control,'launch.json'),JSON.stringify(plan,null,2))
 console.log(JSON.stringify(plan))
