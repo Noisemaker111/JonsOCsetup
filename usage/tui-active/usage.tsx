@@ -389,15 +389,21 @@ function UsageTable(props: { context: any; view: UsageView }) {
           const hint = sourceHint(block.id, block.doc)
           return (
             <box flexDirection="column" gap={0} minWidth={TABLE_WIDTH} flexShrink={0}>
-              <box flexDirection="row" gap={1} flexWrap="no-wrap" flexShrink={0}>
+              <box flexDirection="row" gap={1} flexWrap="no-wrap" flexShrink={0} minWidth={0}>
                 <text fg={colors.text} attributes={TextAttributes.BOLD} wrapMode="none" truncate flexShrink={0}>
                   {block.title ?? sourceTitle(block.id)}
                 </text>
                 <text fg={toneFg(sourceStateTone(block.state), colors)} wrapMode="none" truncate flexShrink={0}>
                   · {sourceStateLabel(block.state)}
                 </text>
+                {/* The hint is what gives when the row runs out: the source and its state are short
+                    and identify the block. Held at flexShrink={0} it could not give at all, so it
+                    overflowed and the frame clipped it with no ellipsis — "exact percentag" simply
+                    stopped, and nothing on the row said text was missing. It stays on this line
+                    rather than wrapping onto its own, which is what keeps ten sources inside the
+                    dialog's height without a scrollbar. */}
                 <Show when={hint}>
-                  <text fg={colors.muted} wrapMode="none" truncate flexShrink={0}>
+                  <text fg={colors.muted} wrapMode="none" truncate flexShrink={1} minWidth={0}>
                     · {hint}
                   </text>
                 </Show>
