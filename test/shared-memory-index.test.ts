@@ -5,7 +5,7 @@
 import { test, expect } from "bun:test"
 import { readFileSync, readdirSync } from "node:fs"
 
-const MEMORY = "setup/files/Projects/opencode-hub/MEMORY.md"
+const MEMORY = "MEMORY.md"
 
 test("the shared memory's test index resolves", () => {
   const memory = readFileSync(MEMORY, "utf8")

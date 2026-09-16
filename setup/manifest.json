@@ -3,18 +3,6 @@
   "name": "JonsOCsetup",
   "entries": [
     {
-      "target": "Projects/opencode-hub/AGENTS.md",
-      "sha256": "d824652920a71d3ebf864339074912a79dc8f35f2d5012cb27dd045df6552503"
-    },
-    {
-      "target": "Projects/opencode-hub/CLAUDE.md",
-      "sha256": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49"
-    },
-    {
-      "target": "Projects/opencode-hub/MEMORY.md",
-      "sha256": "f2a9e5208e94f44b0c1c7476c63b84d1f343764b32ce1e7b14788abf1b54cf59"
-    },
-    {
       "target": ".agents/matt-pocock.md",
       "sha256": "8ccacd0bbeea8c578ab0f82e255a33a5ef56c43ab102c6d4ac7ea324e6782ad0"
     },
@@ -37,11 +25,11 @@
     },
     {
       "target": ".codex/config.toml",
-      "sha256": "f9a380bb6963a177a08d0fa96541a3bcfc7e5056b4230172eb268d79c27371f2"
+      "sha256": "20b46577af65a136ede6e6294ed7863f6852535fe6bf9e44b247315ceefdb888"
     },
     {
       "target": ".claude/CLAUDE.md",
-      "sha256": "4fca259317dcd44b5c51af8f6be8420b9db313262f5c1048accb1eed52c6101c"
+      "sha256": "e045e9b7915745d2f00d77b4434ab10f29d9afa6c0c981552beeee8e9a75d1bb"
     },
     {
       "target": ".claude/settings.json",
@@ -597,7 +585,7 @@
     },
     {
       "target": ".claude/skills/memory/SKILL.md",
-      "sha256": "eaf343297eaa86d8dcd536c5890146b7e0383ca54b13586389649a83c1dd104e"
+      "sha256": "44565ca7a6200e7a9905c2cbfd145e210c1f73f621143cae8cb1d3692a407071"
     }
   ],
   "dependencies": [

@@ -179,9 +179,6 @@ trust_level = "trusted"
 [projects.'c:\users\jk101\projects\ai-lab-game']
 trust_level = "trusted"
 
-[projects.'c:\users\jk101\projects\opencode-hub']
-trust_level = "trusted"
-
 [projects.'c:\users\jk101\projects\btg-hub\appforgutters']
 trust_level = "trusted"
 
@@ -192,12 +189,6 @@ trust_level = "trusted"
 trust_level = "trusted"
 
 [projects.'c:\users\jk101\.config\opencode\.worktrees\runtime-repair\.visual-e2e\luna-runtime-1788934833303\repo']
-trust_level = "trusted"
-
-[projects.'c:\users\jk101\projects\opencode-hub\.runtime-tests\luna-runtime-1788935030545\repo']
-trust_level = "trusted"
-
-[projects.'c:\users\jk101\projects\opencode-hub\.runtime-tests\luna-review-1788937865820\repo']
 trust_level = "trusted"
 
 [projects.'c:\users\jk101\projects\shell-forensics\.worktrees\codex-english-bench-20260910\work\codex-bench\csv-delegated-6dd32f84\workspace']

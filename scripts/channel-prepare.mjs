@@ -144,8 +144,8 @@ export async function ensureHostModelCatalog({model, repository, commit, cacheFi
   }
   throw Error(`Cannot prepare channel on ${identity.route}: the host model catalog at ${cacheFile} still cannot resolve it after refresh from ${source}; no prompt was sent.`)
 }
-/** The hub's installed source mapping owns repository selection; runtimeHome only stores runtime data. */
-export function sourceRepository(source = join(homedir(), 'Projects', 'opencode-hub', 'source')) {
+/** The maintained JonsOCsetup checkout owns repository selection; runtimeHome only stores runtime data. */
+export function sourceRepository(source = join(homedir(), 'Projects', 'JonsOCsetup')) {
   const directory = realpathSync.native(source)
   return repositoryOwner(directory)
 }

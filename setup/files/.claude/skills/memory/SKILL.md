@@ -49,7 +49,7 @@ the line only parses for someone who read the previous version, it is a changelo
 | Destination | For |
 | --- | --- |
 | `~/.claude/projects/<cwd-slug>/memory/` | Claude Code only; Codex and the Quest Giver never see it |
-| `Projects/opencode-hub/MEMORY.md` | anything another harness needs |
+| `Projects/JonsOCsetup/MEMORY.md` | anything another harness needs |
 | the repo it belongs to | anything a person would go looking for in docs |
 
 ## The file

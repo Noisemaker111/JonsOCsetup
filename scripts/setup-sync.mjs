@@ -41,7 +41,7 @@ console.log(JSON.stringify({
   linked: links.alreadyLinked,
   unlinked: links.wouldLink,
   // Reported, never enforced: a ceiling on characters refuses a line that earns its place.
-  sharedMemoryCharacters: readFileSync(join(root, 'setup/files/Projects/opencode-hub/MEMORY.md'), 'utf8').length,
+  sharedMemoryCharacters: readFileSync(join(root, 'MEMORY.md'), 'utf8').length,
   workingTree: dirty.length,
   next: dirty.length
     ? 'Review the diff, then commit setup/manifest.json with the source bytes in the same change.'

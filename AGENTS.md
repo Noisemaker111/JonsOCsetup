@@ -4,7 +4,7 @@ Run small core checks, typechecks, builds and isolated actual-product verificati
 
 Use the exact model the user chose. If that route is unavailable, say so instead of substituting. For quotas and resets call `usage_status` with `{"format":"json"}`. When you describe a worker, give its recorded provider, model and reasoning level, say fast only when actually selected, and give the session link rather than a raw ses_ ID.
 
-When the task is OpenCode itself (config, plugins, agents, Quests, TUI), work from `C:\Users\Jk101\Projects\opencode-hub` and read its AGENTS.md first.
+When the task is OpenCode itself (config, plugins, agents, Quests, TUI), work in `C:\Users\Jk101\Projects\JonsOCsetup`, the repository that is also this configuration, and load its `opencode` skill first.
 
 ## Reading Jk
 
@@ -66,8 +66,8 @@ Read C:/Users/Jk101/.agents/user-verification.md before implementation. Inspect 
 drive the product through the same controls the user uses. Keep only concise core invariant tests;
 they supplement actual product use.
 
-Working on OpenCode itself? Its dev loop, branch policy, standing merge authorization, memory and
-verification rules live in the hub AGENTS.md and docs/development-workflow.md, which load when you
-are there. They are not repeated here, because every session in every project pays for this file.
+Working on OpenCode itself? Its ecosystem map, dev loop, branch policy, standing merge authorization,
+memory and verification rules live in the `opencode` skill and docs/development-workflow.md in
+JonsOCsetup. They are not repeated here, because every session in every project pays for this file.
 
 Model choices belong to user-editable settings for every role and default chat. Do not hardcode model names or universal fallbacks in implementation. Automatic routing uses the individual user's allowed accounts, pricing, current usage and measured speed; preserve explicit selections and deliberate changes.

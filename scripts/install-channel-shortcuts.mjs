@@ -49,6 +49,9 @@ if(existsSync(profile)){
  drop('Get-OcRuntimeScript',/^function Get-OcRuntimeScript \{[\s\S]*?\n\}\r?\n/m)
  after=after
   .replace('# oho / ohc / ohcc: cd here, then open opencode2 / Codex / Claude Code in this terminal','# ohc / ohcc: cd here, then open Codex / Claude Code in this terminal')
+  // The hub is the JonsOCsetup source itself; the junction folder it used to name is retired.
+  .replace("# oh: jump to the OpenCode hub (config + sessions + state + upstream source, all junctions)","# oh: jump to the OpenCode hub, the JonsOCsetup source that is also the configuration")
+  .replace("function oh { Set-Location (Join-Path $env:USERPROFILE \"Projects\\opencode-hub\") }","function oh { Set-Location (Join-Path $env:USERPROFILE \"Projects\\JonsOCsetup\") }")
   .replace(/^# OpenCode launchers\. ocm is stable \(main\), oca is the agents integration release\.\r?\n(^#.*\r?\n)*/m,'# OpenCode itself is opened with `oc` (installed by install-channel-shortcuts.mjs), not from here.\n')
  if(after!==before){copyFileSync(profile,profile+'.before-channel-shortcuts-'+Date.now()+'.bak');writeFileSync(profile,after)}
 }

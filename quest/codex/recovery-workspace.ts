@@ -1,6 +1,5 @@
 import {createHash, randomUUID} from 'node:crypto'
 import {existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync} from 'node:fs'
-import {homedir} from 'node:os'
 import {dirname, isAbsolute, join, relative, resolve} from 'node:path'
 import {spawnSync} from 'node:child_process'
 import type {QuestStore} from '../store'
@@ -29,9 +28,6 @@ const git=(directory:string,args:string[])=>{
 const save=(file:string,value:unknown)=>{const temp=file+'.'+randomUUID()+'.tmp';writeFileSync(temp,JSON.stringify(value));renameSync(temp,file)}
 const contained=(root:string,path:string)=>{const rel=relative(root,path);return rel===''||(!isAbsolute(rel)&&rel!=='..'&&!rel.startsWith('../')&&!rel.startsWith('..\\'))}
 export function sameDirectory(a:string,b:string){return key(realpathSync(a))===key(realpathSync(b))}
-// This personal configuration has an explicitly documented non-Git hub. Never
-// guess a repository by scanning children: the hub also contains upstream repos.
-export function checkoutAliases(){return {[join(homedir(),'Projects','opencode-hub')]:join(homedir(),'Projects','opencode-hub','source')}}
 // Same temporary-index/two-pass mechanism as QuestWorkspaces.applySnapshot,
 // narrowed to tracked regular files. hash-object avoids repository clean filters;
 // no source index mutation, lifecycle command, or arbitrary untracked-file copy.
@@ -85,7 +81,7 @@ function trackedSnapshot(store:QuestStore,repository:string,head:string):string{
  }finally{if(existsSync(index))unlinkSync(index)}
 }
 export function recoverWorkspace(store:QuestStore,origin:string,sessionID:string,options:RecoveryOptions={}):RecoveryBinding{
- const aliases=options.aliases??checkoutAliases()
+ const aliases=options.aliases??{}
  const alias=Object.entries(aliases).find(([path])=>existsSync(path)&&sameDirectory(path,origin))?.[1]
  const repository=realpathSync(git(alias??origin,['rev-parse','--show-toplevel']))
  // A session keeps its origin+session identity when the hub mapping moves to
@@ -195,7 +191,6 @@ const CHECKOUT_FREE_CONTROLS=new Set([
 /** A home or project container is not a checkout reservation for every tool on the machine. */
 export function hasCheckout(directory:string):boolean {
  const actual=realpathSync(directory)
- if(Object.keys(checkoutAliases()).some(alias=>existsSync(alias)&&sameDirectory(alias,actual)))return true
  if(!gitMetadataDirectory(actual)&&!process.env.GIT_DIR&&!process.env.GIT_WORK_TREE)return false
  const result=spawnSync('git',['-C',actual,'rev-parse','--is-inside-work-tree'],{encoding:'utf8',windowsHide:true,timeout:15000})
  if(result.error)throw result.error

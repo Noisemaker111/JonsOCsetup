@@ -39,7 +39,7 @@ function tree(target){if(!existsSync(join(home,target)))return;for(const e of re
 // Every harness that reads instructions on this machine is listed here, because a file that is only
 // installed is a file that gets corrected repeatedly and lost every time: the dev-workflow skill was
 // reworded away from "dev release" twice before the wording reached this tree.
-for(const path of ['Projects/opencode-hub/AGENTS.md','Projects/opencode-hub/CLAUDE.md','Projects/opencode-hub/MEMORY.md','.agents/matt-pocock.md','.agents/user-verification.md','.agents/.skill-lock.json','.agents/plugins/marketplace.json','.codex/AGENTS.md','.codex/config.toml','.claude/CLAUDE.md','.claude/settings.json'])file(path)
+for(const path of ['.agents/matt-pocock.md','.agents/user-verification.md','.agents/.skill-lock.json','.agents/plugins/marketplace.json','.codex/AGENTS.md','.codex/config.toml','.claude/CLAUDE.md','.claude/settings.json'])file(path)
 for(const path of ['.agents/scripts','.agents/docs','.codex/skills/convex-deploy-guard','.codex/rules'])tree(path)
 for(const e of readdirSync(join(home,'.agents/skills'),{withFileTypes:true})){const p='.agents/skills/'+e.name;if(statSync(join(home,p)).isDirectory())tree(p);else file(p)}
 // Disabled skills stay disabled but remain reproducible source, including their licenses.

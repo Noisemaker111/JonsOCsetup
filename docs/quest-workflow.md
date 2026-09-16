@@ -57,11 +57,9 @@ completion never silently accepts or archives the Quest.
 
 ## Editing source
 
-`~/Projects/JonsOCsetup` is the current source repository. The hub's `source/`
-junction points there; `bun run setup:hub` establishes that link and refuses to
-replace an unexpected target. Use an owned worktree of that source repository.
+`~/Projects/JonsOCsetup` is the source repository and the hub: `oc` launches
+there and the giver lives there. Use an owned worktree of it for changes.
 `~/.config/opencode` retains the runtime registry and historical checkout; plain
 `oc` prepares committed `agents` code without switching that directory's branch.
-The runtime resolves the configured hub source binding for both research and editing.
-Workers remain attached to the hub Quest; research runs at the mapped source and
-editing runs in an owned worktree. The giver stays in the hub.
+Research runs at the source and editing runs in an owned worktree; workers stay
+attached to their Quest.
