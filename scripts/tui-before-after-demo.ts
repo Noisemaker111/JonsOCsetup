@@ -63,7 +63,7 @@ async function renderBefore() {
   root.add(new TextRenderable(r, { content: "7d   ██████████ 100% cap     3d 18h", fg: "#FF0000" }))
   root.add(new TextRenderable(r, { content: "grok n/a         n/a  none    n/a", fg: "#AAAAAA" }))
 
-  // Raw doc dump — wraps, no filtering of placeholder, no HINT_WIDTH truncation
+  // Raw doc dump — wraps, no filtering of placeholder
   root.add(
     new TextRenderable(r, {
       content: "Go: server rolling 5h AND weekly AND monthly caps apply with detailed paragraph that wraps across the dialog and looks messy",
@@ -164,7 +164,7 @@ async function renderAfter() {
     root.add(line)
   }
 
-  // Hint — filtered through sourceHint (truncated to HINT_WIDTH, no raw dump)
+  // Hint — filtered through sourceHint (placeholder docs dropped; the row shortens it to fit)
   const hint = sourceHint("opencode-go", "Go: server rolling 5h AND weekly AND monthly") ?? ""
   if (hint) {
     const hintBox = new BoxRenderable(r, { width: DIALOG_INNER, flexShrink: 0 })

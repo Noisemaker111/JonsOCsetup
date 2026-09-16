@@ -16,7 +16,6 @@ export const COL_COUNT = 4
 export const TABLE_WIDTH = COL.win + COL.bar + COL.pct + COL.reset + COL_GAP * (COL_COUNT - 1)
 export const MONEY_WIDTH = COL.bar + COL_GAP + COL.pct
 export const DIALOG_INNER = 44
-export const HINT_WIDTH = 42
 
 export type PctTone = "ok" | "warn" | "cap" | "none"
 
@@ -285,17 +284,23 @@ export function windowHasSignal(w: UsageWindowIn, source?: SourceCtx): boolean {
   return false
 }
 
-/** Drop placeholder plan docs; never dump a wrapping paragraph. */
-export function formatDoc(doc: string | undefined, width = HINT_WIDTH): string | undefined {
+/**
+ * Drop placeholder plan docs and flatten to one line; the row decides how much of it fits.
+ *
+ * This used to cut at a fixed 42 characters, which is not the space the hint actually has — the
+ * source name and its state sit in front of it and vary in length. On a 60-column dialog the cut
+ * fired first and the row then shortened the result again, so the hint carried two ellipses:
+ * "Claude Code ...ription: local…". One truncation, made by the thing that knows the real width.
+ */
+export function formatDoc(doc: string | undefined): string | undefined {
   if (!doc) return undefined
   const one = doc.replace(/\s+/g, " ").trim()
   if (!one || /^edit me/i.test(one)) return undefined
-  if (one.length <= width) return one
-  return one.slice(0, Math.max(0, width - 1)) + "…"
+  return one
 }
 
-export function sourceHint(id: string, doc?: string, width = HINT_WIDTH): string | undefined {
-  return formatDoc(SOURCE_HINT[id] ?? doc, width)
+export function sourceHint(id: string, doc?: string): string | undefined {
+  return formatDoc(SOURCE_HINT[id] ?? doc)
 }
 
 export function formatSubtitle(age: string, stale: boolean, width = DIALOG_INNER): string {
