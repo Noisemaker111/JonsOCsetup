@@ -15,6 +15,19 @@ test('updates require a real change and reject the old nested envelope',()=>{
  expect(validate({id:'quest',workflow:{readOnly:true,task:'review'}}).valid).toBe(true)
 })
 
+/**
+ * @core-prevents a second Quest operation list appearing in one interface, so the CLI, the MCP namespace and the HTTP contract drift apart while each still looks correct
+ * @core-observed The hub MEMORY.md carried "Quest operations share one contract exposed through the installed `quest` CLI and the `quests` MCP namespace" as prose nothing checked, after the external start helper had already imported `quest/cli-api.ts`, a file absent from `agents` (2026-09-13). A shared contract only holds while exactly one list defines it.
+ */
+test('every Quest interface serves the one shared operation contract',async()=>{
+ const {readFileSync}=await import('node:fs')
+ expect(Object.keys(questOperations).sort()).toEqual(['archive','create','get','inspect','list','plan','reopen','report','run','start','status','update','wait'])
+ // CLI help, MCP tool discovery, the HTTP /contract route and the client all read questOperations
+ // rather than carrying a list of their own.
+ for(const file of ['quest/cli.mjs','quest/mcp-server.ts','quest/api-server.ts','quest/client.mjs'])
+  expect(`${file}: ${readFileSync(file,'utf8').includes('questOperations')}`).toBe(`${file}: true`)
+})
+
 /** @core-observed September 13 discovery retained dozens of listeners from worker locations while clients could not reach a ready giver. */
 test('locations share one authenticated listener and retiring a worker keeps the giver available', async()=>{
  const {mkdtempSync,readdirSync,readFileSync,rmSync}=await import('node:fs')
