@@ -56,11 +56,17 @@ test('a planned run this host recorded is left alone, its admission still pendin
   expect(settledStale(applied)).toBeUndefined()
 })
 
-test('an old planned run that did bind a session is the host’s to judge, not the clock’s', async () => {
+test('an old planned run that did bind a session is settled too, by the host that ended under it', async () => {
+  // Written first as "the host's to judge, not the clock's", which was too broad: the host cannot
+  // judge it. There is no terminal outcome and no execution event, and the process that would have
+  // run it is gone, so it settles as an execution lost with its host rather than as an unadmitted
+  // plan. Either way it stops owning the step, which is the point.
   const stale = new Date(Date.now() - 29 * 60 * 60 * 1000).toISOString()
   const { store, applied } = storeWith({ state: 'planned', updatedAt: stale, sessionID: 'ses_bound', openCodeSessionId: 'ses_bound' })
 
   await reconcileWorkers(store, host, 'q')
 
-  expect(settledStale(applied)).toBeUndefined()
+  const settle = applied.find(a => a.kind === 'session-state' && a.payload.state === 'stale')
+  expect(settle).toBeDefined()
+  expect(settle!.actor).toBe('quest:execution-lost-with-host')
 })

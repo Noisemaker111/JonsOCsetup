@@ -102,6 +102,18 @@ async function reconcile(store:QuestStore,host:any,questID:string) {
    store.apply(entry.quest!.id,'session-state',{callID:currentRun.callID,state:'stale',result:reason,evidence:reason,preserveTerminal:true},'quest:expired-lease')
    continue
   }
+  // A native execution lives inside this host process, so when the host restarts every session it
+  // was running stopped with it. The session row survives that restart and so does the worktree,
+  // which is why none of the settles above reach these: inspectWorker finds the session present with
+  // no terminal outcome, observeWorker answers `unknown`, and nothing settles unknown. Six runs sat
+  // recorded executing across a restart, holding their steps, while the board did nothing for twenty
+  // minutes. The step goes back to the giver to redispatch; the workspace is left where it is.
+  if(!currentRun.harness&&currentRun.runtime!=='claude-code'&&Date.parse(currentRun.updatedAt)<HOST_STARTED_AT&&hostExecution(host,boundID??'')!==true){
+   const reason='Execution ended with the host process it was running in; recorded '+currentRun.state+' at '+currentRun.updatedAt+', before this host started. The workspace is untouched and the step can be dispatched again.'
+   observations[run.runID??run.callID]={state:'stale',reason}
+   store.apply(entry.quest!.id,'session-state',{callID:currentRun.callID,state:'stale',result:reason,evidence:reason,preserveTerminal:true},'quest:execution-lost-with-host')
+   continue
+  }
   const observation=await inspectWorker(host,currentRun);observations[run.runID??run.callID]=observation
   // One host owns a database, so a session its own store cannot produce is gone rather than merely
   // unseen, and that is terminal evidence. Recording it is what ends the wait: an unsaved absence is
