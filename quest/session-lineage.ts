@@ -37,6 +37,12 @@ export function terminalStepUpdates(q: import('./types').Quest) {
   return q.stages.flatMap(step => {
     if (step.status !== 'working') return []
     const runs = q.sessions.filter(run => run.deliverables.includes(step.id))
+    // A step can be recorded working without any run ever claiming it, because a giver or worker
+    // update writes the status directly. Nothing owns it and nothing can: dispatch only ever selects
+    // a pending step, so neither an owner nor an ending will appear, and the Quest waits forever on
+    // a worker that was never started. That is not silence from an owner — there is no owner.
+    if (!runs.length) return [{ stageID: step.id, status: 'pending' as const,
+      evidence: 'Recorded working with no run on this Quest that ever claimed it, so nothing is executing it and nothing will end it.' }]
     const latest = runs.at(-1)
     // Every terminal state releases the step, not only the three a worker reports for itself.
     // `missing` and `stale` are what reconciliation writes when it establishes that a run is over:
