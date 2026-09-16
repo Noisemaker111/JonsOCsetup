@@ -48,3 +48,13 @@ test('moving it somewhere equally unusable is refused', () => {
 
   expect(() => quests.update(created.id, { projectRoot: notARepo })).toThrow(/not a Git checkout/)
 })
+
+test('the public contract exposes projectRoot, or no caller can reach the fix', async () => {
+  // api.ts accepting the field is not enough: service.ts validates against the operation contract
+  // first, and a Quest that needs moving is reached through that contract and nothing else.
+  const { questOperations } = await import('../quest/operations.mjs')
+  const projectRoot = (questOperations as any).update.input.properties.projectRoot
+
+  expect(projectRoot).toBeDefined()
+  expect(String(projectRoot.description)).toMatch(/Git checkout/)
+})
