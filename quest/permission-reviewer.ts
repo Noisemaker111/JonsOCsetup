@@ -100,7 +100,7 @@ export class PermissionReviewer {
     const after=await snapshot()
     if(after.key!==before.key){save({state:'escalated',reason:'User instructions, reviewer settings or assignment changed during review; retry with fresh authority'});return}
     if(!after.view.requests.some((r:any)=>r.requestKey===input.requestKey))return save({state:'decided',reason:'Request was answered elsewhere during review; no duplicate reply sent'})
-    if(decision.decision==='escalate'||decision.decision==='once'&&!request.canApprove)return save({state:'escalated',reason:decision.decision==='once'?'Exact action details are incomplete or redacted; no permission granted':decision.reason})
+    if(decision.decision==='escalate'||decision.decision==='once'&&!request.canApprove)return save({state:'escalated',reason:decision.decision==='once'?'The reviewer approved, but part of this action was redacted as sensitive, so it cannot be granted unseen':decision.reason})
     replyAttempted=true
     const result=await service.reply(input.giverID,{questID:input.questID,runID:input.runID,requestID:input.requestID,requestKey:input.requestKey,reply:decision.decision,reason:decision.reason},'reviewer',pin.model)
     return save({state:'decided',reply:decision.decision,reason:result.settlementError??decision.reason})
