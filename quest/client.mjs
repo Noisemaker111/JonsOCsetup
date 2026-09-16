@@ -46,10 +46,20 @@ export async function discoverQuestAPI({ registry = process.env.QUEST_API_REGIST
 export function createQuestClient({ endpoint, discover = discoverQuestAPI } = {}) {
   return Object.fromEntries(Object.keys(questOperations).map(method => [method, async (input = {}, options = {}) => {
     const service = endpoint ?? await discover()
-    const response = await fetch(service.url + '/api/' + method, {
-      method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + service.token, 'idempotency-key': options.requestID ?? randomUUID() },
-      body: JSON.stringify(input), signal: options.signal,
-    })
+    let response
+    try {
+      response = await fetch(service.url + '/api/' + method, {
+        method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + service.token, 'idempotency-key': options.requestID ?? randomUUID() },
+        body: JSON.stringify(input), signal: options.signal,
+      })
+    } catch (error) {
+      // The request had already left this process, so a transport failure says nothing about
+      // whether the service applied it. Calling that invalid input tells the caller their request
+      // was wrong and invites a second dispatch for work that is already running.
+      const cause = error.cause?.code ?? error.code ?? error.message
+      if (questOperations[method].annotations?.readOnlyHint) throw new QuestAPIError('UNAVAILABLE', 'The Quest Giver did not answer ' + method + ' (' + cause + '). Nothing was read and nothing changed.')
+      throw new QuestAPIError('OUTCOME_UNKNOWN', 'The Quest Giver did not answer ' + method + ' (' + cause + '). The request may already have been applied; read the Quest before sending it again.')
+    }
     const result = await response.json()
     if (!response.ok) throw new QuestAPIError(result.code ?? 'REQUEST_FAILED', result.message ?? 'Quest request failed')
     return result
