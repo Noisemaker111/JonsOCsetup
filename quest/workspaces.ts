@@ -23,6 +23,19 @@ function worktreeExclusions(root:string) {
     .filter(path=>inside(resolve(root),resolve(path)))
     .map(path=>":(exclude,literal)"+relative(root,path).replaceAll("\\","/")).sort()
 }
+/**
+ * Whether a finished dependency has anything for a later worker to inherit. Research workspaces hold
+ * no tree at all, and a worktree that recorded neither files nor commits contributes an empty diff.
+ * Carrying such a dependency costs nothing and risks everything: create() verifies its project
+ * ownership, and a Quest re-pointed to another project can never satisfy that check again.
+ */
+export function dependencyContributes(workspace: Workspace | undefined): boolean {
+  if (!workspace) return true // Still a missing dependency, and still reported as one.
+  if (workspace.mode === "research") return false
+  const changes = workspace.changes
+  return !(changes?.available === true && !changes.files.length && !changes.commits.length)
+}
+
 export class QuestWorkspaces {
   constructor(readonly runtime: string) {}
   private file(runID: string) {

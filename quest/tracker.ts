@@ -357,7 +357,9 @@ export class QuestTracker {
       if (!ref || !ACTIVE_SESSION.has(ref.session.state)) return
       if (ref.session.state === "blocked" && ref.session.dependency && ref.session.dependency.status !== "resumed") return
       const error = data.error as { message?: unknown; data?: { message?: unknown } } | string | undefined
-      const detail = typeof error === "string" ? error : typeof error?.message === "string" ? error.message : typeof error?.data?.message === "string" ? error.data.message : undefined
+      const message = typeof error === "string" ? error : typeof error?.message === "string" ? error.message : typeof error?.data?.message === "string" ? error.data.message : undefined
+      // An interrupt carries no error; its cause is the reason the host shut the turn down.
+      const detail = message ?? (typeof data.reason === "string" && data.reason ? data.reason : undefined)
       const result = "Host reported execution " + type.split(".").pop() + (detail ? ": " + redact(detail, 2000) : "")
       return this.settleWorker(data.sessionID,terminal,result,"host:execution",typeof data.observedAt==="string"?data.observedAt:undefined)
     }
