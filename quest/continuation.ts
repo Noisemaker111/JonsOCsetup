@@ -6,6 +6,7 @@ import { acquireLock } from './locking'
 import { questsAPI, QuestError, type QuestContext, type RunQuest, type StartRun } from './api'
 import { QuestStore } from './store'
 import { RouteReservations } from '../models/route-reservations'
+import { TERMINAL_RUN } from './session-lineage'
 import { getAccountUsage } from '../usage/account-api'
 import { readAllQuests } from './index'
 import { redact } from './privacy'
@@ -134,7 +135,12 @@ export class QuestContinuation {
      if(row.goal&&row.steps.some(s=>{const actual=q.stages.find(x=>x.id===s.id);return actual?.status==='done'&&!verified(q,actual)})){row.state='stopped';row.reason='Completed step has no verified passing proof for its contract; inspect results before continuing';return}
     for(const a of admissions){
      const run=q.sessions.find(s=>s.runID===a.runID)
-     if(run&&['completed','failed','cancelled'].includes(run.state)&&['running','unknown','claiming'].includes(a.state)){
+     // Every terminal state ends the admission, not only the three a worker reports for itself.
+     // Reconciliation writes missing and stale when it establishes a run is over, and leaving those
+     // out held the continuation in `running` — "Confirmed worker/command launch" — across a restart
+     // that had already killed the worker. The step read pending and never became ready, so eight
+     // dispatches reported running and produced no model request for twenty-two minutes.
+     if(run&&TERMINAL_RUN.has(run.state)&&['running','unknown','claiming'].includes(a.state)){
       a.state=run.state==='completed'&&q.stages.find(s=>s.id===a.stepID)?.status==='done'?'done':'stopped'
       a.reason=a.state==='done'?'Terminal worker completed its step':'Worker terminal outcome did not complete its step'
      }
@@ -169,7 +175,7 @@ export class QuestContinuation {
    try{
     await this.options.verifyContext?.(row.context)
      const reservations=new RouteReservations(dispatchReservationFile(this.store.runtime))
-    for(const entry of readAllQuests(this.store.projectRoot,{includeArchived:true}))for(const run of entry.quest?.sessions??[]){if(run.runID&&['completed','failed','cancelled'].includes(run.state)&&reservations.get(run.runID)&&reservations.get(run.runID)?.state!=='settled')reservations.settle(run.runID,{state:'settled',completedAt:run.updatedAt})}
+    for(const entry of readAllQuests(this.store.projectRoot,{includeArchived:true}))for(const run of entry.quest?.sessions??[]){if(run.runID&&TERMINAL_RUN.has(run.state)&&reservations.get(run.runID)&&reservations.get(run.runID)?.state!=='settled')reservations.settle(run.runID,{state:'settled',completedAt:run.updatedAt})}
     await (this.options.refresh??getAccountUsage)({refresh:true})
     const proceed=this.change(rows=>{
      const current=rows.find(x=>x.id===id)!,a=current.admissions!.find(x=>x.stepID===admission.stepID)!
@@ -227,7 +233,7 @@ export class QuestContinuation {
    await this.options.verifyContext?.(row.context)
    // Reconcile only observed terminal runs, including another Quest holding this account.
     const reservations=new RouteReservations(dispatchReservationFile(this.store.runtime))
-   for(const entry of readAllQuests(this.store.projectRoot,{includeArchived:true}))for(const run of entry.quest?.sessions??[]){if(run.runID&&['completed','failed','cancelled'].includes(run.state)&&reservations.get(run.runID)?.state!=='settled'&&reservations.get(run.runID))reservations.settle(run.runID,{state:'settled',completedAt:run.updatedAt})}
+   for(const entry of readAllQuests(this.store.projectRoot,{includeArchived:true}))for(const run of entry.quest?.sessions??[]){if(run.runID&&TERMINAL_RUN.has(run.state)&&reservations.get(run.runID)?.state!=='settled'&&reservations.get(run.runID))reservations.settle(run.runID,{state:'settled',completedAt:run.updatedAt})}
    await (this.options.refresh??getAccountUsage)({refresh:true})
    // Cancellation during the asynchronous refresh wins before dispatch.
    const proceed=this.change(rows=>{const current=rows.find(x=>x.id===id)!;if(current.state!=='claiming')return false;current.attempt++;return true})
