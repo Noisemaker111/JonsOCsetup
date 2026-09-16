@@ -200,6 +200,18 @@ export class QuestTracker {
       scope: input.scope && typeof input.scope === "object" ? input.scope as Record<string, unknown> : undefined,
     })
   }
+  /**
+   * True when this Quest owns the completed run.
+   *
+   * A dispatched Quest run carries a saved runID and its giver return is owned
+   * by QuestWorkerReturns, so the orchestration watchdog must not inject its own
+   * synthetic completion for the same result. Runs with no saved runID (a legacy
+   * native-subagent binding) are not claimed and keep the native delivery.
+   */
+  deliversCompletion(completion: CompletionEvidence): boolean {
+    if (!completion.questID || completion.questID === "unbound" || !completion.runID) return false
+    return Boolean(this.store.read(completion.questID)?.sessions.some((session) => session.runID === completion.runID))
+  }
   onCompletion(completion: CompletionEvidence, parkedDeliverySuppressed = false): "recorded" | "duplicate" | "parked" | undefined {
     if (!completion.questID || !this.enabled) return
     const quest = this.store.read(completion.questID)
