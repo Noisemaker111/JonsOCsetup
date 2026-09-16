@@ -18,7 +18,7 @@ export class QuestError extends Error {
 }
 export type QuestContext = { project: ProjectIdentity; /** Internal host-derived location; never tool input. */ directory?: string; /** Verified user-giver origin, separate from the selected worker project. */ giverDirectory?: string; sessionID: string; requestID: string; /** Persisted user instruction identity, not the per-response assistant ID. */ turnID?: string }
 export type CreateQuest = { workflow?: QuestWorkflow; title: string; description: string; steps: { title: string; detail?:string; needs?: string[]; id?: string; commandID?: string }[]; reward?: string }
-export type UpdateQuest = { workflow?: QuestWorkflow; title?: string; description?: string; reward?: string; steps?: { id: string; state: QuestStageStatus; title?: string; detail?: string; needs?: string[]; note?: string; commandID?: string | null }[]; artifacts?: { name: string; path?: string; uri?: string; label?: string }[]; archive?: { reason?: string; accepted: boolean } | null }
+export type UpdateQuest = { workflow?: QuestWorkflow; title?: string; description?: string; reward?: string; steps?: { id: string; state: QuestStageStatus; title?: string; detail?: string; needs?: string[]; note?: string; commandID?: string | null; verification?: { command: string; exitCode: number; artifact?: string } }[]; artifacts?: { name: string; path?: string; uri?: string; label?: string }[]; archive?: { reason?: string; accepted: boolean } | null }
 /** `task` is what kind of work this dispatch is: coding, review, planning or utility. It is the
  *  only thing that can name a class the dispatch does not enforce, and it decides how much
  *  published accuracy the route may trade for a cheaper reasoning effort. Omitting it is safe --
@@ -123,10 +123,10 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
       }
       if (input.steps !== undefined) {
         if (!Array.isArray(input.steps)) throw new QuestError("INVALID_INPUT", "steps must be an array")
-        const stages = structuredClone(q.stages), seen = new Set<string>()
+        const stages = structuredClone(q.stages), seen = new Set<string>(), checks: Quest["evidence"]["tests"] = []
         const stepResults=structuredClone((q.extensions.stepResults??{}) as Record<string,{runIDs:string[];state:string;recordedAt:string}>)
         for (const update of input.steps) {
-          keys(update, ["id", "state", "title", "detail", "needs", "note", "commandID"])
+          keys(update, ["id", "state", "title", "detail", "needs", "note", "commandID", "verification"])
           if (!["pending", "working", "blocked", "done"].includes(update.state)) throw new QuestError("INVALID_INPUT", "Step state is required: pending, working, blocked or done")
           let step = stages.find(s => s.id === update.id)
           text(update.id, "Step id")
@@ -143,6 +143,17 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
           if (update.needs !== undefined) { if (!Array.isArray(update.needs) || update.needs.some(n => typeof n !== "string")) throw new QuestError("INVALID_INPUT", "Dependencies must be step IDs"); step.needs = update.needs }
           seen.add(update.id); step.status = update.state
           if (update.note !== undefined) { if (typeof update.note !== "string") throw new QuestError("INVALID_INPUT", "Step note must be text"); step.note = update.note }
+          // The check a worker actually ran, against its own step. Not a definition and not a global
+          // artifact, so it stays inside the worker restriction while making a delivered step
+          // judgeable: prose in a note cannot be evaluated, a command and its exit code can.
+          if (update.verification !== undefined) {
+            const check = update.verification as { command?: unknown; exitCode?: unknown; artifact?: unknown }
+            if (!check || typeof check !== "object" || Array.isArray(check)) throw new QuestError("INVALID_INPUT", "Step verification must be an object with command and exitCode")
+            if (update.state !== "done") throw new QuestError("INVALID_INPUT", "Only a step reported done carries verification")
+            if (!Number.isSafeInteger(check.exitCode)) throw new QuestError("INVALID_INPUT", "Verification exitCode must be the integer the command actually returned")
+            if (check.artifact !== undefined && typeof check.artifact !== "string") throw new QuestError("INVALID_INPUT", "Verification artifact must be a path or URI")
+            checks.push({ command: text(check.command, "Verification command"), result: check.exitCode === 0 ? "passed" : "failed", at: new Date().toISOString(), stepID: step.id, ...(check.artifact ? { artifact: check.artifact as string } : {}) })
+          }
           // Saving a terminal result reconciles the observed completed runs. A
           // blocked result may later be retried; preserve the old runs and notes.
           // Merely setting pending must never bypass an uninspected completion.
@@ -155,6 +166,7 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
         validateGraph(stages)
         patch.stages = stages
         patch.extensions={...(patch.extensions??q.extensions) as Record<string,unknown>,stepResults}
+        if (checks.length) patch.evidence = { ...q.evidence, tests: [...q.evidence.tests, ...checks] }
       }
       if (input.artifacts !== undefined) {
         if (!Array.isArray(input.artifacts)) throw new QuestError("INVALID_INPUT", "Artifacts must be an array")

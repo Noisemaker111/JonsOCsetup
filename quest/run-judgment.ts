@@ -43,6 +43,11 @@ const TERMINAL = new Set(['completed', 'failed', 'cancelled'])
 
 /** Successful verification the evaluator will accept: a command that passed, with an artifact. */
 export function runVerification(quest: Quest, run: QuestSession) {
+  // A check the worker recorded against one of this run's own steps is the strongest evidence,
+  // because it names the step it proves. A Quest-level artifact is the fallback for checks the
+  // giver attached, which is all that existed before workers could record their own.
+  const own = quest.evidence.tests.filter(t => t.result === 'passed' && t.stepID && run.deliverables.includes(t.stepID) && t.artifact)
+  if (own.length) return own.map(test => ({ command: test.command, exitCode: 0, artifact: test.artifact! }))
   const artifact = quest.evidence.artifacts.at(-1)
   const passed = quest.evidence.tests.filter(t => t.result === 'passed')
   if (!passed.length || !artifact) return []
