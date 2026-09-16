@@ -44,6 +44,7 @@
     "quest/router-public.ts",
     "quest/goal-public.ts",
     "quest/route-public.ts",
+    "models/access-policy.ts",
     "models/model-catalog.ts",
     "models/model-router.ts",
     "models/session-lifecycle.ts",
