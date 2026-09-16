@@ -10,7 +10,7 @@ import { realpathSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { QuestError,type StartRun } from "./api"
 import { QuestStore } from "./store"
-import { QuestWorkspaces } from "./workspaces"
+import { QuestWorkspaces, dependencyContributes } from "./workspaces"
 import { allocateWorkspace } from "./workspace-allocation"
 import { reserveDispatch, dispatchReservationFile } from "../models/dispatch-planner"
 import { workspaceRunID } from "./change-view"
@@ -49,7 +49,7 @@ export function startQuestRun(store:QuestStore,host:QuestHost,options:{policyFil
   }
   const retry=[...input.quest.sessions].reverse().find(s=>["failed","cancelled"].includes(s.state)&&s.runID&&s.deliverables.some(id=>input.stepIDs.includes(id)))
    if(retry?.runID&&workspaceRunID(retry.runID)&&workspaces.get(retry.runID))inheritRunIDs.push(retry.runID)
-  const inherited=[...new Set(inheritRunIDs)].filter(id=>workspaces.get(id)?.mode!=="research")
+  const inherited=[...new Set(inheritRunIDs)].filter(id=>dependencyContributes(workspaces.get(id)))
   if(assigned.some(s=>s.commandID)) {
    intent.advance('command')
    if(input.model)throw new QuestError("EXPLICIT_MODEL_CONFLICT","Configured command steps do not use a model; the explicit model was not substituted")
