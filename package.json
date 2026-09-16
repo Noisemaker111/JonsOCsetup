@@ -1,6 +1,7 @@
 {
   "name": "jons-quest",
   "private": true,
+  "packageManager": "bun@1.3.14",
   "files": ["quest/cli.mjs", "quest/client.mjs", "quest/operations.mjs", "quest/mcp-client.mjs"],
   "bin": { "quest": "quest/cli.mjs" },
   "dependencies": {
