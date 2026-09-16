@@ -17,6 +17,10 @@ export function isSessionQuotaExhausted(session: QuestSession): boolean {
   return QUOTA_FAILOVER_PATTERN.test(`${session.evidence?.join(" ") ?? ""} ${session.result ?? ""}`)
 }
 
+/** A settled run reports the outcome we recorded; the owning host is not asked to confirm it again. */
+export const TERMINAL_RUN: ReadonlySet<string> = new Set(["completed", "failed", "cancelled", "missing", "stale"])
+export const isTerminalSession = (state: string) => TERMINAL_RUN.has(state)
+
 /** Historical attempts stay visible, but only the newest attempt in a resume lineage is live work. */
 export function latestSessionAttempts(sessions: QuestSession[]): QuestSession[] {
   const latest = new Map<string, QuestSession>()
