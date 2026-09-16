@@ -38,9 +38,16 @@ export function terminalStepUpdates(q: import('./types').Quest) {
     if (step.status !== 'working') return []
     const runs = q.sessions.filter(run => run.deliverables.includes(step.id))
     const latest = runs.at(-1)
-    if (!latest || !['completed', 'failed', 'cancelled'].includes(latest.state)
-      || runs.some(run => ['planned', 'executing', 'waiting', 'blocked'].includes(run.state))) return []
+    // Every terminal state releases the step, not only the three a worker reports for itself.
+    // `missing` and `stale` are what reconciliation writes when it establishes that a run is over:
+    // its session is gone, its workspace was deleted, its lease expired, or its execution ended with
+    // the host. Leaving those out meant each of those settles freed the run and left the step owned
+    // by it anyway, so the board filled with working steps that had no run behind them at all.
+    if (!latest || !TERMINAL_RUN.has(latest.state) || runs.some(run => !TERMINAL_RUN.has(run.state))) return []
+    const ended = ['missing', 'stale'].includes(latest.state)
+      ? `Run recorded ${latest.state}; nothing is executing it any more.`
+      : `Worker ${latest.state} without saving this step as done.`
     return [{ stageID: step.id, status: 'pending' as const,
-      evidence: `Worker ${latest.state} without saving this step as done. ${latest.result ?? latest.evidence.at(-1) ?? 'Inspect the retained run result before retrying.'}` }]
+      evidence: `${ended} ${latest.result ?? latest.evidence.at(-1) ?? 'Inspect the retained run result before retrying.'}` }]
   })
 }
