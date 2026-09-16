@@ -78,6 +78,15 @@ if($ref){
   $tried=Get-Content -Raw $planFile | ConvertFrom-Json
   Remove-Item $planFile -ErrorAction SilentlyContinue
   $env:OPENCODE_DEV_CANDIDATE=$tried.candidate
+  # The generation loaded at this commit; only the provider could not be asked to confirm it. That is
+  # worth saying out loud, because the alternative used to be running older code without being told.
+  if($tried.probe -eq 'provider-unavailable'){
+   Write-Host $rule -ForegroundColor Yellow
+   Write-Host ' This code loaded and is what you are running. No provider answered the check.' -ForegroundColor Yellow
+   Write-Host ("   route     {0} refused the preparation prompt" -f $tried.model) -ForegroundColor Yellow
+   Write-Host '   `oc --model <exact-route>` prepares on a route that still has room.' -ForegroundColor Yellow
+   Write-Host $rule -ForegroundColor Yellow
+  }
  }
 }
 $planText=& node (Join-Path $PSScriptRoot 'prepare-direct-channel.mjs') $channel --owner-pid $PID

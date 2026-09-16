@@ -56,6 +56,7 @@ const plan = {
   subject: target.subject,
   model: release.model,
   modelCatalog: release.modelCatalog,
+  probe: release.probe,
   reused: !!existing,
   preparedAt: release.preparedAt,
   activatedCommit: selected?.commit,
