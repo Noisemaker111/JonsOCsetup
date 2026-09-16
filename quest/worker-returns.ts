@@ -12,7 +12,7 @@ import type {QuestStore} from './store'
 import type {StartRun,QuestContext} from './api'
 import type {QuestHost} from './runtime'
 
-type Notice={questID:string;runID:string;context:QuestContext;agent?:string;model?:unknown;state:'waiting'|'sending'|'accepted'|'unknown';error?:string;permissions?:Record<string,PermissionReview>}
+type Notice={questID:string;runID:string;context:QuestContext;agent?:string;model?:unknown;state:'waiting'|'sending'|'accepted'|'unknown';error?:string;settled?:string;permissions?:Record<string,PermissionReview>}
 /** Direct Quest runs have a return address even when no project_route was used. */
 export class QuestWorkerReturns {
  private unreadable=new Map<string,string>()
@@ -79,6 +79,11 @@ export class QuestWorkerReturns {
      }
      continue
     }
+    // A turned-in Quest has nowhere for this to go. The worker's own notes are already saved on
+    // the Quest and the return is only a routing summary, so waking the giver to read a result for
+    // work it has already turned in buys nothing and costs a turn. Three of the ten messages queued
+    // on this machine were exactly that.
+    if(q.state==='Archived'){row.state='accepted';row.settled='Quest archived before delivery; the result stays on the Quest';save(row);continue}
     row.state='sending';save(row)
     try{
      // Each independent terminal outcome retains its queued giver response.

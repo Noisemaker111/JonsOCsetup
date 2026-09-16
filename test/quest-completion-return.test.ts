@@ -41,10 +41,10 @@ test('terminal worker delivery carries one outcome line while the complete note 
     await returns.tick()
     expect(prompts).toHaveLength(1)
     const text = prompts[0].text as string, payload = JSON.parse(text.split('\n')[1])
-    expect(Object.keys(payload)).toEqual(['questID', 'title', 'state', 'runState', 'finishedStep', 'outcome', 'notes'])
+    // No `notes`: it repeated the call syntax for tools the giver already holds, in every message.
+    expect(Object.keys(payload)).toEqual(['questID', 'title', 'state', 'runState', 'finishedStep', 'outcome'])
     expect(payload.runState).toBe('completed')
     expect(payload).toMatchObject({ questID: quest.id, title: quest.title, state: 'Ready to complete', finishedStep: { id: 'bounded-return', title: 'Bound the completion return', state: 'done' }, outcome: 'Implemented the bounded return and verified the saved record; [REDACTED]' })
-    expect(payload.notes).toContain('quests.inspect')
     expect(text).not.toContain(secret)
     expect(text).not.toContain('Detailed artifact')
     expect(questsAPI(store, context, async () => ({ sessionID: 'unused' })).get(quest.id).steps[0].note).toBe(note)

@@ -36,7 +36,9 @@ export function questCompletionReturn(input: {
     ...(run ? { runState: run.state } : {}),
     finishedStep: step ? { id: line(step.id), title: line(step.title), state: line(step.status) } : null,
     outcome,
-    notes: 'quests.get({id: questID}) or quests.inspect({id: questID, section: "steps"})',
+    // No `notes` field. It restated how to call `quests.get` and `quests.inspect` -- tools whose
+    // own descriptions already say it -- in every message, so nine queued updates carried nine
+    // identical copies of the same instruction and nothing a reader could act on.
   }
   return input.label + '.\n' + JSON.stringify(payload) + '\nSaved outcome is not independent verification; full notes remain on the Quest and are read only when needed.'
 }
