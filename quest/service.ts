@@ -4,7 +4,7 @@ import { questOperations, coordinatorInput } from './operations.mjs'
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv-provider.js'
 import { readUserGiver } from './giver-registry.mjs'
 import {cleanupQuests,cleanupStatus,installQuestCleanup} from "./cleanup"
-import {bindUserGiver,userGiverID,giverContext,adoptQuestGiver,verifyGiverBinding} from './user-giver'
+import {bindUserGiver,userGiverID,giverContext,adoptQuestGiver,verifyGiverBinding,refreshUserGiverLocation} from './user-giver'
 import { reconcileWorkers, inspectWorker } from "./worker-inspection"
 import {configureLearning,collectWorkflowOutcomes} from "./outcome-tracking"
 import {workspaceSettings} from "./workspace-settings"
@@ -64,7 +64,12 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
  let disposeCleanup:(()=>void)|undefined
  const directory=options.directory?physicalDirectory(options.directory):undefined
  const workerPermissions=poll('worker permission review',()=>returns.tick(directory))
+ // Outside the comparison below, because it is what keeps that comparison answerable. The
+ // registration records where the giver was first bound and the launcher decides where it opens;
+ // when those disagreed every poll here was skipped and the board had no coordinator at all.
+ const giverLocation=poll('giver location',()=>refreshUserGiverLocation(store,host))
  const timer=setInterval(()=>{
+  void giverLocation()
   // Worker locations also load this plugin. Only the registered giver's location
   // coordinates the board; workers retain their tools and local host observations.
   if(directory&&readUserGiver(store.runtime)?.directory!==directory){void workerPermissions();return}

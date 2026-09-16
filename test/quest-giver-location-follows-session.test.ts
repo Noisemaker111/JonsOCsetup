@@ -59,3 +59,29 @@ test('a host that reports no location leaves the registration as it was', async 
 
   expect(physicalDirectory(readUserGiver(store.runtime)!.directory)).toBe(registered)
 })
+
+test('the board recovers its coordinator without the giver being reopened from home', async () => {
+  // ensureUserGiver only runs on a home route, and `oc` opens the giver session directly, so this
+  // is the path an ordinary launch actually takes.
+  const root = physicalDirectory(mkdtempSync(join(tmpdir(), 'giver-service-')))
+  const opened = physicalDirectory(mkdtempSync(join(tmpdir(), 'giver-service-opened-')))
+  const registered = physicalDirectory(mkdtempSync(join(tmpdir(), 'giver-service-registered-')))
+  const store = bound(root, registered)
+  const host = { get: async ({ sessionID }: any) => ({ id: sessionID, location: { directory: opened } }) }
+
+  const { refreshUserGiverLocation } = await import('../quest/user-giver')
+  await refreshUserGiverLocation(store, host)
+
+  expect(physicalDirectory(readUserGiver(store.runtime)!.directory)).toBe(opened)
+})
+
+test('an unbound registration is left alone by the refresh', async () => {
+  const root = physicalDirectory(mkdtempSync(join(tmpdir(), 'giver-unbound-')))
+  const store = new QuestStore(root)
+  saveUserGiver(store.runtime, { state: 'launching', directory: 'C:/nowhere' })
+  const { refreshUserGiverLocation } = await import('../quest/user-giver')
+
+  await refreshUserGiverLocation(store, { get: async () => { throw new Error('must not be asked') } })
+
+  expect(readUserGiver(store.runtime)!.directory).toBe('C:/nowhere')
+})
