@@ -3,9 +3,15 @@
  * @core-observed On 2026-09-11 the activated dev release was driven on opencode-go/deepseek-v4.1-flash#high against a model catalog cached before that model shipped. The session bound openrouter/deepseek/deepseek-v4.1-flash, the access policy refused it, and the drive sat 247.8s after the prompt for 0 tokens and $0 with no requests.jsonl written and nothing on screen; the host log alone carried "Failed to drain Session". A launch asking for opencode-go/zzz-not-a-real-model landed on the same substitute, so it is the composer's fallback rather than a same-name twin.
  */
 import { test, expect } from "bun:test"
-import { installAccessGuard, announcer, requestedAgentRoute, refusalNotice, substitutedProvider } from "../models/access-policy"
+import { mkdtempSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { installAccessGuard, announcer, requestedAgentRoute, refusalNotice, substitutedProvider, readSelection, recordSelection, describeSelection, bindingProvenance } from "../models/access-policy"
 
 const launch = JSON.stringify({ default_agent: "quest-giver", agents: { "quest-giver": { model: "opencode-go/deepseek-v4.1-flash#high" }, worker: {model:"openai/gpt-6-astra#medium"} } })
+// The selection ledger is durable runtime state; keep it out of the real state directory.
+const selectionRoot = mkdtempSync(join(tmpdir(), "model-selection-"))
+process.env.OPENCODE_MODEL_SELECTION = join(selectionRoot, "model-selection.json")
 
 test("a refused request and a substituted model both reach the conversation, not just the log", async () => {
   const hooks: Record<string, Function> = {}
@@ -87,6 +93,51 @@ test("a refused request and a substituted model both reach the conversation, not
       process.env.OPENCODE_LAUNCH_SELECTION=JSON.stringify({explicitModel:false})
       expect(requestedAgentRoute('quest-giver',launch,'ses_first')).toBeUndefined()
     }finally{if(priorSelection===undefined)delete process.env.OPENCODE_LAUNCH_SELECTION;else process.env.OPENCODE_LAUNCH_SELECTION=priorSelection}
+
+    // A deliberate /model choice outlives the process that observed it. The next launch (a resumed
+    // conversation) reads the same record instead of reporting the launch default as a substitution.
+    const switchedHooks: Record<string, Function> = {}
+    const switchedPosted: any[] = []
+    await installAccessGuard({
+      session: { hook: async (name: string, callback: Function) => { switchedHooks[name] = callback }, synthetic: async (input: any) => { switchedPosted.push(input) } },
+      event: { subscribe: async () => ({ async *[Symbol.asyncIterator]() {} }) },
+    })
+    recordSelection("ses_switched", { route: "openai/gpt-5.6-sol-fast", variant: "low", source: "user-selected" })
+    await switchedHooks.context({ sessionID: "ses_switched", agent: "quest-giver", model: { providerID: "openai", id: "gpt-5.6-sol-fast", variant: "low" } })
+    await Bun.sleep(5)
+    expect(switchedPosted).toHaveLength(0)
+    expect(readSelection("ses_switched")?.source).toBe("user-selected")
+    expect(describeSelection("ses_switched")).toMatchObject({ route: "openai/gpt-5.6-sol-fast", source: "user-selected", selectedByUser: true })
+
+    // A session created on the user's own model (/new or the first prompt) emits no switch event.
+    // When the connected catalog can still produce the launch route, that difference is the
+    // conversation's selection, not a catalog fallback.
+    // Each probe is its own conversation, so its session id must be distinct: a shared id would
+    // find the previous probe's ledger row and answer its question instead of this one's.
+    let probed = 0
+    const probe = async (catalog?: any) => {
+      const hooks: Record<string, Function> = {}
+      const posted: any[] = []
+      await installAccessGuard({
+        session: { hook: async (name: string, callback: Function) => { hooks[name] = callback }, synthetic: async (input: any) => { posted.push(input) } },
+        event: { subscribe: async () => ({ async *[Symbol.asyncIterator]() {} }) },
+        catalog,
+      })
+      await hooks.context({ sessionID: `ses_new_${probed++}`, agent: "quest-giver", model: { providerID: "openai", id: "gpt-5.6-sol-fast" } })
+      await Bun.sleep(5)
+      return posted
+    }
+    expect(await probe({ model: { list: async () => [{ providerID: "opencode-go", id: "deepseek-v4.1-flash" }] } })).toHaveLength(0)
+    const fallback = await probe({ model: { list: async () => [] } })
+    expect(fallback).toHaveLength(1)
+    expect(fallback[0].text).toContain("the launch asked for")
+
+    // The three questions are answered from observed provenance, never from a model name.
+    expect(bindingProvenance({ requested: "opencode-go/deepseek-v4.1-flash#high", actual: "openai/gpt-5.6-sol-fast", recorded: { route: "openai/gpt-5.6-sol-fast", source: "user-selected", at: "2026-09-16T00:00:00.000Z" } })).toEqual({ source: "user-selected", substitution: false })
+    expect(bindingProvenance({ requested: "opencode-go/deepseek-v4.1-flash#high", actual: "openrouter/deepseek/deepseek-v4.1-flash", requestedResolves: false })).toEqual({ source: "automatic-fallback", substitution: true })
+    expect(bindingProvenance({ requested: "opencode-go/deepseek-v4.1-flash#high", actual: "openai/gpt-5.6-sol-fast", requestedResolves: true, sessionCreatedAt: 2, processStartedAt: 1 })).toEqual({ source: "user-selected", substitution: false })
+    expect(bindingProvenance({ requested: "opencode-go/deepseek-v4.1-flash#high", actual: "openai/gpt-5.6-sol-fast", requestedResolves: true, sessionCreatedAt: 1, processStartedAt: 1_000 })).toEqual({ source: "stale-session", substitution: false })
+    expect(bindingProvenance({ requested: "openai/gpt-6-astra#medium", actual: "openai/gpt-6-astra", recorded: { route: "openai/gpt-6-astra", source: "task-routed", at: "2026-09-16T00:00:00.000Z" } })).toEqual({ source: "task-routed", substitution: false })
 
     // The host draws a session's title and summary models from the session's own provider, so a
     // same-provider difference is that, not the catalog handing back another provider's model.
