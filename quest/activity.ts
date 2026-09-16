@@ -1,9 +1,21 @@
 import { boundedInspection } from './worker-observation.mjs'
-import { latestSessionAttempts } from './session-lineage'
+import { latestSessionAttempts, TERMINAL_RUN } from './session-lineage'
 import { hostExecution } from './host-observation'
 import type { Quest, QuestSession } from './types'
 
 export const ownedRuns = (q: Quest) => latestSessionAttempts(q.sessions).filter(run => ['planned', 'executing', 'waiting', 'blocked'].includes(run.state))
+
+/**
+ * What every surface shows for one run.
+ *
+ * useWorkerObservations polls the host only for ownedRuns, so a settled run has no
+ * observation entry and every reader that asked it directly sat on "Checking owning
+ * host…" for a worker that finished. The settled run reports the outcome we recorded;
+ * only a live run is worth inspecting. The worker picker already did this, and the
+ * board detail's agent log did not.
+ */
+export const observedRun = (run: QuestSession, observation: (run: QuestSession) => any) =>
+ run.state && TERMINAL_RUN.has(run.state) ? { state: run.state, reason: run.result ?? 'Recorded outcome' } : observation(run)
 type ActivitySnapshot = { active?: Record<string, unknown>; checkedAt: string; reason?: string }
 const nativeID = (run: QuestSession) => {
  const id = run.openCodeSessionId ?? run.openCodeSessionID ?? run.sessionID
