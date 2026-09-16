@@ -76,6 +76,18 @@ async function reconcile(store:QuestStore,host:any,questID:string) {
    store.apply(entry.quest!.id,'session-state',{callID:currentRun.callID,state:'stale',result:reason,evidence:reason,preserveTerminal:true},'quest:missing-workspace')
    continue
   }
+  // A run on another harness executes outside this host, so there is no session to ask about and
+  // inspectWorker answers `external` by design. Its lease is the liveness signal instead: the
+  // dispatcher renews it about once a minute for as long as the worker is alive. Nothing read it
+  // back, so two Codex runs whose leases expired three days earlier still held their steps, and one
+  // of those Quests had every step done and could not be turned in.
+  const lease=currentRun.leaseExpiresAt?Date.parse(currentRun.leaseExpiresAt):NaN
+  if((currentRun.harness||currentRun.runtime==='claude-code')&&Number.isFinite(lease)&&lease<Date.now()){
+   const reason='External '+(currentRun.harness??currentRun.runtime)+' run stopped renewing its lease, which expired at '+currentRun.leaseExpiresAt+'. Nothing outside this host is holding the step any more.'
+   observations[run.runID??run.callID]={state:'stale',reason}
+   store.apply(entry.quest!.id,'session-state',{callID:currentRun.callID,state:'stale',result:reason,evidence:reason,preserveTerminal:true},'quest:expired-lease')
+   continue
+  }
   const observation=await inspectWorker(host,currentRun);observations[run.runID??run.callID]=observation
   // One host owns a database, so a session its own store cannot produce is gone rather than merely
   // unseen, and that is terminal evidence. Recording it is what ends the wait: an unsaved absence is
