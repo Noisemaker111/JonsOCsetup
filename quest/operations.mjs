@@ -21,6 +21,7 @@ const fields = {
   }, ['title', 'description', 'steps']),
   update: object({
     workflow, title: text, description: text, reward: text, cancelContinuation: { type: 'boolean' },
+    projectRoot: { type: 'string', description: 'Move the Quest to this project. The destination must be a Git checkout: a Quest recorded against a directory that is not one can never bind a worker, and moving it somewhere equally unusable only moves the failure.' },
     steps: { type: 'array', items: object({ id: text, title: text, state: { type: 'string', enum: ['pending', 'working', 'blocked', 'done'] }, detail: text, note: text, needs: strings, commandID: { type: ['string', 'null'], description: 'Giver only: replace a configured command identifier, or set null to clear it for agent work. Omission preserves the binding. Cannot change an active or unconfirmed run.' }, verification: { type: 'object', description: 'On a step reported done: the check actually run, so the result can be judged rather than trusted.', properties: { command: text, exitCode: { type: 'integer' }, artifact: text }, required: ['command', 'exitCode'] } }, ['id', 'state']) },
     artifacts: { type: 'array', items: object({ name: text, path: text, uri: text, label: text }, ['name']) },
     archive: { anyOf: [object({ accepted: { type: 'boolean' }, reason: text }, ['accepted']), { type: 'null' }] },
