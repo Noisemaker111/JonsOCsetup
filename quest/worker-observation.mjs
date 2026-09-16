@@ -23,7 +23,7 @@ export function observeWorker(session, { active, messages = [], permissions = []
 }
 export function observationFailure(error, now = Date.now()) {
   const status = error?.status ?? error?.response?.status
-  return { state: status === 404 ? 'missing' : 'unreachable', checkedAt: new Date(now).toISOString(), reason: status === 404 ? 'Session is missing from this host; it may belong to another host or have been pruned. Ownership retained.' : 'Owning host inspection failed. Check its connection, then refresh; do not redispatch an uncertain worker.' }
+  return { state: status === 404 ? 'missing' : 'unreachable', checkedAt: new Date(now).toISOString(), reason: status === 404 ? 'Owning host no longer holds this session; it was pruned or never persisted. The run is over and the step is free to redispatch.' : 'Owning host inspection failed. Check its connection, then refresh; do not redispatch an uncertain worker.' }
 }
 
 /** Bound inspection without cancelling or restarting the worker itself. */

@@ -19,7 +19,8 @@ the rest lives". Correct a stale line in place, delete a wrong one. User instruc
 - Luna medium is prohibited everywhere, with no lower-effort workaround and no alias for unsupported
   max. Astra medium is fine. `models/access-policy.json` enforces it and
   `test/model-selection-policy.test.ts` keeps it enforced; this line exists only so you do not propose
-  it and lose a turn.
+  it and lose a turn. Luna max is not prohibited and he reports almost unlimited Luna max allowance; his
+  Claude and Codex accounts also carry headroom he wants used.
 - Models for chats, workers and reviewers must remain user-selectable and changeable. Automatic
   choices use the user’s accounts, pricing, usage, speed and task evidence; never a model name in code.
 - Routine worker permission reviews go to a lower-cost capable reviewer from his own routes, chosen via
@@ -84,10 +85,18 @@ task-based routing.
 - Jon does not want upstream contributions. Keep implementation in his repositories and use supported host extension APIs. For OpenEval, do not contact or modify the upstream repository again (including remote checks, comments, issues or PR updates); Jon is handling the premature submission.
 
 - Jon expects workspace coordination to cover every checkout-dependent tool, including persistent tools; checkout-independent operations must remain usable. Public Quest operations should be directly named (for example, quests.create with its fields), without quest.quest action dispatch or a repeated create wrapper.
-- Jon wants Quest review to be optional. With review off, create and start should be one operation; workers save completion and deliverables, and the giver returns a concise handoff without reviewing, redundant reads or bookkeeping turns. Reduce unnecessary activities rather than imposing a fixed activity count.
+- Jon does not want separate review passes or reviewer workers on the OpenCode backlog. Continue implementation, functional checks, actual-product acceptance and authorized verified merges; routine worker permission decisions still use supported controls. Workers save completion and deliverables, and the giver returns a concise handoff without redundant reads or bookkeeping turns. Reduce unnecessary activities rather than imposing a fixed activity count. The return itself must be bounded: a completion hands the giver the Quest id, title, state and a one-line outcome, with the full step notes left on the Quest and opened only when a decision needs them — ten full-note envelopes dumped into one giver turn is the cost he is objecting to.
+- Jon expects no Quest to sit blocked or locked: every parked step is either work the giver can dispatch now or a decision it can put to him, and a step nothing can move is a product flaw to fix rather than a resting state. Workflow concurrency follows available account allowance and capable routes, not a fixed number of slots.
 - Jon wants compact benchmark comparisons on one page: numbers in aligned rows with separator lines, no boxes or metric tabs. Put each colored delta to the right of its value, always relative to benchmark 1, and identify that reference once. Stack metric sections; keep graphs/trends separate and coverage/ranges on demand. Verify screenshot readability and clicks with pointer movement.
 - Jon wants new-session handoffs to be only `Resume Quest <id>`. Save the workspace, current progress, remaining work, constraints and evidence references in the Quest before handing off; the receiving session resolves them from the ID. Do not make Jon carry paths or a second set of instructions. If saving fails, disclose that the Quest is not current instead of claiming the ID alone is ready.
+- When acknowledging a newly started Quest, Jon wants one short sentence: agree, give the Quest ID, state the intended outcome, and name the selected worker model; omit the diagnostic preamble and routing rationale.
 
 - A deliberate /model selection supersedes the launch default, including after /new. Verify ordinary request intake through native /new, /model and submission; explicit Quest-start checks alone do not establish this flow works.
 
 - Keep OpenCode implementation in JonsOCsetup/.worktrees/<task> and durable verification evidence in JonsOCsetup/.evidence/<task>. Do not start new work in the legacy home-level dev-workflow-evidence directory. Preserve historical evidence links when relocating it.
+
+- Prefer existing CLI or API access (including Python or shell) over adding model-facing tools. When CLI or MCP access needs improvement, use or generate a well-typed interface from the underlying contract. Do not add a standalone tool merely because a model needs a capability.
+
+- September 14 correction: Jon does not require separate reviews or reviewer workers for the current OpenCode backlog. Keep functional checks and actual-product verification; do not make a review pass a delivery prerequisite. Routine worker permission decisions remain authorized through supported controls.
+
+- The running `oc` TUI is its own Windows Terminal window titled `OpenCode`, not a tab of the window Jon reads chat in, so every `wt -w 0 focus-tab` or `wt -w 0 focus-pane` command lands in the wrong window and looks like focus refusing to move. Find it by enumerating top-level `CASCADIA_HOSTING_WINDOW_CLASS` windows for the WindowsTerminal process and matching the title; never store the HWND, it changes every launch. Drive it natively: force foreground (`AttachThreadInput` + `SetForegroundWindow`), confirm `GetForegroundWindow` really equals that handle before sending anything, then `SendInput` for keys and `CopyFromScreen` over the window rect for capture. Refusing to send when the focus check fails is what keeps stray keystrokes out of Jon's other tabs. This is the visible-window control surface Jon asks for; `runtime:drive` spawns a separate PTY and does not exercise the session he is looking at.
