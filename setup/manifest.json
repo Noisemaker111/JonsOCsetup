@@ -25,11 +25,11 @@
     },
     {
       "target": ".codex/config.toml",
-      "sha256": "20b46577af65a136ede6e6294ed7863f6852535fe6bf9e44b247315ceefdb888"
+      "sha256": "55e1202084f3ffcd63241cbf6c22fc703e7f2d7632b3a03ce8673a12c0f9e60f"
     },
     {
       "target": ".claude/CLAUDE.md",
-      "sha256": "e045e9b7915745d2f00d77b4434ab10f29d9afa6c0c981552beeee8e9a75d1bb"
+      "sha256": "2452076834a76d9c184d142096b7b91a1154301ae0a904e50a28b8f3c54724f3"
     },
     {
       "target": ".claude/settings.json",
@@ -585,7 +585,7 @@
     },
     {
       "target": ".claude/skills/memory/SKILL.md",
-      "sha256": "44565ca7a6200e7a9905c2cbfd145e210c1f73f621143cae8cb1d3692a407071"
+      "sha256": "4df2e1e121335b476a03f7ac99a321ae303cf9b59b1405a3fc925cdec7c03db9"
     }
   ],
   "dependencies": [
