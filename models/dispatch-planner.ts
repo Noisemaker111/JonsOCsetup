@@ -13,6 +13,8 @@ import type { AccountSnapshot } from "../usage/account-types"
 import { getAccountUsage, ACCOUNT_USAGE_FILE } from "../usage/account-api"
 import { RouteReservations } from "./route-reservations"
 import type { PlannerInput,Route,RoutingRequest } from "./route-planner"
+import { failingModels, recentRequests } from "./observed-route-health"
+import { TELEMETRY_FILE } from "../usage/telemetry-store"
 /** A promoted generation must read the policy promoted with its planner, not mutable root source. */
 export const configuredDispatchPolicyFile=()=>process.env.OPENCODE_DISPATCH_POLICY??join(import.meta.dir,"dispatch-policy.json")
 /** Explicit fixture/host pin keeps isolated Quest storage on shared atomic account admission. */
@@ -50,8 +52,13 @@ export function resolveDispatchSelector(policy: DispatchPolicy, selector: string
 }
 /** A route that answered an error when probed is not a candidate, however much quota it holds.
  *  Health is recorded per probed route id, but the thing that failed is the model behind it:
- *  a derived candidate on the same provider/model is the same broken call, under a new name. */
-export function unusableRoutes(maxAgeMs = 6 * 60 * 60 * 1000, now = Date.now()) {
+ *  a derived candidate on the same provider/model is the same broken call, under a new name.
+ *
+ *  The probe is not the only witness. Requests that were actually made are recorded too, and they
+ *  are the stronger evidence: on 2026-09-16 this file was four days old and therefore ignored,
+ *  while cliproxyapi/gpt-5.6-luna#max failed 53 requests across 17 sessions and stayed a candidate
+ *  all day. Observed failures now mark the same models the probe would. */
+export function unusableRoutes(maxAgeMs = 6 * 60 * 60 * 1000, now = Date.now(), telemetryFile = TELEMETRY_FILE) {
   const file = process.env.OPENCODE_ROUTE_HEALTH ?? join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "opencode", "route-health.json")
   const byRoute = new Map<string, string>(), byModel = new Map<string, string>()
   try {
@@ -65,6 +72,7 @@ export function unusableRoutes(maxAgeMs = 6 * 60 * 60 * 1000, now = Date.now()) 
       if (row.model) byModel.set(String(row.model), reason)
     }
   } catch {}
+  try { for (const [model, observed] of failingModels(recentRequests(telemetryFile), now, { windowMs: maxAgeMs })) if (!byModel.has(model)) byModel.set(model, observed.reason) } catch {}
   return { byRoute, byModel }
 }
 
