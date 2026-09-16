@@ -10,6 +10,7 @@ import { requestFingerprint, redact } from "./privacy"
 import type { Quest, QuestSession } from "./types"
 import { readAllQuests } from "./index"
 import { parseWorkerReport } from "./report"
+import { isTerminalSession as terminalSession } from "./session-lineage"
 import { deferGoalTerminal } from './goal-lifecycle'
 import {dispatchReservationFile} from '../models/dispatch-planner'
 import {physicalDirectory} from './project'
@@ -19,7 +20,6 @@ import type { CompletionEvidence } from "../orchestration/orchestration-ledger"
 
 export type QuestDispatch = { questID: string; callID: string; taskID?: string; role: string; deliverables: string[]; model?: string; harness?: string; branch?: string; worktree?: string; agentRole?: string; providerID?: string; modelID?: string; reasoningEffort?: QuestSession["reasoningEffort"]; fast?: boolean; runtime?: "native" | "claude-code"; runID?: string; task?: string; parentID?: string; scope?: Record<string, unknown> }
 
-const terminalSession = (state: string) => ["completed", "failed", "cancelled", "missing", "stale"].includes(state)
 const ACTIVE_SESSION = new Set(["planned", "executing", "waiting", "blocked"])
 const SESSION_ID = /^ses_[A-Za-z0-9_-]+$/
 

@@ -69,6 +69,9 @@ export function seedQuestLedger(dir: string, project: LabProject): QuestStore {
       session({ callID: "c-running", state: "executing", providerID: "openai", modelID: "gpt-5.6-luna-fast", reasoningEffort: "high", fast: true, openCodeSessionId: "ses_lab_running_0a1b2c3d4e5f6g7h", task: "Rebuild the detail pane header and action bar", evidence: ["Header layout drafted; action bar compiles"], updatedAt: iso(MIN) }),
       session({ callID: "c-done", state: "completed", providerID: "anthropic", modelID: "claude-fable-5-1", reasoningEffort: "xhigh", openCodeSessionId: "ses_lab_completed_9z8y7x6w5v4u3t2s", task: "Rebuild the board list rows", result: "Rows use a 3-line layout: title, repo · status, next step. 14 tests pass.", updatedAt: iso(40 * MIN) }),
       session({ callID: "c-waiting", state: "waiting", providerID: "grok-sub", modelID: "grok-4.6", reasoningEffort: "medium", openCodeSessionId: "ses_lab_waiting_1q2w3e4r5t6y7u8i", task: "Restyle the step list and agent log", evidence: ["Waiting on the header rebuild to land"], updatedAt: iso(5 * MIN) }),
+      // A retried run keeps its earlier attempt, so any surface that lists sessions instead of the
+      // latest attempt per lineage draws this worker twice on adjacent rows.
+      session({ callID: "c-running-2", state: "executing", resumeRoot: "c-running", resumedFrom: "c-running", attempt: 2, providerID: "openai", modelID: "gpt-5.6-luna-fast", reasoningEffort: "high", fast: true, openCodeSessionId: "ses_lab_retry_5f6g7h8i9j0k1l2m", task: "Rebuild the detail pane header and action bar", evidence: ["Second attempt after the first was interrupted"], updatedAt: iso(2 * MIN) }),
     ],
     evidence: {
       commits: [{ repo: project.root, hash: "a1b2c3d", verified: true }],

@@ -2,6 +2,8 @@ import {readUserGiver} from '../giver-registry.mjs'
 import {artifactPreview} from '../artifact-preview'
 import {userGiverID} from '../user-giver'
 import { useWorkerObservations } from "./worker-observation"
+import { ownedRuns } from "../activity"
+import { TERMINAL_RUN } from "../session-lineage"
 import { nudgeGiver } from "../tui-workflow"
 /** @jsxImportSource @opentui/solid */
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
@@ -341,7 +343,10 @@ function LegacyDetail(props: { context: any; store: QuestStore; quest: () => Que
 async function openQuestWorkers(context:any,quest:Quest,observation:(run:QuestSession)=>any) {
  const rows=quest.sessions
  if(!rows.length){await context.ui.dialog.alert({title:'Quest worker sessions',message:'No worker session has been recorded for this Quest.'});return}
- const key=rows.length===1?rows[0].callID:await context.ui.dialog.select({title:'Quest worker sessions',placeholder:'Search assigned step or model',options:rows.map(s=>({value:s.callID,title:workerTask(quest,s),searchText:workerTask(quest,s)+' '+workerLabel(s),details:[workerLabel(s),observation(s).reason],footer:observation(s).state.toUpperCase()}))})
+ // Only live runs are inspected, so a settled one reports the outcome we recorded rather than
+ // sitting on "Checking owning host…" for a worker that finished hours ago.
+ const shown=(s:QuestSession)=>TERMINAL_RUN.has(s.state)?{state:s.state,reason:s.result??'Recorded outcome'}:observation(s)
+ const key=rows.length===1?rows[0].callID:await context.ui.dialog.select({title:'Quest worker sessions',placeholder:'Search assigned step or model',options:rows.map(s=>({value:s.callID,title:workerTask(quest,s),searchText:workerTask(quest,s)+' '+workerLabel(s),details:[workerLabel(s),shown(s).reason],footer:shown(s).state.toUpperCase()}))})
  const run=rows.find(s=>s.callID===key)
  if(run)await openWorkerSession(context,run)
 }
@@ -463,7 +468,11 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
   const narrow = () => width()<100
   let listScroll: ScrollBoxRenderable | undefined
   const scoped = createMemo(()=>projectQuests(records(),project().id,allProjects()))
-  const observation=useWorkerObservations(props.context,()=>scoped().flatMap(q=>q.sessions))
+  // Inspect owned runs only. Every recorded session was polled on a 4s timer, so each finished or
+  // superseded attempt cost four host reads a tick forever, and the ones whose session the host had
+  // already dropped answered 404 every time. A settled run's recorded outcome is what we saved; it
+  // does not need re-confirming.
+  const observation=useWorkerObservations(props.context,()=>scoped().flatMap(q=>ownedRuns(q)))
   const rows = createMemo(()=>filterQuests(scoped(),filter(),observation).filter(q=>!query() || (q.title+" "+q.description).toLowerCase().includes(query().toLowerCase()))
     .sort((a,b)=>questStatus(a).rank-questStatus(b).rank || b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)))
   const selected = createMemo(()=>rows().find(q=>q.id===selectedID()))
