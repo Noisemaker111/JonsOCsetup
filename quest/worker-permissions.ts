@@ -3,7 +3,7 @@ import {userGiverID,giverContext,verifyGiverBinding} from './user-giver'
 import {QuestTracker} from './tracker'
 import type {QuestStore} from './store'
 import {assertWorkerIdentity} from './worker-identity'
-import {redact} from './privacy'
+import {redact,redactSensitive} from './privacy'
 import type {Quest,QuestSession} from './types'
 export const workerSessionID=(run:QuestSession)=>run.openCodeSessionId??run.openCodeSessionID??run.sessionID
 export const permissionSummary=(request:any)=>{
@@ -44,8 +44,15 @@ export class WorkerPermissions {
   const [pending,messages]=await Promise.all([this.permission.list({sessionID}),this.host.context({sessionID})])
   return {questID,runID,title:quest.title,description:quest.description||quest.objective,steps:quest.stages.filter(s=>run.deliverables.includes(s.id)).map(s=>({id:s.id,title:s.title,detail:s.detail})),workspace:run.scope?.worktree,requests:unwrap(pending).map((request:any)=>{
    const message=unwrap(messages).find((m:any)=>m.id===request.source?.messageID),part=message?.content?.find((p:any)=>p.type==='tool'&&p.id===request.source?.id),input=part?.state?.input
-   const details=JSON.stringify({tool:part?.name,input}),safe=redact(details,6000)
-   return {requestID:request.id,requestKey:permissionKey(request),...permissionSummary(request),source:safe,canApprove:!!part?.name&&!!input&&typeof input==='object'&&safe===details}
+   // Whether a request can be approved is about what was hidden, never about how long it was.
+   // canApprove used to compare the details against redact(details,6000), which both strips secrets
+   // and slices at 6000 characters, so any ordinary large action was permanently unapprovable: the
+   // reviewer decided "once", the decision was discarded, and it escalated saying the details were
+   // "incomplete or redacted" when nothing had been redacted at all. The Quest to rewrite the shared
+   // MEMORY.md blocked on exactly that, because the file it had to read is 11,409 characters.
+   // The reviewer is also shown the whole sanitized action now, so it decides on what it can see.
+   const details=JSON.stringify({tool:part?.name,input}),sanitized=redactSensitive(details)
+   return {requestID:request.id,requestKey:permissionKey(request),...permissionSummary(request),source:sanitized,sourceCharacters:sanitized.length,canApprove:!!part?.name&&!!input&&typeof input==='object'&&sanitized===details}
   })}
  }
  async reply(callerID:string,input:{questID:string;runID:string;requestID:string;requestKey:string;reply:'once'|'reject';reason:string},actor:'user'|'reviewer',reviewerModel?:string){
@@ -55,7 +62,7 @@ export class WorkerPermissions {
   if(!shown||permissionKey(shown)!==input.requestKey)throw Error('Request changed or was already answered; inspect it again.')
   if(actor==='reviewer'&&input.reply==='once'){
    const view=await this.inspect(callerID,input.questID,input.runID)
-   if(!view.requests.find((r:any)=>r.requestID===input.requestID)?.canApprove)throw Error('Full action details are unavailable or redacted. Do not guess authorization; use native review or reject an unnecessary request.')
+   if(!view.requests.find((r:any)=>r.requestID===input.requestID)?.canApprove)throw Error('Part of this action was redacted as sensitive, so it cannot be approved unseen. Use native review, or reject an unnecessary request.')
   }
   const worker=unwrap(await this.host.get({sessionID})),reply=permissionReplyInput({quest:this.store.read(quest.id),runID:input.runID,giverID:userGiverID(this.store),activeID:callerID,worker,shown,pending,reply:input.reply})
   const decision={requestID:input.requestID,reply:input.reply,actor,...(reviewerModel?{model:reviewerModel}:{}),reason:redact(input.reason,1500),at:new Date().toISOString()}
