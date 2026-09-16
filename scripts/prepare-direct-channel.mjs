@@ -27,7 +27,12 @@ const {generationRoot,reviewedAgentConfig}=await import(pathToFileURL(join(dev.r
 const {inspectHostExecutable}=await import(pathToFileURL(join(dev.root,'project-router/executable.mjs')))
 const JSON5=createRequire(join(dev.root,'package.json'))('json5')
 const pointer=read(join(root,'plugin-activation.json')),generation=pointer.activeGeneration,selected=generationRoot(root,generation)
-if(!pointer.evidence?.ok||read(join(selected,'.deployment-source.json')).commit!==pointer.evidence.sourceCommit)throw Error('Channel generation differs from verified source')
+// `ok` additionally means a provider answered the preparation prompt, which is not what decides
+// whether this generation may run. `accepted` is: it requires the generation to have loaded at this
+// exact commit, and it tolerates an account with nothing left to answer with. Reading `ok` here kept
+// the launcher on older code for a reason that was never about the code. `ok` remains the fallback
+// for activation records written before preparation recorded the distinction.
+if(!(pointer.evidence?.accepted??pointer.evidence?.ok)||read(join(selected,'.deployment-source.json')).commit!==pointer.evidence.sourceCommit)throw Error('Channel generation differs from verified source')
 const control=join(root,'run','direct','launch-'+Date.now()+'-'+process.pid),config=join(control,'config')
 mkdirSync(config,{recursive:true})
 for(const entry of readdirSync(root,{withFileTypes:true})){
