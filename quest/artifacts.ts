@@ -101,11 +101,6 @@ export function artifactLine(artifact: QuestArtifact): string {
   return `${artifact.label ?? "artifact"} — ${target}`
 }
 
-/** Compact chain summary for the detail header, e.g. `before -> revision 1 -> after`. */
-export function artifactChainSummary(artifacts: QuestArtifact[]): string {
-  return artifactChain(artifacts).map((artifact) => artifact.label ?? artifact.name).join(" -> ")
-}
-
 export type CaptureInput = {
   name?: string
   label: string

@@ -42,3 +42,19 @@ test('a step that is not working is left alone', () => {
   expect(terminalStepUpdates(quest('stale', 'done'))).toEqual([])
   expect(terminalStepUpdates(quest('stale', 'pending'))).toEqual([])
 })
+
+test('a step recorded working that no run ever claimed is released, and says so', () => {
+  const q = quest('completed')
+  q.sessions = []
+  const [update] = terminalStepUpdates(q)
+  expect(update).toBeDefined()
+  expect(update.status).toBe('pending')
+  expect(update.evidence).toContain('no run on this Quest that ever claimed it')
+})
+
+test('a run on another step does not count as this one’s owner', () => {
+  const q = quest('executing')
+  q.sessions = [{ callID: 'run-1', state: 'executing', deliverables: ['something-else'], evidence: [] }]
+  // The step has no owner of its own, so it is released rather than left waiting on unrelated work.
+  expect(terminalStepUpdates(q)[0]?.status).toBe('pending')
+})

@@ -2,8 +2,7 @@ import {readUserGiver} from '../giver-registry.mjs'
 import {artifactPreview} from '../artifact-preview'
 import {userGiverID} from '../user-giver'
 import { useWorkerObservations } from "./worker-observation"
-import { ownedRuns } from "../activity"
-import { TERMINAL_RUN } from "../session-lineage"
+import { observedRun, ownedRuns } from "../activity"
 import { nudgeGiver } from "../tui-workflow"
 /** @jsxImportSource @opentui/solid */
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
@@ -12,12 +11,12 @@ import { activeSessionID } from "../../scripts/runtime-contract.mjs"
 import { boardProject,projectQuests,resolveBoardProject } from "../board-project"
 import { readAllQuests } from "../index"
 import type { Quest, QuestSession, QuestStage } from "../types"
-import { questIndicator,filterQuests,QUEST_FILTERS,type QuestFilter } from "../tui-model"
+import { filterQuests,QUEST_FILTERS,type QuestFilter } from "../tui-model"
+import { questLifecycle, questReachability, type ReachabilityTone } from "../reachability"
 import { questChanges } from "../change-view"
 import { redact } from "../privacy"
 import { createGiver, rememberBoardView } from "../tui-workflow"
 import { WorkflowActions, inspectRun } from "./workflow-actions"
-import { questLane } from "../board"
 import { watchQuests } from "../watcher"
 import { progressGlyph, progressRing, questProgress, ringTone } from "../steps"
 import { artifactChain, artifactLine, questAssetsDir } from "../artifacts"
@@ -26,7 +25,6 @@ import { questRoot } from "../root"
 import { QuestStore } from "../store"
 import { questView } from "../contract"
 import { QuestWorkspaces } from "../workspaces"
-import { nextStepAction } from "../steps"
 import { navigateQuestSession } from "../tui-navigation"
 
 export const C = {
@@ -199,24 +197,36 @@ function Rule() {
   return <box height={1} width="100%" border={["bottom"]} borderColor={C.line} flexShrink={0} />
 }
 
-export function questStatus(q: Quest): { label: string; color: string; rank: number } {
-  const lane = questLane(q)
-  if (lane === "archived") return { label: "Archived", color: C.muted, rank: 5 }
-  if (lane === "attention") return { label: "Needs attention", color: C.orange, rank: 0 }
-  if (lane === "ready") return { label: "Ready for review", color: C.green, rank: 1 }
-  if (lane === "verifying") return { label: "Verifying", color: C.cyan, rank: 2 }
-  if (q.stages.some(s => s.status === "working") || q.executingCount > 0) return { label: "Work recorded", color: C.cyan, rank: 3 }
-  return { label: "Planned", color: C.muted, rank: 4 }
+/** The saved lifecycle only: use reachLabel where a live run may exist. */
+export function questStatus(q: Quest): { label: string; short: string; color: string; tone: ReachabilityTone; rank: number } {
+  const life = questLifecycle(q)
+  return { label: life.label, short: life.short, color: toneColor(life.tone), tone: life.tone, rank: life.rank }
+}
+
+/**
+ * The one surface label every Quest surface draws: the owned run's reachability when there is one,
+ * else the saved lifecycle. The sidebar, board rows, detail badge and footer all call this, so the
+ * same Quest cannot read RUNNING on one surface and UNKNOWN on another.
+ */
+export function reachLabel(quest: Quest, observation: (run: QuestSession) => any): { label: string; color: string; tone: ReachabilityTone } {
+  const r = questReachability(quest, observation)
+  return { label: r.run ? r.label : r.lifecycle.short, color: toneColor(r.tone), tone: r.tone }
+}
+
+/** One tone table for every surface; the palette stays here. */
+export function toneColor(tone: ReachabilityTone): string {
+  if (tone === "live") return C.green
+  if (tone === "done") return C.cyan
+  if (tone === "failed") return C.red
+  if (tone === "blocked" || tone === "uncertain") return C.orange
+  return C.muted
 }
 
 function Row(props: { quest: Quest; selected: boolean; select: () => void; allProjects?: boolean; observation:(run:QuestSession)=>any }) {
   const p = () => questProgress(props.quest)
-  const state = () => {
-    const run=props.quest.sessions.findLast(r=>['executing','planned','waiting','blocked'].includes(r.state))
-    if(!run){const saved=questStatus(props.quest);return {...saved,label:({"Needs attention":"ATTENTION","Ready for review":"REVIEW","Work recorded":"RECORDED"} as Record<string,string>)[saved.label]??saved.label.toUpperCase()}}
-    const live=props.observation(run).state
-    return {label:live==='running'?'RUNNING':live==='completed'?'WORKER DONE':live==='external'?'EXTERNAL':live.toUpperCase(),color:live==='running'?C.green:live==='completed'?C.cyan:C.orange}
-  }
+  // One read for the row label: the owned run's reachability when there is one, else the saved
+  // lifecycle. The inline table this replaced had its own words for every state.
+  const state = () => reachLabel(props.quest, props.observation)
   return <box id={"quest-row-" + props.quest.id} flexDirection="column" paddingLeft={1} paddingRight={1} paddingBottom={1}
     border={["left"]} borderColor={props.selected ? C.green : C.panel} backgroundColor={props.selected ? C.selected : "transparent"} flexShrink={0} onMouseUp={(event:any)=>activate(event,props.select)}>
     <box flexDirection="row" gap={1}>
@@ -346,7 +356,7 @@ async function openQuestWorkers(context:any,quest:Quest,observation:(run:QuestSe
  if(!rows.length){await context.ui.dialog.alert({title:'Quest worker sessions',message:'No worker session has been recorded for this Quest.'});return}
  // Only live runs are inspected, so a settled one reports the outcome we recorded rather than
  // sitting on "Checking owning host…" for a worker that finished hours ago.
- const shown=(s:QuestSession)=>TERMINAL_RUN.has(s.state)?{state:s.state,reason:s.result??'Recorded outcome'}:observation(s)
+ const shown=(s:QuestSession)=>observedRun(s,observation)
  const key=rows.length===1?rows[0].callID:await context.ui.dialog.select({title:'Quest worker sessions',placeholder:'Search assigned step or model',options:rows.map(s=>({value:s.callID,title:workerTask(quest,s),searchText:workerTask(quest,s)+' '+workerLabel(s),details:[workerLabel(s),shown(s).reason],footer:shown(s).state.toUpperCase()}))})
  const run=rows.find(s=>s.callID===key)
  if(run)await openWorkerSession(context,run)
@@ -381,7 +391,7 @@ function ContractDetail(props: { context: any; store: QuestStore; quest: () => Q
      <text fg={C.muted} flexShrink={0}>{links().length} linked PR{links().length===1?'':'s'} · {props.quest().evidence.tests.length} check{props.quest().evidence.tests.length===1?'':'s'}</text>
     </box>
     <box flexDirection="column" alignItems="flex-end" flexShrink={0}>
-     <text fg={questStatus(props.quest()).color} attributes={TextAttributes.BOLD}>[ {questStatus(props.quest()).label.toUpperCase()} ]</text>
+     <text fg={reachLabel(props.quest(), observation).color} attributes={TextAttributes.BOLD}>[ {reachLabel(props.quest(), observation).label} ]</text>
      <text fg={C.dim}>Created {shortDate(props.quest().createdAt)}</text>
      <text fg={C.dim}>Updated {shortDate(props.quest().updatedAt)}</text>
     </box>
@@ -424,7 +434,7 @@ function ContractDetail(props: { context: any; store: QuestStore; quest: () => Q
        <text fg={C.dim} wrapMode="none" truncate>TIME   ASSIGNED STEP            STATUS · [i] Evidence</text>
        <Show when={sessions().length} fallback={<text fg={C.dim}>No worker sessions recorded</text>}>
         <For each={sessions()}>{run=>{
-         const live=()=>observation(run)
+         const live=()=>observedRun(run,observation)
          return <box flexDirection="column" flexShrink={0}>
           <box flexDirection="row" gap={1} flexShrink={0} backgroundColor={live().state==='running'?C.selected:'transparent'}>
            <text fg={C.cyan} width={2} flexShrink={0} onMouseUp={(e:any)=>activate(e,()=>setExpandedRun(expandedWorker()===run.callID?'':run.callID))}>{expandedWorker()===run.callID?'▾':'▸'}</text>
