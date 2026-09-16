@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { homedir, uptime } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { request as httpRequest } from 'node:http'
 import { questOperations } from './operations.mjs'
 
 export class QuestAPIError extends Error {
@@ -43,14 +44,52 @@ export async function discoverQuestAPI({ registry = process.env.QUEST_API_REGIST
   return live[0]
 }
 
+/**
+ * The global fetch gives up on response headers after 300 seconds and throws
+ * `TypeError: fetch failed` with cause UND_ERR_HEADERS_TIMEOUT, measured at 307,112 ms against a
+ * deliberately slow local server. A real dispatch takes longer than that: three runs on 2026-09-16
+ * bound their sessions 584, 613 and 665 seconds after being planned, and every one of them reported
+ * failure to a caller whose work was in fact already running. node:http imposes no such deadline,
+ * and options.signal still cancels.
+ */
+function postToService(service, method, body, headers, signal) {
+  return new Promise((resolve, reject) => {
+    const target = new URL(service.url + '/api/' + method)
+    const call = httpRequest({ hostname: target.hostname, port: target.port, path: target.pathname, method: 'POST', headers }, answer => {
+      const chunks = []
+      answer.on('data', chunk => chunks.push(chunk))
+      answer.on('error', reject)
+      answer.on('end', () => resolve({ ok: answer.statusCode >= 200 && answer.statusCode < 300, status: answer.statusCode, body: Buffer.concat(chunks).toString('utf8') }))
+    })
+    call.on('error', reject)
+    if (signal) {
+      const cancelled = () => signal.reason ?? new Error('The Quest request was cancelled')
+      if (signal.aborted) { call.destroy(cancelled()); reject(cancelled()); return }
+      signal.addEventListener('abort', () => call.destroy(cancelled()), { once: true })
+    }
+    call.end(body)
+  })
+}
+
 export function createQuestClient({ endpoint, discover = discoverQuestAPI } = {}) {
   return Object.fromEntries(Object.keys(questOperations).map(method => [method, async (input = {}, options = {}) => {
     const service = endpoint ?? await discover()
-    const response = await fetch(service.url + '/api/' + method, {
-      method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + service.token, 'idempotency-key': options.requestID ?? randomUUID() },
-      body: JSON.stringify(input), signal: options.signal,
-    })
-    const result = await response.json()
+    const body = JSON.stringify(input)
+    let response
+    try {
+      response = await postToService(service, method, body, {
+        'content-type': 'application/json', 'content-length': Buffer.byteLength(body),
+        authorization: 'Bearer ' + service.token, 'idempotency-key': options.requestID ?? randomUUID(),
+      }, options.signal)
+    } catch (error) {
+      // The request had already left this process, so a transport failure says nothing about
+      // whether the service applied it. Calling that invalid input tells the caller their request
+      // was wrong and invites a second dispatch for work that is already running.
+      const cause = error.cause?.code ?? error.code ?? error.message
+      if (questOperations[method].annotations?.readOnlyHint) throw new QuestAPIError('UNAVAILABLE', 'The Quest Giver did not answer ' + method + ' (' + cause + '). Nothing was read and nothing changed.')
+      throw new QuestAPIError('OUTCOME_UNKNOWN', 'The Quest Giver did not answer ' + method + ' (' + cause + '). The request may already have been applied; read the Quest before sending it again.')
+    }
+    const result = JSON.parse(response.body)
     if (!response.ok) throw new QuestAPIError(result.code ?? 'REQUEST_FAILED', result.message ?? 'Quest request failed')
     return result
   }]))
