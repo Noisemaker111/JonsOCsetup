@@ -28,7 +28,7 @@ export async function inspectWorker(host:any, run:QuestSession):Promise<any> {
  if(!sessionID.startsWith('ses_')||run.harness||run.runtime==='claude-code')return {state:'external',reason:'External runtime; no native OpenCode session can be confirmed'}
  try {
   const row=unwrap(await boundedInspection(signal=>host.get({sessionID},{signal})))
-  if(row?.id!==sessionID)return {state:'missing',reason:'Recorded session was not returned by this host; ownership retained'}
+  if(row?.id!==sessionID)return {state:'missing',reason:'Recorded session was not returned by its owning host; the run is over and the step is free to redispatch'}
   const active=typeof host.active==='function'?unwrap(await boundedInspection(signal=>host.active({signal}))):undefined
   const messages=typeof host.context==='function'?unwrap(await boundedInspection(()=>host.context({sessionID}))):[]
   const permissions=unwrap(await boundedInspection(()=>hostPermissions(host,sessionID)))
@@ -63,6 +63,16 @@ async function reconcile(store:QuestStore,host:any,questID:string) {
    try{if(await tracker.settleInterruptedDispatch(entry.quest!.id,currentRun.runID??currentRun.callID,host)){observations[run.runID??run.callID]={state:'failed',reason:'Exited dispatch owner; owning host confirmed an empty idle session'};continue}}catch(error){observations[run.runID??run.callID]=observationFailure(error);continue}
   }
   const observation=await inspectWorker(host,currentRun);observations[run.runID??run.callID]=observation
+  // One host owns a database, so a session its own store cannot produce is gone rather than merely
+  // unseen, and that is terminal evidence. Recording it is what ends the wait: an unsaved absence is
+  // re-derived identically on every later sweep, so the step stays owned by a run that can never
+  // report and the dead session is re-inspected for the life of the host. An unreachable host is a
+  // different answer and keeps its run, because absence was never established.
+  if(observation.state==='missing'){
+   const reason=observation.reason??'Owning host no longer holds this session'
+   store.apply(entry.quest!.id,'session-state',{callID:currentRun.callID,state:'missing',result:reason,evidence:reason,preserveTerminal:true},'quest:missing-session')
+   continue
+  }
   if(observation.outcome&&observation.completedAt&&Date.parse(observation.completedAt)>=Date.parse(run.updatedAt))tracker.onHostEvent({type:'session.execution.'+observation.outcome,data:{sessionID:run.openCodeSessionId??run.sessionID,observedAt:observation.completedAt}})
  }
  }
