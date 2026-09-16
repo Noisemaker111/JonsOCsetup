@@ -1,3 +1,4 @@
+import {existsSync} from 'node:fs'
 import {hostExecution,hostPermissions} from "./host-observation"
 import {interruptedPreflight,interruptedBoundDispatch} from './dispatch-intent'
 import { observeWorker, observationFailure, boundedInspection } from './worker-observation.mjs'
@@ -61,6 +62,19 @@ async function reconcile(store:QuestStore,host:any,questID:string) {
   const boundID=currentRun.openCodeSessionId??currentRun.sessionID
   if(currentRun.state==='planned'&&boundID&&interruptedBoundDispatch(store.runtime,currentRun.runID??currentRun.callID,boundID)){
    try{if(await tracker.settleInterruptedDispatch(entry.quest!.id,currentRun.runID??currentRun.callID,host)){observations[run.runID??run.callID]={state:'failed',reason:'Exited dispatch owner; owning host confirmed an empty idle session'};continue}}catch(error){observations[run.runID??run.callID]=observationFailure(error);continue}
+  }
+  // A recorded workspace that is no longer on disk cannot be resumed, whatever the host says about
+  // the session, so settle the run before asking. This is not the same answer as an unreachable
+  // host: the directory is gone, and it does not come back. One run had been retried for the life of
+  // the host because the release it worked in was retired under it — every attempt to start a
+  // process there threw NotFound, 236 times in a four-minute window, while its Quest had all three
+  // steps done and could not be turned in because the run still owned them.
+  const workspace=currentRun.scope?.worktree??(currentRun as any).worktree
+  if(typeof workspace==='string'&&workspace&&!existsSync(workspace)){
+   const reason='Recorded workspace is gone, so this run cannot resume or report again: '+workspace
+   observations[run.runID??run.callID]={state:'stale',reason}
+   store.apply(entry.quest!.id,'session-state',{callID:currentRun.callID,state:'stale',result:reason,evidence:reason,preserveTerminal:true},'quest:missing-workspace')
+   continue
   }
   const observation=await inspectWorker(host,currentRun);observations[run.runID??run.callID]=observation
   // One host owns a database, so a session its own store cannot produce is gone rather than merely
