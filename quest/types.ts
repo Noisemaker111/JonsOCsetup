@@ -59,7 +59,9 @@ export type QuestArtifactRef = {
 }
 export type Evidence = {
   commits: Array<{ repo: string; hash: string; worktreeHead?: string; verified: boolean }>
-  tests: Array<{ command: string; result: "passed" | "failed"; at: string; summary?: string }>
+  /** `stepID` and `artifact` are present when the worker that ran the check recorded it against its
+   *  own assigned step, which is what lets a delivered step be judged rather than taken on trust. */
+  tests: Array<{ command: string; result: "passed" | "failed"; at: string; summary?: string; stepID?: string; artifact?: string }>
   builds: Array<{ name: string; result: "passed" | "failed"; at: string }>
   artifacts: QuestArtifactRef[]
   publish: Array<{ target: string; result: "succeeded" | "failed" | "credentials-limitation"; at: string }>
