@@ -8,6 +8,8 @@ import { readAllQuests } from './index'
 import type { QuestStore } from './store'
 import type { QuestSession } from './types'
 const unwrap = (value:any) => value?.data ?? value
+/** When this host process began. Admission happens in it, so nothing older is still waiting on it. */
+const HOST_STARTED_AT = Date.now() - (typeof process?.uptime === 'function' ? process.uptime() * 1000 : 0)
 /** Confirm historical workers through the owning host even when no live event survived restart. */
 export async function confirmWorkerIdle(host:any,sessionID:string):Promise<boolean> {
  try {
@@ -53,6 +55,18 @@ async function reconcile(store:QuestStore,host:any,questID:string) {
   if(interruption){
    observations[run.runID??run.callID]={state:'failed',reason:interruption}
    store.apply(entry.quest!.id,'session-state',{callID:run.callID,state:'failed',result:interruption,evidence:interruption,preserveTerminal:true},'quest:interrupted-preflight')
+   continue
+  }
+  // A planned run carries no session, no lease and no workspace: it is a pending admission and
+  // nothing else. Admission happens inside this process, so one recorded before this process began
+  // has no admitter left and waits forever. The preflight receipt above settles the ones that got
+  // far enough to leave one; this settles the ones that did not. A run planned for the route that
+  // was exhausted sat here 29 hours holding its step, and the giver had already written down the
+  // gap: the runtime could not terminalize a sessionless pre-reboot planned run.
+  if(run.state==='planned'&&!(run.openCodeSessionId??run.sessionID)&&Date.parse(run.updatedAt)<HOST_STARTED_AT){
+   const reason='Planned before this host started and never bound a session, so no admission is still pending for it. Recorded at '+run.updatedAt+'.'
+   observations[run.runID??run.callID]={state:'stale',reason}
+   store.apply(entry.quest!.id,'session-state',{callID:run.callID,state:'stale',result:reason,evidence:reason,preserveTerminal:true},'quest:unadmitted-plan')
    continue
   }
   // A transport error without an identity does not prove worker creation failed.
