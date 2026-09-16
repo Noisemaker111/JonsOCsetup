@@ -3,7 +3,7 @@ import {cleanupQuests} from "./cleanup"
 import {connectHostObservation,disconnectHostObservation,recordHostObservation,registerHostObservation} from "./host-observation"
 import {installWorkerCapabilities} from './worker-capabilities'
 import {installUserGiverContext} from './user-giver'
-import {guidanceTool,outcomeTool,workSupplyTool} from "./adaptive-tools"
+import {guidanceTool,outcomeTool,reportTool,workSupplyTool} from "./adaptive-tools"
 import {installSharedWorkspaceGuard} from "./shared-guard"
 /**
  * The quests server plugin: explicit durable work, tracked to completion.
@@ -195,13 +195,22 @@ export async function installQuestTools(ctx: { tool?: { transform?: Function }; 
   // belong to plugin setup, not to each replay of the description registration.
   if(!ctx.session||!ctx.location||!ctx.mcp)throw Error('Quest API requires the installed OpenCode session and MCP plugin interfaces')
   const service=createQuestService(api.store,ctx.session,{directory:ctx.location.directory,onDispose:fn=>{dispose=fn}})
-  const endpoint=await serveQuestAPI(api.store,service,ctx.location.directory)
-  const tools=[guidanceTool(api.store,ctx.session),outcomeTool(api.store,ctx.session),workSupplyTool(api.store,ctx.session)]
+  const tools=[guidanceTool(api.store,ctx.session),outcomeTool(api.store,ctx.session),workSupplyTool(api.store,ctx.session),reportTool(service.call)]
+  // The direct tools are synchronous plugin registrations. Register them before the remote MCP so a
+  // Quest API listener that is slow, unreachable or timing out cannot also remove the worker save path.
+  try{await transform((draft: { add: (tool: unknown) => void }) => {for(const tool of tools)draft.add(tool)})}
+  catch(error){dispose?.();throw error}
+  let endpoint: Awaited<ReturnType<typeof serveQuestAPI>>|undefined
   try{
-    await ctx.mcp.transform((draft:any)=>draft.set('quests',{type:'remote',url:endpoint.mcpURL,headers:{authorization:'Bearer '+endpoint.token},oauth:false,codemode:true}))
-    await transform((draft: { add: (tool: unknown) => void }) => {for(const tool of tools)draft.add(tool)})
-  }catch(error){endpoint.dispose();dispose?.();throw error}
-  return ()=>{endpoint.dispose();dispose?.()}
+    endpoint=await serveQuestAPI(api.store,service,ctx.location.directory)
+    await ctx.mcp.transform((draft:any)=>draft.set('quests',{type:'remote',url:endpoint!.mcpURL,headers:{authorization:'Bearer '+endpoint!.token},oauth:false,codemode:true}))
+  }catch(error){
+    // The quests MCP namespace is a convenience; quest_report and the other direct tools still save
+    // assigned steps, including when the listener times out on a worker location.
+    endpoint?.dispose();endpoint=undefined
+    console.error('[quests] quests MCP namespace unavailable; direct Quest tools remain registered',String(error))
+  }
+  return ()=>{endpoint?.dispose();dispose?.()}
 }
 
 export default define({
