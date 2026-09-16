@@ -68,7 +68,7 @@ export function coordinatorInput(method, input) {
   const { id, ...value } = input
   if (method === 'status' || method === 'plan') return { action: 'get', id }
   if (method === 'inspect') return { action: 'get', id, inspect: value }
-  if (method === 'report') return { action: 'update', id, update: { steps: [{ id: value.stepID, state: value.state, note: value.note }] } }
+  if (method === 'report') return { action: 'update', id, update: { steps: [{ id: value.stepID, state: value.state, note: value.note, ...(value.verification === undefined ? {} : { verification: value.verification }) }] } }
   if (method === 'archive') return { action: 'update', id, update: { archive: value } }
   if (method === 'reopen') return { action: 'update', id, update: { archive: null } }
   if (method === 'list') return { action: method, query: value }

@@ -19,6 +19,8 @@ Account pacing and reservations still decide actual capacity. A held account doe
 
 `quest_work_supply({allProjects: true})` gives a bounded inventory of existing pending steps, their project, active/uncertain runs and dependency readiness. It does not invent opportunities or treat saved work as dispatch authorization. Select the destination with the existing project-router tools while retaining the same verified giver. Automatic discovery of new repository issues and additional host/account adapters remain separate integrations.
 
+`quest_report({id, stepID, state, note, verification})` is the direct Code Mode save path for a worker's own assigned step. It is registered as a synchronous plugin tool alongside the tools above, so a worker can save its state, note and the check it actually ran even when the remote `quests` MCP namespace fails to connect on that location; the MCP `quests.update`/`quests.report` operations remain the equivalent contract when the namespace is available. It keeps the worker-assignment guard: only current assigned step states may be saved.
+
 `quest_guidance` sends relevant guidance to a specific owned run, defaults to `queue`, and supports explicit `steer`. Queue is consumed at idle; steer is consumed at a work-step boundary. These are instructions, not a provider token-speed control. Stable message identities prevent duplicated nudges across retries and reloads. An ambiguous host response stays unknown. A worker can acknowledge only its own guidance; submission, acknowledgement and completed work remain separate facts. No process interruption is used.
 
 ## Learning model roles
