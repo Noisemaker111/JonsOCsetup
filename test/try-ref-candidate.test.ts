@@ -92,17 +92,16 @@ test('a prepared release is only reused when its own receipts prove it is that c
 })
 
 /** @core-observed September 13 plain oc prepared the merged commit from the historical config repository; hub workers consequently landed under .config/opencode despite hub/source selecting JonsOCsetup. */
-test('normal oc follows the hub source and refuses an identical candidate owned by another repository', () => {
+test('normal oc follows the maintained source and refuses an identical candidate owned by another repository', () => {
   const home=realpathSync.native(mkdtempSync(join(tmpdir(),'oc-source-owner-')))
   try {
-    const source=join(home,'source-repo'),historical=join(home,'historical'),hub=join(home,'hub'),registry=join(home,'registry')
-    mkdirSync(source);mkdirSync(hub)
+    const source=join(home,'source-repo'),historical=join(home,'historical'),registry=join(home,'registry')
+    mkdirSync(source)
     git(source,['init','--initial-branch=agents'])
     writeFileSync(join(source,'work.txt'),'reviewed source')
     git(source,['add','.']);git(source,['-c','user.name=Check','-c','user.email=check@example.invalid','commit','-m','source'])
     git(home,['clone','--no-hardlinks',source,historical])
-    symlinkSync(source,join(hub,'source'),process.platform==='win32'?'junction':'dir')
-    expect(sourceRepository(join(hub,'source'))).toBe(source)
+    expect(sourceRepository(source)).toBe(source)
     const commit=git(source,['rev-parse','HEAD'])
     const prepared=(repository:string,suffix:string)=>{
       const root=join(registry,'releases','dev-'+commit.slice(0,12)+'-'+suffix)

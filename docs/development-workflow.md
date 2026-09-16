@@ -41,8 +41,8 @@ actual completion and delivery back to the giver. Do not mark work done on a
 startup receipt, source inspection or an agent's unsupported success claim.
 
 Read the project-root MEMORY.md at the beginning of work and after context loss.
-For OpenCode hub work, the shared memory is
-`C:/Users/Jk101/Projects/opencode-hub/MEMORY.md`. Update it when the user makes a
+For OpenCode work, the shared memory is
+`C:/Users/Jk101/Projects/JonsOCsetup/MEMORY.md`. Update it when the user makes a
 durable decision or real app use establishes a useful lesson. Read before editing,
 merge with existing entries, correct stale facts, and reopen the saved file.
 Keep it concise: decisions, preferences, current architecture and verified lessons.
@@ -241,14 +241,15 @@ becomes transcript events and input arrives as JSON writes; that is the mode
 same launch root, pin the same generation, set the same `OPENCODE_*` environment,
 hold the same release lease and write the same load receipt.
 
-### Hub editing source
+### Editing source
 
-The non-Git OpenCode hub keeps its existing Quest ledger identity. The reviewed
-`models/dispatch-policy.json` binds its `config` scope to the clean public
-JonsOCsetup checkout. Dispatch validates physical checkout paths and requires a
-clean source. Dev resolves the loaded immutable release and verifies its source receipt, release identity and Git revision before creating an owned repository worktree and translates
-`config/docs` to `docs`. It never follows the hub's old config junction to choose
-a source. A worker can update the hub Quest only from its verified owned workspace.
+Quests for OpenCode itself are rooted at the JonsOCsetup checkout, a Git
+repository, so dispatch resolves their editing source natively and creates each
+worker's owned worktree under it. `models/dispatch-policy.json` `sourceByProject`
+stays empty: it only ever mapped the retired non-Git hub folder onto a checkout.
+Dev verifies the loaded immutable release's source receipt, release identity and
+Git revision before creating a worktree. A worker can update its Quest only from
+its verified owned workspace.
 
 Channel state remains under `~/.config/opencode/.channels` after source migration.
 The installed `~/.config/opencode` folder is not a Git editing checkout. Maintain

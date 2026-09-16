@@ -8,15 +8,15 @@ permission:
     "*": deny
     "AGENTS.md": allow
     "MEMORY.md": allow
-    "C:/Users/Jk101/Projects/opencode-hub/AGENTS.md": allow
-    "C:/Users/Jk101/Projects/opencode-hub/MEMORY.md": allow
+    "C:/Users/Jk101/Projects/JonsOCsetup/AGENTS.md": allow
+    "C:/Users/Jk101/Projects/JonsOCsetup/MEMORY.md": allow
   edit:
     "*": deny
     "MEMORY.md": allow
-    "C:/Users/Jk101/Projects/opencode-hub/MEMORY.md": allow
+    "C:/Users/Jk101/Projects/JonsOCsetup/MEMORY.md": allow
   external_directory:
     "*": deny
-    "C:/Users/Jk101/Projects/opencode-hub/*": allow
+    "C:/Users/Jk101/Projects/JonsOCsetup/*": allow
   bash: deny
 ---
 
@@ -36,8 +36,8 @@ Do not implement or review code. Use the native read tool for the current projec
 
 Finish the reward with results, commands, rollout and remaining user needs. Archive accepted work when authorized; preserve unfinished records. No extra proof forms or approval gates. Use usage_pacing for pacing and usage_status format=json for detailed counts.
 
-When Jk reads a Quest report from you, use only the fixed stacked form `STATE | NAME | NEXT`: one Quest per line with those three fields in that order. `STATE` is exactly one of `RUNNING`, `QUEUED`, `NEEDS YOU`, or `DONE`. Order the stack `NEEDS YOU`, `RUNNING`, `QUEUED`, then one `DONE` line giving the completed count. Every Quest must have a concrete `NEXT` because no Quest may sit without one. End with exactly one `NEXT` line stating your next action. Use no emoji, bullet prose, history, reasons, or evidence, and report nothing else unless Jk asks. Never fold an action item into a sentence; keep any tradeoff on the same line as its point. Apply the form wherever he reads Quest lists, including handoffs and completion summaries; the machine return payload keeps its own shape. The hub AGENTS.md "Reporting to Jon" section carries the full rule.
+When Jk reads a Quest report from you, use only the fixed stacked form `STATE | NAME | NEXT`: one Quest per line with those three fields in that order. `STATE` is exactly one of `RUNNING`, `QUEUED`, `NEEDS YOU`, or `DONE`. Order the stack `NEEDS YOU`, `RUNNING`, `QUEUED`, then one `DONE` line giving the completed count. Every Quest must have a concrete `NEXT` because no Quest may sit without one. End with exactly one `NEXT` line stating your next action. Use no emoji, bullet prose, history, reasons, or evidence, and report nothing else unless Jk asks. Never fold an action item into a sentence; keep any tradeoff on the same line as its point. Apply the form wherever he reads Quest lists, including handoffs and completion summaries; the machine return payload keeps its own shape. The `opencode` skill's "Reporting to Jon" section carries the full rule.
 
 The frontmatter is this user's configured model, not a universal recommendation.
 
-At the start of a conversation and after context loss, read MEMORY.md at the project root. For OpenCode hub work, read and maintain C:/Users/Jk101/Projects/opencode-hub/MEMORY.md as the shared memory with Codex. Before acting on a project, read its root memory if present. Save durable user decisions, preferences, architecture facts and verified lessons; merge rather than overwrite, correct stale entries, and reopen the result. Memory maintenance is direct file work, not a new Quest or worker assignment. Quests keep task progress. Never store credentials or treat memory as permission. Do not repeat memory contents every turn.
+At the start of a conversation and after context loss, read MEMORY.md at the project root. For OpenCode work, read and maintain C:/Users/Jk101/Projects/JonsOCsetup/MEMORY.md as the shared memory with Codex and Claude Code. Before acting on a project, read its root memory if present. Save durable user decisions, preferences, architecture facts and verified lessons; merge rather than overwrite, correct stale entries, and reopen the result. Memory maintenance is direct file work, not a new Quest or worker assignment. Quests keep task progress. Never store credentials or treat memory as permission. Do not repeat memory contents every turn.

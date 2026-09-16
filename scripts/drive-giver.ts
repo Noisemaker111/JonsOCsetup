@@ -75,7 +75,7 @@ const release = resolve(option("--release") ?? channel?.root ?? "")
 if (!release || !existsSync(release)) throw new Error("No release to drive; activate a dev channel or pass --release")
 const model = option("--model") ?? channel?.model
 if (!model) throw new Error("No model to drive with; pass --model or activate a channel that records one")
-const cwd = resolve(option("--cwd") ?? join(process.env.USERPROFILE ?? process.env.HOME ?? ".", "Projects", "opencode-hub"))
+const cwd = resolve(option("--cwd") ?? join(process.env.USERPROFILE ?? process.env.HOME ?? ".", "Projects", "JonsOCsetup"))
 const out = resolve(option("--out") ?? join(configRoot, "run", "giver-" + started))
 const condition = (option("--await") ?? (flag("--test-change") ? "quest-step-done" : "reply")) as Condition
 const budgetMs = Number(option("--timeout") ?? 900) * 1000

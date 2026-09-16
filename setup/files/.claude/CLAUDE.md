@@ -19,7 +19,7 @@ Keep this short. Project `CLAUDE.md` / skills own deep conventions.
 ## Quick navigation
 
 - BTG (btggutters.com + appforgutters.com) work: hub at `C:\Users\Jk101\Projects\btg-hub` (`AGENTS.md` there has repos/sites/commands). Terminal shortcut: `btg`.
-- OpenCode work (config, plugins, Quests, TUI): hub at `C:\Users\Jk101\Projects\opencode-hub` (`AGENTS.md` there maps config/data/state/host/upstream). Terminal shortcut: `oc`.
+- OpenCode work (config, plugins, Quests, TUI): `C:\Users\Jk101\Projects\JonsOCsetup` is both the source and the hub; load its `opencode` skill first (it maps config, data, state, host and upstream). Terminal shortcuts: `oh` cds there, `oc` opens OpenCode.
 
 Read C:/Users/Jk101/.agents/user-verification.md before implementation. Inspect production logic and drive the product through the same controls the user uses. Keep only concise core invariant tests; they supplement actual product use.
 

@@ -19,7 +19,6 @@ const apply = process.argv.includes('--apply')
 const LINKED = [
   /^\.codex\/AGENTS\.md$/,
   /^\.claude\/CLAUDE\.md$/,
-  /^Projects\/opencode-hub\/(AGENTS|CLAUDE|MEMORY)\.md$/,
   /^\.agents\/(user-verification|matt-pocock)\.md$/,
   /^\.agents\/(skills|docs)\//,
   /^\.claude\/skills\//,

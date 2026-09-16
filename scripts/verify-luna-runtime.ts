@@ -2,14 +2,13 @@
 import {spawn,spawnSync} from 'node:child_process'
 import {mkdirSync,writeFileSync,readFileSync,existsSync,cpSync,readdirSync} from 'node:fs'
 import {join,resolve} from 'node:path'
-import {homedir} from 'node:os'
 import {createInterface} from 'node:readline'
 import {codexExecutable} from '../quest/codex/recovery-command'
 import {assertConfiguredSelection} from '../models/access-policy'
 const effortArg=process.argv.indexOf('--effort'),effort=effortArg>=0?process.argv[effortArg+1]:undefined
 if(!effort)throw Error('Pass --effort with an explicitly authorized, supported Luna reasoning level; no default is selected')
 assertConfiguredSelection({providerID:'openai',id:'gpt-5.6-luna',reasoning:effort})
-const root=join(homedir(),'Projects','opencode-hub','.runtime-tests','luna-runtime-'+Date.now()),repo=join(root,'repo')
+const root=resolve(import.meta.dir,'..','tmp','runtime-tests','luna-runtime-'+Date.now()),repo=join(root,'repo')
 mkdirSync(repo,{recursive:true})
 writeFileSync(join(repo,'AGENTS.md'),'This is an isolated runtime verification fixture. Read and write only this checkout. Use the installed shell and patch tools. Do not create Quests, spawn agents, use network tools, commit, deploy or change other files.\n')
 writeFileSync(join(repo,'input.txt'),'LUNA_RUNTIME_INPUT\n')

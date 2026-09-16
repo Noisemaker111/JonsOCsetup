@@ -325,10 +325,10 @@
         { "action": "read", "resource": "*", "effect": "deny" },
         { "action": "read", "resource": "AGENTS.md", "effect": "allow" },
         { "action": "read", "resource": "MEMORY.md", "effect": "allow" },
-        { "action": "read", "resource": "C:/Users/Jk101/Projects/opencode-hub/AGENTS.md", "effect": "allow" },
-        { "action": "read", "resource": "C:/Users/Jk101/Projects/opencode-hub/MEMORY.md", "effect": "allow" },
+        { "action": "read", "resource": "C:/Users/Jk101/Projects/JonsOCsetup/AGENTS.md", "effect": "allow" },
+        { "action": "read", "resource": "C:/Users/Jk101/Projects/JonsOCsetup/MEMORY.md", "effect": "allow" },
         { "action": "external_directory", "resource": "*", "effect": "deny" },
-        { "action": "external_directory", "resource": "C:/Users/Jk101/Projects/opencode-hub/*", "effect": "allow" },
+        { "action": "external_directory", "resource": "C:/Users/Jk101/Projects/JonsOCsetup/*", "effect": "allow" },
         { "action": "grep", "resource": "*", "effect": "deny" },
         { "action": "glob", "resource": "*", "effect": "deny" },
         { "action": "list", "resource": "*", "effect": "deny" },
@@ -373,7 +373,7 @@
           "effect": "deny"
         },
         { "action": "edit", "resource": "MEMORY.md", "effect": "allow" },
-        { "action": "edit", "resource": "C:/Users/Jk101/Projects/opencode-hub/MEMORY.md", "effect": "allow" }
+        { "action": "edit", "resource": "C:/Users/Jk101/Projects/JonsOCsetup/MEMORY.md", "effect": "allow" }
       ]
     },
     "build": {
