@@ -8,6 +8,7 @@ import {physicalDirectory} from './project'
 import {permissionKey,workerSessionID} from './worker-permissions'
 import {PermissionReviewer,type PermissionReview} from './permission-reviewer'
 import {questCompletionReturn} from './completion-return'
+import {latestSessionAttempts} from './session-lineage'
 import type {QuestStore} from './store'
 import type {StartRun,QuestContext} from './api'
 import type {QuestHost} from './runtime'
@@ -84,6 +85,11 @@ export class QuestWorkerReturns {
     // work it has already turned in buys nothing and costs a turn. Three of the ten messages queued
     // on this machine were exactly that.
     if(q.state==='Archived'){row.state='accepted';row.settled='Quest archived before delivery; the result stays on the Quest';save(row);continue}
+    // Only the newest attempt in a resume lineage is live work -- the Quest's own definition, the
+    // one `questView` already projects. A return for a superseded attempt describes a state the
+    // giver has moved past, because it dispatched the newer attempt itself, and its result is still
+    // on the Quest in that lineage's history. Waking it buys a turn spent re-reading the past.
+    if(!latestSessionAttempts(q.sessions).some(s=>(s.runID??s.callID)===row.runID)){row.state='accepted';row.settled='Superseded by a newer attempt in this run lineage';save(row);continue}
     row.state='sending';save(row)
     try{
      // Each independent terminal outcome retains its queued giver response.
