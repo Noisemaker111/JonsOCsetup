@@ -46,7 +46,10 @@ export function reduceQuest(input: Quest, event: QuestEvent): Quest {
     case "patched": {
       const allowed = ["contractVersion","description","reward","project","archive","evidence","title","objective","priority","reason","nextAction","owner","integrationOwner","scope","relationships","deliverables","acceptanceCriteria","usageInstructions","stages","setbacks","claims","unresolvedWork","completionPolicy","extensions"]
       for (const key of allowed) if (key in p) (q as any)[key] = structuredClone(p[key])
-      if (q.contractVersion === 2 && "archive" in p) {
+      // The archive decision is recorded the same way whatever contract wrote the Quest, and it is
+      // the only thing that decides whether a Quest is turned in. Gating the state on contractVersion
+      // meant an older Quest accepted "archive", saved the decision, returned success and stayed open.
+      if ("archive" in p) {
         q.state = p.archive ? "Archived" : "Waiting"
         if (p.archive?.reason) q.reason = p.archive.reason
       }

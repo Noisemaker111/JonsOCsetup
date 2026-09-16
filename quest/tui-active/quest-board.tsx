@@ -2,8 +2,7 @@ import {readUserGiver} from '../giver-registry.mjs'
 import {artifactPreview} from '../artifact-preview'
 import {userGiverID} from '../user-giver'
 import { useWorkerObservations } from "./worker-observation"
-import { ownedRuns } from "../activity"
-import { TERMINAL_RUN } from "../session-lineage"
+import { observedRun, ownedRuns } from "../activity"
 import { nudgeGiver } from "../tui-workflow"
 /** @jsxImportSource @opentui/solid */
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
@@ -346,7 +345,7 @@ async function openQuestWorkers(context:any,quest:Quest,observation:(run:QuestSe
  if(!rows.length){await context.ui.dialog.alert({title:'Quest worker sessions',message:'No worker session has been recorded for this Quest.'});return}
  // Only live runs are inspected, so a settled one reports the outcome we recorded rather than
  // sitting on "Checking owning host…" for a worker that finished hours ago.
- const shown=(s:QuestSession)=>TERMINAL_RUN.has(s.state)?{state:s.state,reason:s.result??'Recorded outcome'}:observation(s)
+ const shown=(s:QuestSession)=>observedRun(s,observation)
  const key=rows.length===1?rows[0].callID:await context.ui.dialog.select({title:'Quest worker sessions',placeholder:'Search assigned step or model',options:rows.map(s=>({value:s.callID,title:workerTask(quest,s),searchText:workerTask(quest,s)+' '+workerLabel(s),details:[workerLabel(s),shown(s).reason],footer:shown(s).state.toUpperCase()}))})
  const run=rows.find(s=>s.callID===key)
  if(run)await openWorkerSession(context,run)
@@ -424,7 +423,7 @@ function ContractDetail(props: { context: any; store: QuestStore; quest: () => Q
        <text fg={C.dim} wrapMode="none" truncate>TIME   ASSIGNED STEP            STATUS · [i] Evidence</text>
        <Show when={sessions().length} fallback={<text fg={C.dim}>No worker sessions recorded</text>}>
         <For each={sessions()}>{run=>{
-         const live=()=>observation(run)
+         const live=()=>observedRun(run,observation)
          return <box flexDirection="column" flexShrink={0}>
           <box flexDirection="row" gap={1} flexShrink={0} backgroundColor={live().state==='running'?C.selected:'transparent'}>
            <text fg={C.cyan} width={2} flexShrink={0} onMouseUp={(e:any)=>activate(e,()=>setExpandedRun(expandedWorker()===run.callID?'':run.callID))}>{expandedWorker()===run.callID?'▾':'▸'}</text>

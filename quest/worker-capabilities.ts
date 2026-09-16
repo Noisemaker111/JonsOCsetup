@@ -25,7 +25,7 @@ export async function installWorkerCapabilities(ctx:any,store:QuestStore){
   if((assignment.scope as any)?.readOnly===true)for(const name of Object.keys(event.tools??{}))if(!researchTools.has(name))delete event.tools[name]
   if(event.tools?.execute){
    const example=JSON.stringify({code:'return await tools.quests.get({id:"<assigned Quest ID>"})'})
-   event.tools.execute.description='Save and verify assigned Quest results with this callable native tool. Call execute with '+example+'. To save, call tools.quests.update({id,steps:[{id:stepID,state:"done",note:actualFinding}]}) inside code, then get to verify. tools.quests methods are called inside execute, not as a separate top-level tool.\n'+(event.tools.execute.description??'')
+   event.tools.execute.description='Save and verify assigned Quest results with this callable native tool. Call execute with '+example+'. Save an assigned step with tools.quest_report({id,stepID,state,note,verification}) inside code, then get the Quest to verify. That direct tool works even when the remote quests MCP namespace is unavailable; tools.quests.update({id,steps:[{id:stepID,state,note}]}) is equivalent when it is connected. Code Mode tools are called inside execute, not as separate top-level tools.\n'+(event.tools.execute.description??'')
   }
   const tools=Object.keys(event.tools??{});save(event.sessionID,{modelTools:tools})
   if(!tools.includes('execute'))throw new QuestError('WORKER_TOOLS_UNAVAILABLE','Worker cannot save assigned Quest results: the host exposed neither Code Mode execute nor quest. Parent must repair tool readiness before another dispatch.')
