@@ -166,6 +166,57 @@ export async function run(exe, argv, cwd, env) {
   if (code !== 0) throw Error(`${exe} exited ${code}`)
 }
 
+/**
+ * Stop waiting once the provider has settled this preparation's request, rather than at the timeout.
+ *
+ * `opencode run` does not exit when its model request fails. On an account with nothing left the
+ * request settles in under a second and the process then sits there until the bound expires, which
+ * was most of the wait before OpenCode opened: a launch measured 22:34:36 worktree, 22:35:04 plugins
+ * loaded, 22:35:06 request failed, 22:37:04 host finally started. Those two minutes bought nothing.
+ *
+ * The channel's own telemetry ledger records each request settling, so read that rather than guess.
+ */
+export function watchProviderSettlement({controller, since, file = process.env.OPENCODE_TELEMETRY_FILE, interval = 250}) {
+  let failure
+  if (!file) return {failure: () => failure, stop: () => {}, poll: () => {}}
+  let offset = existsSync(file) ? statSync(file).size : 0
+  const poll = () => {
+    try {
+      if (!existsSync(file) || statSync(file).size <= offset) return
+      const text = readFileSync(file, 'utf8').slice(offset)
+      offset += Buffer.byteLength(text)
+      for (const line of text.split('\n')) {
+        const trimmed = line.trim()
+        if (!trimmed) continue
+        let record
+        try {record = JSON.parse(trimmed)?.request} catch {continue}
+        if (!record || record.kind !== 'primary' || (record.startedAt ?? 0) < since) continue
+        if (record.state === 'failed') {
+          failure ??= {route: record.route, accountID: record.accountID, startedAt: record.startedAt, completedAt: record.completedAt}
+          controller?.abort()
+        }
+      }
+    } catch { /* A half-written ledger line is read again on the next tick. */ }
+  }
+  const timer = setInterval(poll, interval)
+  return {failure: () => failure, stop: () => clearInterval(timer), poll}
+}
+
+/**
+ * Whether a prepared release may be run, given what the preparation actually observed.
+ *
+ * The load receipt is the claim that matters: the server plugin loaded, from this generation, at
+ * this exact commit. The prompt is a second and weaker check — that some provider will talk to it —
+ * and it fails for reasons that have nothing to do with the code, an account with nothing left being
+ * the ordinary one. Treating that as a broken release sent `oc` back to whatever it ran before, so
+ * merged and verified work was absent from the command Jon types with only a fallback notice to say
+ * so. A generation that never loaded is still refused; that is a real failure of this code.
+ */
+export function judgePreparation({loaded, answered, providerFailure}) {
+  const probe = answered ? 'answered' : providerFailure ? 'provider-unavailable' : 'failed'
+  return {probe, ok: !!(loaded && answered), accepted: !!(loaded && (answered || providerFailure))}
+}
+
 /** The quarantined environment a dev release is prepared and launched under. */
 export function envFor(root, name, registry = registryRoot) {
   const state = join(registry, 'state', name)
@@ -248,7 +299,11 @@ export async function prepareDevRelease({repository, registry = registryRoot, co
     ...envFor(root, 'dev', registry),
     OPENCODE_MODEL_CATALOG_PREFLIGHT: JSON.stringify(modelCatalog),
   })
-  const release = {schema: 1, cleanupProtocol: existsSync(join(root, 'scripts/release-retirement.mjs')) ? 1 : undefined, channel: 'dev', commit, root, repository: repositoryOwner(repository), model, modelCatalog, ref, resolved, subject, integrationRef: integration, preparedAt: new Date().toISOString()}
+  // Whether a provider actually answered the preparation prompt. The release is kept either way once
+  // the generation has loaded at this commit, so the launcher needs this to say which it is running.
+  let probe
+  try {probe = JSON.parse(readFileSync(join(root, 'run', 'channel-prepare', 'report.json'), 'utf8')).probe} catch {}
+  const release = {schema: 1, cleanupProtocol: existsSync(join(root, 'scripts/release-retirement.mjs')) ? 1 : undefined, channel: 'dev', commit, root, repository: repositoryOwner(repository), model, modelCatalog, probe, ref, resolved, subject, integrationRef: integration, preparedAt: new Date().toISOString()}
   atomic(join(root, 'channel-release.json'), release)
   return {root, release}
 }
