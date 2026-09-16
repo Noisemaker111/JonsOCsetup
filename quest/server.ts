@@ -32,8 +32,8 @@ import { define } from "@opencode-ai/plugin/v2/promise"
 import { QuestStore } from "./store"
 import { QuestTracker } from "./tracker"
 import { createQuestAgentAPI } from "./agent-api"
-import { preparedDispatch, validatePreparedSubagent, QUEST_SUBAGENT_DESCRIPTION, QUEST_SUBAGENT_INPUT } from "./spawn"
-import { recordSpawn, recordSpawnResult, registerCompletionEvidenceHandler, suppressCompletionDelivery } from "../orchestration/orchestration-ledger"
+import { validatePreparedSubagent, QUEST_SUBAGENT_DESCRIPTION, QUEST_SUBAGENT_INPUT } from "./spawn"
+import { recordSpawn, recordSpawnResult, registerCompletionEvidenceHandler, registerCompletionDeliveryClaimant, suppressCompletionDelivery } from "../orchestration/orchestration-ledger"
 import { canonicalizeDispatch } from "../orchestration/dispatch"
 import { watchSubagentCompletions } from "../orchestration/orchestration"
 
@@ -175,6 +175,10 @@ export function installQuestEvents(ctx: { event?: { subscribe?: Function }; sess
 }
 
 export function installQuestCompletionEvidence(quests: QuestTracker, api = createQuestAgentAPI(questRoot())) {
+  // One delivery owner per completion: a Quest run's giver return already comes from
+  // QuestWorkerReturns, so the orchestration watchdog must not also inject its synthetic
+  // completion. Claim only runs the Quest actually owns (a saved runID), never "unbound".
+  registerCompletionDeliveryClaimant((completion) => quests.deliversCompletion(completion))
   return registerCompletionEvidenceHandler((completion) => {
     const disposition = quests.onCompletion(completion)
     if (disposition === "parked" && suppressCompletionDelivery(completion)) quests.onCompletion(completion, true)

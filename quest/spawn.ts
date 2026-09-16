@@ -108,17 +108,10 @@ export function dispatchChipLabel(quest: Quest, input: Record<string, unknown>):
   })
 }
 
-export function prepareNativeSubagent(input: Record<string, unknown>): NativeSubagentInput {
-  const questID = text(input.questID)
-  if (!questID) throw new Error("Quest dispatch requires questID")
-  return toNativeSubagentInput(input, readCanonicalQuest(questID))
-}
-
-/** Prepared original input is what the host persists and displays in its chip. */
-export function preparedDispatch(input: Record<string, unknown>, quest: Quest) {
-  const native = toNativeSubagentInput(input, quest)
-  return { questID: quest.id, task: text(input.task), ...(text(input.cwd) ? { cwd: text(input.cwd) } : {}), ...(text(input.model) ? { model: text(input.model) } : {}), ...(text(input.sessionID) ? { sessionID: text(input.sessionID) } : {}), agent: native.agent, description: native.description }
-}
+/**
+ * The host's persisted original input must already carry the derived agent and
+ * chip description; execute-time mutation is too late for the background chip.
+ */
 export function validatePreparedSubagent(input: Record<string, unknown>, quest = readCanonicalQuest(text(input.questID))): NativeSubagentInput {
   const native = toNativeSubagentInput(input, quest)
   if (input.agent !== native.agent || input.description !== native.description) throw new Error("Dispatch fields are missing or stale. Use quest action=run with the Quest id; the runtime prepares dispatch and isolates the worker.")

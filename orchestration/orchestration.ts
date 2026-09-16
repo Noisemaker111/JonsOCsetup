@@ -16,7 +16,7 @@
  * summarisation, formatting) take their inputs as plain data so they stay
  * testable without a host.
  */
-import { ledgerLockStatus, claimCompletionDelivery, suppressCompletionDelivery, recordCompletionDelivered, recordCompletionDeliveryFailed, recordNativeSessionLineage, recordNotification, recordTerminal, expireExecutionLeases, pendingCompletionEvidence, readLedger, type CompletionEvidence } from "./orchestration-ledger"
+import { ledgerLockStatus, claimCompletionDelivery, suppressCompletionDelivery, recordCompletionDelivered, recordCompletionDeliveryFailed, recordNativeSessionLineage, recordNotification, recordTerminal, expireExecutionLeases, pendingCompletionEvidence, readLedger, completionDeliveryClaimed, type CompletionEvidence } from "./orchestration-ledger"
 import { injectCompletion } from "./watchdog-inject"
 import { detectProviderFailure, failureMessage, USAGE_REACHED, type ProviderFailure } from "../usage/usage-reached"
 
@@ -44,6 +44,9 @@ export async function deliverPendingCompletion(sessionApi: { synthetic?: Functio
   const pending = pendingCompletionEvidence(completion.parentID, file).find((entry) => entry.idempotencyKey === completion.idempotencyKey)
   if (!pending) return true
   if (await parentSessionGone(sessionApi, pending.parentID)) return suppressCompletionDelivery(pending, file)
+  // A Quest-owned run returns through QuestWorkerReturns; injecting the native synthetic too
+  // wakes the same giver twice for one completion. The ledger row stays for reconciliation.
+  if (completionDeliveryClaimed(pending)) return suppressCompletionDelivery(pending, file, "Quest return owner delivers this completion; native synthetic suppressed")
   if (!claimCompletionDelivery(pending, file)) return true
   if (!await injectCompletion(sessionApi, pending)) {
     recordCompletionDeliveryFailed(pending.parentID, pending.idempotencyKey, file)
