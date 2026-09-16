@@ -131,7 +131,19 @@ export function deriveBenchmarkRoutes(input: { catalog: CatalogModel[]; table: B
     if (accounts.length !== 1) { note(model.providerID + "/" + model.modelID + ": " + (accounts.length ? "several connected accounts serve this identity" : "no connected account serves this identity")); continue }
     const accountID = accounts[0].id
     if (!policy.billing[accountID]) { note(model.providerID + "/" + model.modelID + ": billing arrangement for " + accountID + " is not configured"); continue }
-    for (const { reasoning, benchmark } of benchmarkedEfforts(entry, model)) {
+    const claimed = benchmarkedEfforts(entry, model)
+    // An unstated published effort is attributed to the highest the model declares, and the rest of
+    // its efforts then derive no route at all. That is the right ranking call -- a headline number
+    // must not credit a cheaper effort -- but it was silent, so a permitted effort on a funded
+    // account simply did not exist as far as the router or its user could tell. Measured here:
+    // `opencode-go/deepseek-v4.1-flash#high` has 154 clean runs at 99% and could only ever be
+    // reached by naming it, because its published row states no effort.
+    if (entry.passAt1.unstated !== undefined) {
+      const ranked = new Set(claimed.map(c => c.reasoning))
+      const unranked = model.efforts.filter(effort => !ranked.has(effort))
+      if (unranked.length) note(model.providerID + "/" + model.modelID + ": " + unranked.join(", ") + " derive no ranked route because the published score states no effort and is claimed by " + [...ranked].join(", ") + "; name one explicitly to dispatch on it")
+    }
+    for (const { reasoning, benchmark } of claimed) {
       try { assertConfiguredSelection({ ...model, reasoning }) } catch(error) { note(String(error)); continue }
       const route: Route = {
         id: "live-" + slugModel(model.providerID) + "-" + slugModel(model.modelID) + "-" + slugModel(reasoning),
