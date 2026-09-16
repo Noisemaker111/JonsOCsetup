@@ -45,6 +45,22 @@ function followGiverLocation(store:QuestStore,prior:any,row:any){
  if(prior.directory&&physicalDirectory(prior.directory)===current)return
  saveUserGiver(store.runtime,{...prior,directory:current})
 }
+/**
+ * Ask the host where the bound giver is and record it.
+ *
+ * ensureUserGiver only runs when a conversation is opened from home, and the launcher opens the
+ * giver session directly, so on an ordinary `oc` the registration was never revisited. The board
+ * polls compare against it, which left them switched off for as long as the record disagreed.
+ * Every location runs this, giver and worker alike: they all read the same answer from the host, so
+ * the write is the same wherever it happens, and a worker still fails the comparison afterwards.
+ */
+export async function refreshUserGiverLocation(store:QuestStore,host:any){
+ const prior=readUserGiver(store.runtime)
+ if(prior?.state!=='bound'||!prior.sessionID)return
+ const row=unwrap(await host.get({sessionID:prior.sessionID}))
+ if(row?.id!==prior.sessionID)return
+ followGiverLocation(store,prior,row)
+}
 export async function ensureUserGiver(store:QuestStore,host:any,currentID?:string,directory=process.cwd()){
  const prior=readUserGiver(store.runtime)
  if(prior){if(prior.state!=='bound')throw new QuestError('GIVER_OUTCOME_UNKNOWN','Giver creation is uncertain; inspect the existing session before retrying');const row=unwrap(await host.get({sessionID:prior.sessionID}));if(row?.id!==prior.sessionID)throw new QuestError('GIVER_IDENTITY_INVALID','Host returned a different giver');rootConversation(store,row);followGiverLocation(store,prior,row);return row}
