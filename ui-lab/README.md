@@ -52,11 +52,11 @@ empty ledger are skipped in real mode.
 | `board-contract` | Same board, v2 contract Quest selected | `quest/tui-active/quest-board.tsx` — `ContractDetail` |
 | `board-attention` | Same board, blocked step + failed worker | `quest/tui-active/quest-board.tsx` — `status()`, `badge()`, `sessionColor()` |
 | `board-empty` | First-run, no Quests | `quest/tui-active/quest-board.tsx` — `QuestBoard` fallback |
-| `sidebar` | The quest list beside the chat (`sidebar.content` slot) | `quest/tui-active/quests.tsx` — `Sidebar`, `laneColor` |
+| `sidebar` | The quest list beside the chat (`sidebar.content` slot) | `quest/tui-active/quests.tsx` — `Sidebar`, `toneColor` |
 | `usage` | The `/usage` dialog | `usage/tui-active/usage.tsx` — `UsageDialog`, `ConversationTelemetry`, `UsageTable`; column widths and bars in `usage/tui-usage-format.ts` |
 
-Text that comes from data rather than layout lives one level down: the count
-line wording is `questIndicator` in `quest/tui-model.ts`, the "Step 3/11: …"
+Text that comes from data rather than layout lives one level down: the filter and
+count wording is `QUEST_FILTERS` in `quest/tui-model.ts`, the "Step 3/11: …"
 next-action text is `nextStepAction` in `quest/steps.ts`, the progress glyphs and
 ring are also in `quest/steps.ts`.
 

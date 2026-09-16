@@ -37,3 +37,5 @@ channel-release.json
 /com[1-9]
 /lpt[1-9]
 .candidate-health-*.json
+
+/ui-lab/out/

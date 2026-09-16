@@ -10,7 +10,8 @@ import { ownedRuns } from "../activity"
 import {workspaceSettings,setWorkspaceMode} from "../workspace-settings"
 import { Plugin } from "../../tui-legacy"
 import { For, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
-import { questIndicator, filterQuests, QUEST_FILTERS, type QuestFilter } from "../tui-model"
+import { filterQuests, QUEST_FILTERS, type QuestFilter } from "../tui-model"
+import { questReachability, runReachability } from "../reachability"
 import { boardProject, projectQuests, resolveBoardProject } from "../board-project"
 import { activeSessionID } from "../../scripts/runtime-contract.mjs"
 import { createGiver, hasQuestReturn, returnToQuest } from "../tui-workflow"
@@ -18,7 +19,7 @@ import { giverHomeEntry } from "../tui-navigation"
 import type { Quest, QuestSession } from "../types"
 import { watchQuests } from "../watcher"
 import { progressGlyph, questProgress } from "../steps"
-import { C, QuestBoard, activate, fitTitle, openWorkerSession, projectRoot, quests, workerLabel, workerTask } from "./quest-board"
+import { C, QuestBoard, activate, fitTitle, openWorkerSession, projectRoot, quests, toneColor, workerLabel, workerTask } from "./quest-board"
 
 /**
  * Snapshot of the route live right now, shaped the way the host's own router
@@ -192,8 +193,9 @@ export function QuestStatus(props: { context: any }) {
   // status bar polling the host for workers that ended hours ago.
   const runs=()=>all().flatMap(quest=>ownedRuns(quest).map(session=>({quest,session})))
   const observation=useWorkerObservations(props.context,()=>runs().map(row=>row.session))
+  const reach=(row:{quest:Quest;session:QuestSession})=>runReachability(row.session,observation)
   const {width,ref:measureBox}=useBoxWidth(props.context)
-  const lines=()=>runs().sort((a,b)=>Number(observation(b.session).state==='blocked')-Number(observation(a.session).state==='blocked')||b.session.updatedAt.localeCompare(a.session.updatedAt)).slice(0,2)
+  const lines=()=>runs().sort((a,b)=>Number(reach(b).state==='blocked')-Number(reach(a).state==='blocked')||b.session.updatedAt.localeCompare(a.session.updatedAt)).slice(0,2)
   const counts = async () => {
     const picked=await props.context.ui.dialog.select({title:all.error()??"Quest counts · all projects",options:QUEST_FILTERS.filter(f=>f.id!=="all").map(f=>({value:f.id,title:`${filterQuests(all(),f.id,observation).length} ${f.label}`}))})
     if(picked)openBoard(props.context,undefined,picked)
@@ -208,11 +210,11 @@ export function QuestStatus(props: { context: any }) {
       // fitTitle cuts on a word boundary. Leaving it to the renderer took the shortening out of the
       // middle of a word instead, which is how "…across Codex" reached the footer as "…ross Codex".
       const label=()=>{
-        const prefix=`↳ Open worker · ${observation(row.session).state} · `
+        const prefix=`↳ Open worker · ${reach(row).state} · `
         return prefix+fitTitle(row.quest.title,Math.max(12,width()-prefix.length-1))
       }
       return <box flexDirection="row" gap={1} minWidth={0}>
-        <Show when={activeSessionID(props.context)===userGiverID()&&observation(row.session).permissions?.length}><text fg={C.yellow} flexShrink={0} onMouseUp={(event:any)=>activate(event,()=>void reviewWorkerPermissions(props.context,row.quest.id,row.session.runID??row.session.callID))}>Review permission</text></Show>
+        <Show when={activeSessionID(props.context)===userGiverID()&&reach(row).pendingPermissions}><text fg={C.yellow} flexShrink={0} onMouseUp={(event:any)=>activate(event,()=>void reviewWorkerPermissions(props.context,row.quest.id,row.session.runID??row.session.callID))}>Review permission</text></Show>
         <text fg={C.muted} wrapMode="none" truncate flexShrink={1} onMouseUp={(event:any)=>activate(event,()=>void openWorkerSession(props.context,row.session))}>{label()}</text>
       </box>
     }}</For>
@@ -242,24 +244,18 @@ function SessionRole(props: { context: any; sessionID: string }) {
       <Show when={!giver()}><text fg={C.yellow} onMouseUp={(event:any)=>activate(event,go)}>◆ Go to giver · /giver</text></Show>
     </box>
     <Show when={assignment()}>{row => <>
-      <text fg={C.text} wrapMode="none" truncate>{row().quest.title} · {observation(row().session).state}</text>
-      <text fg={C.muted} wrapMode="none" truncate>{workerLabel(row().session)} · {observation(row().session).lastActivityAt ? 'Last activity '+new Date(observation(row().session).lastActivityAt).toLocaleTimeString() : 'Activity unconfirmed'}</text>
+      <text fg={C.text} wrapMode="none" truncate>{row().quest.title} · {runReachability(row().session, observation).state}</text>
+      <text fg={C.muted} wrapMode="none" truncate>{workerLabel(row().session)} · {runReachability(row().session, observation).lastActivityAt ? 'Last activity '+new Date(runReachability(row().session, observation).lastActivityAt!).toLocaleTimeString() : 'Activity unconfirmed'}</text>
     </>}</Show>
     <Show when={giver()}><text fg={C.muted} wrapMode="none" truncate>Your one conversation across all projects · Workers report here</text></Show>
   </box>
 }
 
-function laneColor(q: Quest): string {
-  if (q.state === "Working") return C.green
-  if (q.state === "Needs attention") return C.red
-  if (q.state === "Ready to complete" || q.state === "Complete") return C.cyan
-  return C.muted
-}
-
-/** Every active Quest beside the session, so the chat always has the whole board in view. */
+/** One compose read: the sidebar shows the same reachability the footer and board show. */
 export function Sidebar(props: { context: any }) {
   const all = useQuests(props.context)
   const active = () => all().filter((q) => q.state !== "Archived").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 12)
+  const observation = useWorkerObservations(props.context,()=>active().flatMap(q=>ownedRuns(q)))
   const {width,ref:measureBox}=useBoxWidth(props.context,40)
   return <box ref={measureBox} flexDirection="column" flexShrink={0}>
     <text fg={C.yellow} onMouseUp={(event:any)=>activate(event,()=>void createGiver(props.context).catch(error=>props.context.ui.dialog.alert({title:"Quest Giver unavailable",message:String(error)})))}>◆ Your Quest Giver · /giver</text>
@@ -273,7 +269,7 @@ export function Sidebar(props: { context: any }) {
         // the renderer shorten the whole line instead gutted the title and kept the count: a column of
         // rows reading "Redesign the Qu...ar and footer 4/11".
         const title = () => fitTitle(q.title, Math.max(8, width() - `${p.done}/${p.total}`.length - 3))
-        return <text fg={C.text} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context, q.id))}><span fg={laneColor(q)}>{progressGlyph(p)}</span> {title()} <span fg={C.dim}>{p.done}/{p.total}</span></text>
+        return <text fg={C.text} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context, q.id))}><span fg={toneColor(questReachability(q,observation).tone)}>{progressGlyph(p)}</span> {title()} <span fg={C.dim}>{p.done}/{p.total}</span></text>
       }}</For>
     </Show>
   </box>

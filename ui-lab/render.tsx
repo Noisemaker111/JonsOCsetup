@@ -111,7 +111,7 @@ async function surfaces(): Promise<Surface[]> {
     board("board-empty", "Quest board · empty ledger", "quest/tui-active/quest-board.tsx (QuestBoard fallback)",
       "What /quests shows today with no Quests: the state in the host screenshot.", undefined, "empty"),
     {
-      id: "sidebar", title: "Sidebar · sidebar.content slot", source: "quest/tui-active/quests.tsx (Sidebar, laneColor)",
+      id: "sidebar", title: "Sidebar · sidebar.content slot", source: "quest/tui-active/quests.tsx (Sidebar, toneColor)",
       note: "The host sidebar column beside the chat, at its real width. Header line, + Start Quest, one row per active Quest.",
       width: SIDEBAR_COLS, height: 16, palette: HOST_PALETTE, render: (context) => <HostSidebar><Sidebar context={context} /></HostSidebar>,
     },

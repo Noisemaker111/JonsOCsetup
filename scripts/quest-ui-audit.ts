@@ -128,7 +128,11 @@ async function createQuestFixture(sourceRoot: string, project: string, ledger: s
   for (let i=0;i<titles.length;i++) {
     const api=questsAPI(store,{project:projectIdentity(project),sessionID:"audit-fixture",requestID:"audit-"+i},async()=>{throw Error("UI audit never dispatches")})
     const steps=[{id:"reproduce",title:"Reproduce the reported behavior",detail:"Record the original behavior with a realistic saved project and a repeatable sequence of actions."},{id:"implement",title:"Implement the smallest complete fix",needs:["reproduce"],detail:"Preserve existing records and handle interrupted sessions without losing user edits."},{id:"verify",title:"Verify reload, keyboard navigation, and recovery",needs:["implement"],detail:"Exercise the full operation after a fresh launch, including failure and retry."},{id:"review",title:"Prepare the change for review",needs:["verify"],detail:"Attach evidence and clear instructions so the reviewer can reproduce the result."}]
-    const q=api.create({title:titles[i],description:i===11?"Customers receive the same invoice reminder twice when a connection drops during delivery. Reproduce the reconnect path, make retry handling idempotent, and verify that one reminder is delivered while failed deliveries remain retryable.":"Improve the daily project workflow for a team managing several active changes. Keep saved work intact across reloads and make the next action clear without requiring knowledge of the runtime.",steps,reward:"A reviewed change with reproducible checks, before-and-after evidence, and short usage instructions."})
+    // The duplicate guard matches on (project, title, objective), so a shared objective text would
+    // make the second seeded Quest a refused duplicate of the first. The fixture still speaks with
+    // one voice; only the variant marker keeps each admission distinct.
+    const objective=i===11?"Customers receive the same invoice reminder twice when a connection drops during delivery. Reproduce the reconnect path, make retry handling idempotent, and verify that one reminder is delivered while failed deliveries remain retryable.":"Improve the daily project workflow for a team managing several active changes. Keep saved work intact across reloads and make the next action clear without requiring knowledge of the runtime."
+    const q=api.create({title:titles[i],description:objective+" (audit fixture "+(i+1)+")",steps,reward:"A reviewed change with reproducible checks, before-and-after evidence, and short usage instructions."})
     id=q.id
     api.update(id,{steps:steps.map((s,j)=>({id:s.id,state:i%4===0||i===8?"done":j===0?"done":j===1?(i%4===1?"blocked":"working"):"pending",note:j===0?"Reproduced after reconnect using a saved customer invoice.":j===1&&i%4===1?"Waiting for a reproducible delivery receipt from the sandbox mailbox.":undefined}))})
     if(i===8)api.update(id,{archive:{accepted:true}})
@@ -388,8 +392,7 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
       await shot("07-selection-retains-scroll")
       for(let i=0;i<25;i++)await send("\x1b[<64;"+(COLS-8)+";"+(ROWS-8)+"M",40)
       await shot("07-blocked-quest")
-      if(has("--source-capture")){await send("f",200);await waitForScreen(render,t=>t.includes("Quest state filter"),5000,"ready filter picker");await clickText("Ready for review")}
-      else await clickText("2 Turn in")
+      await send("f",200);await waitForScreen(render,t=>t.includes("Quest state filter"),5000,"ready filter picker");await clickText("Ready for review")
       await waitForScreen(render,t=>t.includes("2 matching"),5000,"review-ready filter")
       if(has("--source-capture") && COLS<100)await enter(200)
       await shot("08-review-ready")
@@ -399,8 +402,7 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
         const entries=(await import(pathToFileURL(join(root,"quest/index.ts")).href)).readAllQuests(questFixture!.store.projectRoot,{includeArchived:true})
         if(entries.filter((entry:any)=>entry.quest?.state==="Archived").length!==1)throw Error("Dismissal changed archive")
       }
-      if(has("--source-capture")){await send("f",200);await waitForScreen(render,t=>t.includes("Quest state filter"),5000,"archived filter picker");await clickText("Archived")}
-      else await clickText("1 Archived")
+      await send("f",200);await waitForScreen(render,t=>t.includes("Quest state filter"),5000,"archived filter picker");await clickText("Archived")
       if(has("--source-capture")&&COLS<100)await enter(200);await waitForScreen(render,t=>t.includes("Reopen Quest"),5000,"archived Quest")
       await shot("09-archived")
       await send("\x1b",300)
