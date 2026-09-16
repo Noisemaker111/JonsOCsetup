@@ -141,7 +141,8 @@ export function fitTitle(title: string, max: number): string {
     out = next
   }
   if (!out) out = clean.slice(0, max - 1)
-  return `${out}…`
+  // A cut that lands after a comma or a dash leaves it dangling in front of the ellipsis.
+  return `${out.replace(/[\s,;:·—–-]+$/, "")}…`
 }
 
 /** The id worth showing/clicking: short enough for a footer row, long enough to be unambiguous. */

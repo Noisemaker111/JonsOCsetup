@@ -160,6 +160,29 @@ function useQuests(context: any) {
   return Object.assign(all,{error})
 }
 
+/**
+ * The laid-out width of a box, for deciding where a title has to be shortened.
+ *
+ * Not the terminal's width: these surfaces live in the composer and the sidebar column, both
+ * narrower than the screen and narrower again as panes open. Over-budget the title and the
+ * shortening falls back to the renderer, whose ellipsis is a middle cut with no setting to change
+ * it, so it lands inside a word. There is no laid-out width until the first frame, hence the
+ * measurement once mount returns.
+ */
+function useBoxWidth(context: any, fallback = 120) {
+  let box: { width?: number } | undefined
+  const [width, setWidth] = createSignal(fallback)
+  const measure = () => { const value = box?.width; if (typeof value === "number" && value > 0) setWidth(value) }
+  onMount(() => {
+    measure()
+    const settle = setTimeout(measure, 0)
+    const renderer = context?.renderer
+    renderer?.on?.("resize", measure)
+    onCleanup(() => { clearTimeout(settle); renderer?.off?.("resize", measure) })
+  })
+  return { width, ref: (node: any) => { box = node; measure() } }
+}
+
 /** Quest status occupies its own composer rows; the host footer keeps its native controls. */
 export function QuestStatus(props: { context: any }) {
   const all = useQuests(props.context)
@@ -169,25 +192,13 @@ export function QuestStatus(props: { context: any }) {
   // status bar polling the host for workers that ended hours ago.
   const runs=()=>all().flatMap(quest=>ownedRuns(quest).map(session=>({quest,session})))
   const observation=useWorkerObservations(props.context,()=>runs().map(row=>row.session))
-  // Measure the row box, not the terminal: these rows sit in the composer, which is narrower than the
-  // screen and narrower again when a sidebar is open. Terminal width would over-budget the title and
-  // hand the shortening back to the renderer, which is what puts the cut inside a word.
-  let box: { width?: number } | undefined
-  const [width,setWidth]=createSignal(props.context?.renderer?.width??120)
-  const measure=()=>{const value=box?.width;if(typeof value==="number"&&value>0)setWidth(value)}
-  onMount(()=>{
-    // The box has no laid-out width until the first frame, so measure once mount returns as well.
-    measure()
-    const settle=setTimeout(measure,0)
-    const renderer=props.context?.renderer
-    renderer?.on?.("resize",measure);onCleanup(()=>{clearTimeout(settle);renderer?.off?.("resize",measure)})
-  })
+  const {width,ref:measureBox}=useBoxWidth(props.context)
   const lines=()=>runs().sort((a,b)=>Number(observation(b.session).state==='blocked')-Number(observation(a.session).state==='blocked')||b.session.updatedAt.localeCompare(a.session.updatedAt)).slice(0,2)
   const counts = async () => {
     const picked=await props.context.ui.dialog.select({title:all.error()??"Quest counts · all projects",options:QUEST_FILTERS.filter(f=>f.id!=="all").map(f=>({value:f.id,title:`${filterQuests(all(),f.id,observation).length} ${f.label}`}))})
     if(picked)openBoard(props.context,undefined,picked)
   }
-  return <box ref={box} flexDirection="column" width="100%" flexShrink={0} minWidth={0}>
+  return <box ref={measureBox} flexDirection="column" width="100%" flexShrink={0} minWidth={0}>
     <box flexDirection="row" flexShrink={1} minWidth={0} gap={1}>
       <Show when={hasQuestReturn(props.context)}><text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>returnToQuest(props.context))}>↩ Quest</text></Show>
       <text fg={C.yellow} wrapMode="none" truncate flexShrink={1} onMouseUp={(event:any)=>activate(event,()=>openBoard(props.context))}>Quests · {filterQuests(all(),"open").length} open</text>
@@ -249,7 +260,8 @@ function laneColor(q: Quest): string {
 export function Sidebar(props: { context: any }) {
   const all = useQuests(props.context)
   const active = () => all().filter((q) => q.state !== "Archived").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 12)
-  return <box flexDirection="column" flexShrink={0}>
+  const {width,ref:measureBox}=useBoxWidth(props.context,40)
+  return <box ref={measureBox} flexDirection="column" flexShrink={0}>
     <text fg={C.yellow} onMouseUp={(event:any)=>activate(event,()=>void createGiver(props.context).catch(error=>props.context.ui.dialog.alert({title:"Quest Giver unavailable",message:String(error)})))}>◆ Your Quest Giver · /giver</text>
     <text fg={C.yellow} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context))}>Quests · all projects · open board</text>
     <Show when={all.error()}>{message=><text fg={C.orange} wrapMode="word">{message()}</text>}</Show>
@@ -257,7 +269,11 @@ export function Sidebar(props: { context: any }) {
     <Show when={active().length > 0} fallback={<text fg={C.dim} wrapMode="word">None yet. Tell the Quest Giver what you want done.</text>}>
       <For each={active()}>{(q) => {
         const p = questProgress(q)
-        return <text fg={C.text} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context, q.id))}><span fg={laneColor(q)}>{progressGlyph(p)}</span> {q.title} <span fg={C.dim}>{p.done}/{p.total}</span></text>
+        // The glyph and the step count are fixed furniture, so the title is what has to give. Letting
+        // the renderer shorten the whole line instead gutted the title and kept the count: a column of
+        // rows reading "Redesign the Qu...ar and footer 4/11".
+        const title = () => fitTitle(q.title, Math.max(8, width() - `${p.done}/${p.total}`.length - 3))
+        return <text fg={C.text} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context, q.id))}><span fg={laneColor(q)}>{progressGlyph(p)}</span> {title()} <span fg={C.dim}>{p.done}/{p.total}</span></text>
       }}</For>
     </Show>
   </box>
