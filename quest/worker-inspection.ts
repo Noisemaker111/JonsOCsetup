@@ -10,7 +10,10 @@ import type { QuestSession } from './types'
 const unwrap = (value:any) => value?.data ?? value
 /** When this host process began. Admission happens in it, so nothing older is still waiting on it. */
 const HOST_STARTED_AT = Date.now() - (typeof process?.uptime === 'function' ? process.uptime() * 1000 : 0)
-/** Confirm historical workers through the owning host even when no live event survived restart. */
+/** Observation states that mean this run is over, whoever established it. */
+export const SETTLED_OBSERVATION = new Set(['completed','failed','interrupted','cancelled','missing','stale'])
+/** Recorded run states the sweep still owns. */
+const OWNED_RUN = ['planned','executing','waiting','blocked']
 export async function confirmWorkerIdle(host:any,sessionID:string):Promise<boolean> {
  try {
   if(typeof host.active==='function'){
@@ -25,21 +28,60 @@ export async function confirmWorkerIdle(host:any,sessionID:string):Promise<boole
   return hostExecution(host,sessionID)!==true
  }catch{return false}
 }
-export async function inspectWorker(host:any, run:QuestSession):Promise<any> {
+/**
+ * What one run looks like to its owning host.
+ *
+ * `active` is the host's own map of executing sessions. It is the same answer for every run, so the
+ * sweep reads it once and hands it in; only a single interactive inspection fetches its own.
+ *
+ * `messages` is off by default and that is the point. Liveness is `host.active` plus the session
+ * row: `time.idle` and `idle_outcome` are written by the host's execution projector and `time.updated`
+ * is deliberately not advanced by a terminal, so the row alone says whether the execution ended. The
+ * message history said nothing extra and cost the whole thread -- `session.context` has no limit
+ * parameter, so every one of the fifteen recorded runs loaded its session's entire history every five
+ * seconds, and the host log filled with `InterruptError: All fibers interrupted` from the five-second
+ * abort that gave up on them. An interactive read of one run still asks for it.
+ */
+export async function inspectWorker(host:any, run:QuestSession, options:{active?:Record<string,unknown>;messages?:boolean}={}):Promise<any> {
  const sessionID=run.openCodeSessionId??run.openCodeSessionID??run.sessionID
  if(!sessionID) return {state:run.state==='planned'?'launching':run.state==='failed'?'failed':'queued',reason:run.result??'No worker session was confirmed'}
  if(!sessionID.startsWith('ses_')||run.harness||run.runtime==='claude-code')return {state:'external',reason:'External runtime; no native OpenCode session can be confirmed'}
  try {
   const row=unwrap(await boundedInspection(signal=>host.get({sessionID},{signal})))
   if(row?.id!==sessionID)return {state:'missing',reason:'Recorded session was not returned by its owning host; the run is over and the step is free to redispatch'}
-  const active=typeof host.active==='function'?unwrap(await boundedInspection(signal=>host.active({signal}))):undefined
-  const messages=typeof host.context==='function'?unwrap(await boundedInspection(()=>host.context({sessionID}))):[]
+  const active=options.active??(typeof host.active==='function'?unwrap(await boundedInspection(signal=>host.active({signal}))):undefined)
+  const messages=options.messages&&typeof host.context==='function'?unwrap(await boundedInspection(signal=>host.context({sessionID},{signal}))):[]
   const permissions=unwrap(await boundedInspection(()=>hostPermissions(host,sessionID)))
   return observeWorker(row,{active:active===undefined?hostExecution(host,sessionID):Object.hasOwn(active,sessionID),messages:Array.isArray(messages)?messages.slice(-3):[],permissions,expected:run})
  }catch(error){return observationFailure(error)}
 }
+/** Everything one sweep shares across the Quests it walks. */
+type Sweep={active?:Record<string,unknown>}
+/**
+ * What this sweep already concluded about a Quest, and from what.
+ *
+ * The board sweep re-derived every Quest every five seconds whether or not anything about it had
+ * moved. Reconciliation is a pure function of the record and what the host says is executing, so the
+ * same inputs produce the same writes; the fingerprint is those inputs. A record that changes, a
+ * session that starts or stops executing, a workspace that disappears or a lease that falls due all
+ * change it, and the Quest is reconciled again on the very next tick.
+ */
+const observed=new WeakMap<object,Map<string,string>>()
+function questFingerprint(quest:any,sweep:Sweep,now:number){
+ const parts=[String(quest.revision)]
+ for(const run of quest.sessions as QuestSession[]){
+  if(!OWNED_RUN.includes(run.state))continue
+  const id=run.openCodeSessionId??run.sessionID??''
+  const workspace=run.scope?.worktree??(run as any).worktree
+  const lease=run.leaseExpiresAt?Date.parse(run.leaseExpiresAt):NaN
+  parts.push([run.callID,run.state,run.updatedAt,id,sweep.active?String(Object.hasOwn(sweep.active,id)):'?',
+   typeof workspace==='string'&&workspace?String(existsSync(workspace)):'-',
+   Number.isFinite(lease)?String(lease<now):'-'].join(''))
+ }
+ return parts.join('')
+}
 /** Poll persisted outcomes to recover missed events without turning silence into completion. */
-async function reconcile(store:QuestStore,host:any,questID:string) {
+async function reconcile(store:QuestStore,host:any,questID:string,sweep:Sweep={}) {
  const tracker=new QuestTracker(store,host),observations:Record<string,any>={}
  const quest=store.read(questID)
  for(const entry of quest?[{quest}]:[]){
@@ -50,7 +92,7 @@ async function reconcile(store:QuestStore,host:any,questID:string) {
    current=store.apply(current.id,'stage-state',update,'quest:terminal-step-reconcile',{expectedRevision:current.revision})
   }
   for(const run of current?.sessions??[]){
-  if(!['planned','executing','waiting','blocked'].includes(run.state))continue
+  if(!OWNED_RUN.includes(run.state))continue
   const interruption=run.state==='planned'&&!(run.openCodeSessionId??run.sessionID)?interruptedPreflight(store.runtime,run.runID??run.callID):undefined
   if(interruption){
    observations[run.runID??run.callID]={state:'failed',reason:interruption}
@@ -114,7 +156,7 @@ async function reconcile(store:QuestStore,host:any,questID:string) {
    store.apply(entry.quest!.id,'session-state',{callID:currentRun.callID,state:'stale',result:reason,evidence:reason,preserveTerminal:true},'quest:execution-lost-with-host')
    continue
   }
-  const observation=await inspectWorker(host,currentRun);observations[run.runID??run.callID]=observation
+  const observation=await inspectWorker(host,currentRun,{active:sweep.active});observations[run.runID??run.callID]=observation
   // One host owns a database, so a session its own store cannot produce is gone rather than merely
   // unseen, and that is terminal evidence. Recording it is what ends the wait: an unsaved absence is
   // re-derived identically on every later sweep, so the step stays owned by a run that can never
@@ -126,6 +168,17 @@ async function reconcile(store:QuestStore,host:any,questID:string) {
    continue
   }
   if(observation.outcome&&observation.completedAt&&Date.parse(observation.completedAt)>=Date.parse(run.updatedAt))tracker.onHostEvent({type:'session.execution.'+observation.outcome,data:{sessionID:run.openCodeSessionId??run.sessionID,observedAt:observation.completedAt}})
+  // quest:idle-host-outcome — the recorded run says executing; the host says this session is not in
+  // its active map and its row carries a persisted outcome older than the record. Both statements
+  // cannot be true, and the host's is the one backed by an execution event. Without this the set of
+  // runs the board calls active only ever grew: all fifteen "Working" Quests carried an `executing`
+  // run written by prompt admission, the host had long since finished most of them, and nothing
+  // above settles an already-idle session whose outcome predates the last ledger write.
+  else if(observation.outcome&&observation.state!=='running'&&['executing','waiting'].includes(currentRun.state)){
+   const reason='Owning host reports this session idle with a persisted '+observation.outcome+' outcome recorded at '+(observation.completedAt??'an earlier time')+', so the recorded execution is over.'
+   observations[run.runID??run.callID]={...observation,reason}
+   store.apply(entry.quest!.id,'session-state',{callID:currentRun.callID,state:observation.outcome==='succeeded'?'completed':observation.outcome==='failed'?'failed':'cancelled',result:reason,evidence:reason,preserveTerminal:true},'quest:idle-host-outcome')
+  }
  }
  }
  return observations
@@ -139,11 +192,35 @@ export function reconcileWorkers(store:QuestStore,host:any,questID?:string):Prom
  const prior=polls.get(key);if(prior)return prior
  // A board sweep shares each Quest's observation, but an interactive request
  // never waits for unrelated historical workers ahead of it in that sweep.
- const task=questID?reconcile(store,host,questID):(async()=>{
-  const observations:Record<string,any>={}
-  for(const {quest} of readAllQuests(store.projectRoot,{includeArchived:true}))if(quest)Object.assign(observations,await reconcileWorkers(store,host,quest.id))
-  return observations
- })()
+ const task=questID?reconcile(store,host,questID):sweepAll(store,host)
  const promise=task.finally(()=>{if(polls.get(key)===promise)polls.delete(key)})
  polls.set(key,promise);return promise
+}
+/**
+ * One board sweep.
+ *
+ * Archived records are excluded: turn-in is the end of the work, their runs are terminal, and
+ * reading them here walked 88 of this installation's 110 records on every five-second tick to
+ * conclude nothing. Cleanup, which is the operation that does care about an archived Quest's
+ * workspace, reads the archived view itself and is driven by filesystem events, not by this timer.
+ */
+async function sweepAll(store:QuestStore,host:any){
+ const sweep:Sweep={}
+ if(typeof host.active==='function')try{const value=unwrap(await boundedInspection(signal=>host.active({signal})));if(value&&typeof value==='object'&&!Array.isArray(value))sweep.active=value}catch{}
+ let memo=observed.get(host);if(!memo){memo=new Map();observed.set(host,memo)}
+ const now=Date.now(),observations:Record<string,any>={},live=new Set<string>()
+ for(const {quest} of readAllQuests(store.projectRoot)){
+  if(!quest||quest.state==='Archived')continue
+  const key=store.runtime+'\0'+quest.id,fingerprint=questFingerprint(quest,sweep,now)
+  live.add(key)
+  if(memo.get(key)===fingerprint)continue
+  Object.assign(observations,await reconcile(store,host,quest.id,sweep))
+  // Recorded after the reconcile, from the record it produced: a settle that changed the Quest
+  // leaves a different fingerprint, so the next tick re-reads it rather than trusting this one.
+  const after=store.read(quest.id)
+  memo.set(key,after?questFingerprint(after,sweep,now):fingerprint)
+ }
+ // A Quest that was archived or removed stops being remembered, so the memo tracks the board.
+ for(const key of [...memo.keys()])if(key.startsWith(store.runtime+'\0')&&!live.has(key))memo.delete(key)
+ return observations
 }

@@ -1,5 +1,6 @@
 import {classifyDispatch} from '../models/task-demand'
 import {readContinuations} from './runtime-queues'
+import {TERMINAL_RUN} from './session-lineage'
 import {workspaceSettings} from "./workspace-settings"
 import {existsSync,readFileSync,writeFileSync,renameSync,mkdirSync} from 'node:fs'
 import {join} from 'node:path'
@@ -30,29 +31,52 @@ export function trackedStart(store:QuestStore,start:StartRun,settingsFile?:strin
 }}
 const keys=['input','cacheRead','cacheWrite','output','reasoning'] as const
 const route=(r:LedgerRow):WorkflowRoute=>({accountID:r.accountID??'unknown',providerID:r.route.providerID,modelID:r.route.modelID,reasoning:r.route.reasoning??r.route.variant??'unknown',harness:r.route.harness??'unknown',version:'unknown',planRegime:r.regime??'unknown',serviceTier:r.route.serviceTier??'unknown'})
-/** Query only directly-owned native session records; host corroboration and descendants are not added twice. */
+/**
+ * Query only directly-owned native session records; host corroboration and descendants are not added twice.
+ *
+ * Every registration ever made stayed in `workflow-tracking.json`, and each one opened the 90 MB
+ * telemetry sqlite to ask about a session whose outcome had been terminal for days: 258 registrations,
+ * 1,273 ms of the host's JS thread, on every five-second sweep and again at the end of every Quest API
+ * call. A terminal observation is immutable -- `observeWorkflowRun` refuses to change one -- so a run
+ * that carries one has nothing left to measure. It is skipped before any ledger read and its
+ * registration is dropped, because the outcomes file already holds its whole identity. What is left to
+ * walk is the runs that have not finished.
+ */
 export function collectWorkflowOutcomes(store:QuestStore,options:{file?:string;now?:number;rows?:(sessionID:string)=>LedgerRow[]}={}){
  const target=options.file??workflowFile(),now=options.now??Date.now(),known=new Map(readWorkflowOutcomes(target).runs.map(r=>[r.runID,r])),quests=new Map<string,ReturnType<QuestStore['read']>>(),diagnostics:string[]=[];let observed=0
+ const settled=new Set<string>()
  for(const meta of read(store).runs){try{
+  const recorded=known.get(meta.runID)?.observation
+  if(recorded&&recorded.state!=='running'){settled.add(meta.runID);continue}
   if(!quests.has(meta.questID))quests.set(meta.questID,store.read(meta.questID));const q=quests.get(meta.questID),run=q?.sessions.find(s=>s.runID===meta.runID),sessionID=run?.openCodeSessionId??run?.sessionID
   if(!q||!run||!sessionID)continue
   const raw=options.rows?options.rows(sessionID):readSessionLedgerRows(sessionID,meta.startedAt-1000,now)
   const records=[...new Map(raw.filter(r=>r.source==='opencode'&&r.sessionID===sessionID&&r.startedAt>=meta.startedAt-1000).map(r=>[r.id,r])).values()]
   if(records.some(r=>!Number.isFinite(r.at)||!Number.isFinite(r.startedAt)||r.at>now||r.at<r.startedAt)||!Number.isFinite(Date.parse(run.updatedAt))||Date.parse(run.updatedAt)>now)throw Error('Invalid or future observation timestamp')
   const prior=known.get(meta.runID),first=records[0]
-  if(!first&&!['completed','failed','cancelled'].includes(run.state))continue
+  // A run the reconciler settled as `stale` or `missing` is over; the workflow record has no such
+  // verdict, so it is recorded as cancelled rather than left running. Without this its registration
+  // never settled, and every collection reopened the telemetry ledger for it for the life of the
+  // installation -- 79 of this machine's 258 registrations were in exactly that state.
+  const ended=TERMINAL_RUN.has(run.state)?(['completed','failed','cancelled'].includes(run.state)?run.state as 'completed'|'failed'|'cancelled':'cancelled'):undefined
+  if(!first&&!ended)continue
   const identity=prior?.route??(first?route(first):{accountID:'unknown',providerID:run.providerID??'unknown',modelID:run.modelID??'unknown',reasoning:run.reasoningEffort??'unknown',harness:run.runtime??'unknown',version:'unknown',serviceTier:'unknown'})
   const mismatch=prior?.observation?.routeConsistent===false||records.some(r=>{const actual=route(r);return Object.keys(identity).some(k=>actual[k as keyof WorkflowRoute]!==identity[k as keyof WorkflowRoute])})
   if(mismatch)diagnostics.push('Changed or mixed route in '+meta.runID+'; token attribution withheld')
   if(!prior)beginWorkflowRun(target,{...meta,workflowID:meta.questID,sessionID,route:identity})
-  const terminal=['completed','failed','cancelled'].includes(run.state)&&records.every(r=>r.state!=='running')
+  const terminal=!!ended&&records.every(r=>r.state!=='running')
   const completedAt=prior?.observation?.completedAt??Math.max(meta.startedAt,Date.parse(run.updatedAt),...records.map(r=>r.at))
   const tokens=Object.fromEntries(keys.map(k=>[k,!mismatch&&records.length&&records.every(r=>r.tokens[k]!==null&&Number.isSafeInteger(r.tokens[k])&&r.tokens[k]!>=0)?records.reduce((n,r)=>n+r.tokens[k]!,0):null])) as any
   // A previously settled record must not be reopened by a late running telemetry row.
   if(prior?.observation?.state!=='running'&&prior?.observation&&!terminal)continue
   if(prior?.observation&&now<=prior.observation.observedAt)continue
-  const previous=prior?.observation;if(previous&&previous.state===(terminal?run.state:'running')&&previous.completedAt===(terminal?completedAt:undefined)&&previous.routeConsistent===!mismatch&&keys.every(k=>previous.tokens[k]===tokens[k]))continue
-  observeWorkflowRun(target,{runID:meta.runID,observedAt:now,state:terminal?run.state as 'completed'|'failed'|'cancelled':'running',...(terminal?{completedAt}:{}),routeConsistent:!mismatch,tokens,reviewMilliseconds:prior?.observation?.reviewMilliseconds??null,integrationMilliseconds:prior?.observation?.integrationMilliseconds??null});observed++
+  const previous=prior?.observation;if(previous&&previous.state===(terminal?ended:'running')&&previous.completedAt===(terminal?completedAt:undefined)&&previous.routeConsistent===!mismatch&&keys.every(k=>previous.tokens[k]===tokens[k]))continue
+  observeWorkflowRun(target,{runID:meta.runID,observedAt:now,state:terminal?ended!:'running',...(terminal?{completedAt}:{}),routeConsistent:!mismatch,tokens,reviewMilliseconds:prior?.observation?.reviewMilliseconds??null,integrationMilliseconds:prior?.observation?.integrationMilliseconds??null});observed++
+  if(terminal)settled.add(meta.runID)
  }catch(error){diagnostics.push(meta.runID+': '+(error instanceof Error?error.message:String(error)))}}
- return {observed,diagnostics}
+ // The outcomes file is the record; the tracking file is the worklist. Dropping a finished run keeps
+ // the worklist the length of the work actually outstanding instead of the length of this
+ // installation's history.
+ if(settled.size)change(store,state=>{state.runs=state.runs.filter(r=>!settled.has(r.runID))})
+ return {observed,diagnostics,settled:settled.size}
 }

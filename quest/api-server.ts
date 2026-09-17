@@ -1,7 +1,8 @@
 import { createServer } from 'node:http'
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
-import { mkdirSync, writeFileSync, unlinkSync } from 'node:fs'
+import { mkdirSync, readFileSync, watch, writeFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
+import { readRegistry, receiptName } from './api-registry.mjs'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
@@ -40,15 +41,49 @@ export async function serveQuestAPI(store: QuestStore, service: ReturnType<typeo
   } catch (error) { remove(); throw error }
 }
 
+/**
+ * Which plugin build is answering.
+ *
+ * The running host was nine commits behind `origin/agents` while Jon read a report form that had
+ * already been replaced, and nothing on any screen said so. `/health` carries it now, so a client can
+ * name the generation and commit that served its answer.
+ */
+const identity = (() => {
+  const generation = process.env.OPENCODE_PLUGIN_GENERATION ?? null
+  let commit: string | null = null
+  try { commit = JSON.parse(readFileSync(join(import.meta.dirname, '..', '.deployment-source.json'), 'utf8')).commit ?? null } catch {}
+  return { generation, commit }
+})()
+
 async function openQuestServer(store: QuestStore, registrations: Set<Registration>) {
-  const token = randomBytes(32).toString('hex'), instance = randomUUID()
+  const token = randomBytes(32).toString('hex'), instance = randomUUID(), startedAt = new Date().toISOString()
   const registry = process.env.QUEST_API_REGISTRY ?? join(store.runtime, 'quest-api')
-  const record = join(registry, instance + '.json')
+  const record = join(registry, receiptName(process.pid, store.runtime))
   const giver = () => {
     const current = readUserGiver(store.runtime)
     const registration = current?.state === 'bound' && [...registrations].find(row => row.owner === current.directory)
     return registration ? { sessionID: current.sessionID, service: registration.service } : undefined
   }
+  /**
+   * Readiness held in memory, so a probe costs nothing.
+   *
+   * `/health` used to call `giver()`, which reads the binding file and matches it against the
+   * locations connected here -- work on the same JS thread that the Quest sweep was saturating, which
+   * is why a probe of an endpoint that reads one small file answered in 13 to 40 seconds and
+   * discovery reported UNAVAILABLE for a Quest Giver that was serving. The binding changes rarely and
+   * says so on disk, so it is watched rather than read. If the watch cannot be installed the request
+   * falls back to reading it, because a wrong `ready` is worse than a slow one.
+   */
+  let bound: string | undefined
+  const refreshBinding = () => { try { const row = readUserGiver(store.runtime); bound = row?.state === 'bound' ? row.directory : undefined } catch { bound = undefined } }
+  refreshBinding()
+  let watched = false
+  try {
+    mkdirSync(store.runtime, { recursive: true })
+    const watcher = watch(store.runtime, { recursive: false }, (_event, file) => { if (String(file ?? '') === 'user-giver.json') refreshBinding() })
+    watcher.unref(); watcher.on('error', () => { watched = false }); watched = true
+  } catch {}
+  const ready = () => { if (!watched) refreshBinding(); return !!bound && [...registrations].some(row => row.owner === bound) }
   const call = (method: string, input: unknown, sessionID: string | undefined, requestID: string, service = giver()?.service, external = false) => {
     if (!sessionID || !service) throw Error('The Quest Giver service is not connected yet.')
     return service.call(method, input, { sessionID, id: requestID, external, native: !external })
@@ -61,7 +96,7 @@ async function openQuestServer(store: QuestStore, registrations: Set<Registratio
       json(403, { code: 'FORBIDDEN', message: 'Quest API credentials are required; browser-origin requests are not accepted.' }); return
     }
     try {
-      if (request.url === '/health' && request.method === 'GET') { json(200, { instance, ready: !!giver() }); return }
+      if (request.url === '/health' && request.method === 'GET') { json(200, { instance, ready: ready(), pid: process.pid, startedAt, ...identity }); return }
       if (request.url === '/contract' && request.method === 'GET') { json(200, questOperations); return }
       const sessionRoute = request.url?.match(/^\/mcp\/session\/([a-f0-9-]+)$/)?.[1]
       if (request.url === '/mcp' || sessionRoute) {
@@ -103,7 +138,9 @@ async function openQuestServer(store: QuestStore, registrations: Set<Registratio
   http.unref()
   const url = 'http://127.0.0.1:' + (http.address() as { port: number }).port
   mkdirSync(registry, { recursive: true })
-  writeFileSync(record, JSON.stringify({ version: 2, instance, url, token, pid: process.pid }), { mode: 0o600 })
+  // Writing is also a read of this directory, so the receipts of hosts that are gone go with it.
+  readRegistry(registry)
+  writeFileSync(record, JSON.stringify({ version: 2, instance, url, token, pid: process.pid, startedAt: Date.parse(startedAt), generation: identity.generation, commit: identity.commit }), { mode: 0o600 })
   return {
     url, token,
     dispose() { http.close(); try { unlinkSync(record) } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error } },
