@@ -9,7 +9,7 @@ const workflow = object({
 })
 const fields = {
   id: text,
-  query: object({ text: { type: 'string', description: 'All search words must occur in the title, description or step titles.' }, state: { type: 'string', description: 'Filter by saved state, such as Working or Needs attention.' }, projectID: text, view: { enum: ['summary', 'plan'], description: 'Plan includes descriptions and steps for backlog review in one call.' }, allProjects: { type: 'boolean' }, archived: { type: 'boolean' }, offset: { type: 'integer', minimum: 0 }, limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Number of Quests per page.' } }),
+  query: object({ text: { type: 'string', description: 'All search words must occur in the title, description or step titles.' }, state: { type: 'string', description: 'Filter by saved state, such as Working or Needs attention.' }, projectID: text, view: { enum: ['summary', 'plan', 'report'], description: 'Plan includes descriptions and steps for backlog review in one call. Report adds the finished four-group answer for the user: relay it, do not rewrite it.' }, allProjects: { type: 'boolean' }, archived: { type: 'boolean' }, offset: { type: 'integer', minimum: 0 }, limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Number of Quests per page.' } }),
   inspect: object({
     section: { enum: ['description', 'reward', 'steps', 'runs', 'artifacts', 'changes', 'continuation', 'cleanup'] },
     offset: { type: 'integer', minimum: 0, description: 'Whole-entry offset from nextOffset.' },
@@ -43,12 +43,19 @@ const stepResult = record({ id: text, title: text, state: text, detail: text, no
 const summary = record({ id: text, title: text, revision: { type: 'integer' }, state: text, nextAction: text, running: { type: 'integer' }, updatedAt: text, project: record({ id: text, root: text }), progress: record({ done: { type: 'integer' }, total: { type: 'integer' } }) })
 const detail = record({ ...summary.properties, description: text, reward: text, workflow, steps: { type: 'array', items: stepResult }, artifacts: { type: 'array', items: record({ name: text, path: text, uri: text }) }, continuation: { type: 'array', items: record({ id: text, state: text, reason: text, stepIDs: strings }) }, waited: record({ changed: { type: 'boolean' }, milliseconds: { type: 'number' }, steering: text }) })
 const page = record({ id: text, section: text, data: {}, offset: { type: 'integer' }, totalItems: { type: 'integer' }, nextOffset: { type: ['integer', 'null'] } })
+const counts = record({ you: { type: 'integer' }, working: { type: 'integer' }, queued: { type: 'integer' }, done: { type: 'integer' }, open: { type: 'integer' }, total: { type: 'integer' } })
+/** The finished report. Every bullet is name + one sentence + the ask; no ids, ever. */
+const report = record({
+  serving: { type: 'string', description: 'The generation serving this answer, when the service knows its own.' },
+  scope: text, counts,
+  sections: { type: 'array', items: record({ group: { enum: ['you', 'working', 'queued', 'done'] }, heading: text, bullets: { type: 'array', items: record({ name: text, sentence: text, ask: text }) } }) },
+})
 const admission = record({ quest: text, state: text, requestID: text, runID: text, sessionID: { type: ['string', 'null'] }, continuation: record({ id: text, state: text }) })
 const operation = (description, input, positional = [], output = detail, readOnly = false) => ({ description, input, output, positional, annotations: { readOnlyHint: readOnly, destructiveHint: false, openWorldHint: false } })
 
 /** Public contract. CLI help, argument parsing and MCP discovery all consume these operations. */
 export const questOperations = {
-  list: operation('Find Quests by text, state or project. Use view=plan for descriptions and steps in one backlog read; summary omits evidence bodies.', fields.query, [], record({ items: { type: 'array', items: detail }, total: { type: 'integer' }, nextOffset: { type: ['integer', 'null'] }, diagnostics: strings }), true),
+  list: operation('Find Quests by text, state or project. Use view=plan for descriptions and steps in one backlog read, and view=report for the finished four-group answer to relay when the user asks what Quests there are. counts and scope describe every matched record, not just this page; summary omits evidence bodies.', fields.query, [], record({ items: { type: 'array', items: detail }, counts, scope: text, report, total: { type: 'integer' }, nextOffset: { type: ['integer', 'null'] }, diagnostics: strings }), true),
   get: operation('Read a Quest, its steps, readiness and latest outcomes. Worker completion is delivered automatically; do not poll.', object({ id: fields.id, inspect: fields.inspect }, ['id']), ['id']),
   status: operation('Read a compact saved status and step states immediately. Includes revision; no waiting or evidence bodies.', object({ id: text }, ['id']), ['id'], detail, true),
   plan: operation('Read the description, workflow, dependencies and step readiness without historical outcomes or long result notes.', object({ id: text }, ['id']), ['id'], detail, true),

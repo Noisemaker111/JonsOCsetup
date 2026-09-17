@@ -10,9 +10,9 @@ import { ownedRuns } from "../activity"
 import {workspaceSettings,setWorkspaceMode} from "../workspace-settings"
 import { Plugin } from "../../tui-legacy"
 import { For, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
-import { filterQuests, QUEST_FILTERS, type QuestFilter } from "../tui-model"
-import { questReachability, runReachability } from "../reachability"
-import { boardProject, projectQuests, resolveBoardProject } from "../board-project"
+import { filterTruths, questTruths, QUEST_FILTERS, type QuestFilter } from "../tui-model"
+import { questCounts, questTruth, runReachability } from "../reachability"
+import { allProjectsByDefault, boardProject, projectQuests, resolveBoardProject, scopeLabel } from "../board-project"
 import { activeSessionID } from "../../scripts/runtime-contract.mjs"
 import { createGiver, hasQuestReturn, returnToQuest } from "../tui-workflow"
 import { giverHomeEntry } from "../tui-navigation"
@@ -152,13 +152,17 @@ function useQuests(context: any) {
   const root = projectRoot(context)
   const [all, setAll] = createSignal<Quest[]>([])
   const [error,setError]=createSignal<string>()
+  const [scope,setScope]=createSignal(scopeLabel(allProjectsByDefault(userGiverID())))
   let project = boardProject(context?.location?.directory ?? context?.state?.path?.directory)
   let request=0
-  const refresh = () => { try { setAll(projectQuests(quests(root), project.id,Boolean(userGiverID()))) } catch {} }
+  // The same scope rule the board and the CLI apply: the one giver reads the whole ledger, any
+  // other session reads its own project. The words are shared so three surfaces cannot imply
+  // three different backlogs.
+  const refresh = () => { try { const allProjects=allProjectsByDefault(userGiverID()); setScope(scopeLabel(allProjects,project.root)); setAll(projectQuests(quests(root), project.id,allProjects)) } catch {} }
   createEffect(()=>{const sessionID=activeSessionID(context),version=++request;project=boardProject(undefined);setAll([]);setError("Checking current project");void resolveBoardProject(context,sessionID).then(p=>{if(version===request){project=p;setError(p.error);refresh()}})})
   onMount(() => { const stop = watchQuests(root, refresh); onCleanup(stop) })
   onCleanup(()=>{request++})
-  return Object.assign(all,{error})
+  return Object.assign(all,{error,scope})
 }
 
 /**
@@ -196,15 +200,20 @@ export function QuestStatus(props: { context: any }) {
   const reach=(row:{quest:Quest;session:QuestSession})=>runReachability(row.session,observation)
   const {width,ref:measureBox}=useBoxWidth(props.context)
   const lines=()=>runs().sort((a,b)=>Number(reach(b).state==='blocked')-Number(reach(a).state==='blocked')||b.session.updatedAt.localeCompare(a.session.updatedAt)).slice(0,2)
-  const counts = async () => {
-    const picked=await props.context.ui.dialog.select({title:all.error()??"Quest counts · all projects",options:QUEST_FILTERS.filter(f=>f.id!=="all").map(f=>({value:f.id,title:`${filterQuests(all(),f.id,observation).length} ${f.label}`}))})
+  // One derivation per frame feeds the "N open" line and the count dialog, so the number Jk clicks
+  // and the list he lands on are the same set. They used to be two independent reads.
+  const truths=()=>questTruths(all(),observation)
+  const counts=()=>questCounts(truths())
+  const openCounts = async () => {
+    const rows=truths()
+    const picked=await props.context.ui.dialog.select({title:all.error()??("Quest counts · "+all.scope()),options:QUEST_FILTERS.filter(f=>f.id!=="all").map(f=>({value:f.id,title:`${filterTruths(rows,f.id).length} ${f.label}`}))})
     if(picked)openBoard(props.context,undefined,picked)
   }
   return <box ref={measureBox} flexDirection="column" width="100%" flexShrink={0} minWidth={0}>
     <box flexDirection="row" flexShrink={1} minWidth={0} gap={1}>
       <Show when={hasQuestReturn(props.context)}><text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>returnToQuest(props.context))}>↩ Quest</text></Show>
-      <text fg={C.yellow} wrapMode="none" truncate flexShrink={1} onMouseUp={(event:any)=>activate(event,()=>openBoard(props.context))}>Quests · {filterQuests(all(),"open").length} open</text>
-      <text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>void counts())}>▾</text>
+      <text fg={C.yellow} wrapMode="none" truncate flexShrink={1} onMouseUp={(event:any)=>activate(event,()=>openBoard(props.context))}>Quests · {counts().open} open · {counts().you} need you</text>
+      <text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>void openCounts())}>▾</text>
     </box>
     <For each={lines()}>{row=>{
       // fitTitle cuts on a word boundary. Leaving it to the renderer took the shortening out of the
@@ -259,7 +268,7 @@ export function Sidebar(props: { context: any }) {
   const {width,ref:measureBox}=useBoxWidth(props.context,40)
   return <box ref={measureBox} flexDirection="column" flexShrink={0}>
     <text fg={C.yellow} onMouseUp={(event:any)=>activate(event,()=>void createGiver(props.context).catch(error=>props.context.ui.dialog.alert({title:"Quest Giver unavailable",message:String(error)})))}>◆ Your Quest Giver · /giver</text>
-    <text fg={C.yellow} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context))}>Quests · all projects · open board</text>
+    <text fg={C.yellow} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context))}>Quests · {all.scope()} · open board</text>
     <Show when={all.error()}>{message=><text fg={C.orange} wrapMode="word">{message()}</text>}</Show>
     <text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>void createGiver(props.context).catch(error=>props.context.ui.dialog.alert({title:"Start Quest",message:String(error)})))}>+ Start Quest</text>
     <Show when={active().length > 0} fallback={<text fg={C.dim} wrapMode="word">None yet. Tell the Quest Giver what you want done.</text>}>
@@ -269,7 +278,7 @@ export function Sidebar(props: { context: any }) {
         // the renderer shorten the whole line instead gutted the title and kept the count: a column of
         // rows reading "Redesign the Qu...ar and footer 4/11".
         const title = () => fitTitle(q.title, Math.max(8, width() - `${p.done}/${p.total}`.length - 3))
-        return <text fg={C.text} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context, q.id))}><span fg={toneColor(questReachability(q,observation).tone)}>{progressGlyph(p)}</span> {title()} <span fg={C.dim}>{p.done}/{p.total}</span></text>
+        return <text fg={C.text} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context, q.id))}><span fg={toneColor(questTruth(q,observation).reach.tone)}>{progressGlyph(p)}</span> {title()} <span fg={C.dim}>{p.done}/{p.total}</span></text>
       }}</For>
     </Show>
   </box>

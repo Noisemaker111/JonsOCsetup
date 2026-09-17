@@ -20,7 +20,7 @@ import { questDispatch } from "./dispatch"
 import { QuestWorkspaces } from "./workspaces"
 import { questChanges } from "./change-view"
 import type { QuestHost } from "./runtime"
-import {toolSummary,toolDetail,toolSection,toolStatus,toolPlan} from './tool-projection'
+import {toolSummary,toolDetail,toolSection,toolStatus,toolPlan,questListResult} from './tool-projection'
 import {activeRuns,awaitQuestChange,observedState,runSummary,waitSteering,DEFAULT_WAIT_SECONDS,MAX_WAIT_SECONDS} from './wait'
 import {giverInstruction} from './giver-instruction'
 import {readQuestActivity,withQuestActivity} from './activity'
@@ -140,7 +140,6 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
       ...(blocking?outcome.changed?{}:{steering:waitSteering(after,runID,outcome.milliseconds)}:{settled:true,steering:'No active run to wait for; this is the settled saved state.'})}
     }
    }
-   if(input.action==='list')result={diagnostics:result.diagnostics.slice(0,10),items:result.items.map((item:any)=>listView==='plan'?toolPlan(store.read(item.id)!,continuation.status(item.id)):toolSummary(store.read(item.id)!)),total:result.total,nextOffset:result.nextOffset}
    if(['get','update'].includes(input.action)){
     const q=store.read(input.id)!
     if(input.inspect){
@@ -156,9 +155,9 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
     else result=toolDetail(q,continuation.status(q.id))
    }
    if(input.action==='list'){
-    const records=result.items.map((item:any)=>store.read(item.id)!)
-    const activity=await readQuestActivity(host,records)
-    result={...result,items:result.items.map((item:any,index:number)=>withQuestActivity(records[index],item,activity))}
+    // One host activity read for the whole matched set, then one assembled answer: items, counts by
+    // group and, for view=report, Jon's four groups. The projection lives in tool-projection.ts.
+    result=questListResult(result,await readQuestActivity(host,result.records),(item:any)=>listView==='plan'?toolPlan(store.read(item.id)!,continuation.status(item.id)):toolSummary(store.read(item.id)!),listView)
    }else if(!input.inspect&&result?.id&&result.state){
     const q=store.read(result.id)
     if(q)result=withQuestActivity(q,result,await readQuestActivity(host,[q]))
