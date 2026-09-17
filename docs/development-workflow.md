@@ -386,3 +386,28 @@ releases without lifetime records and crashed/unacknowledged launches remain int
 for explicit ownership review. Stable releases are never retired by this mechanism.
 
 Quest coordination locks publish an immutable owner file with an exclusive hard link. A process failure before publication leaves only an unused staging file; a failure afterward leaves a complete owner that can be checked for liveness. Heartbeats update the file timestamp without truncating its ownership data. Existing directory locks are still recognized. An empty or unreadable legacy lock stays blocked because it does not identify a process whose death can be established; do not erase it as a recovery shortcut.
+
+## Keys the PTY drive cannot reproduce
+
+`runtime:drive` renders the host into an embedded terminal that answers the kitty keyboard query, so
+its `key` action always arrives modifier-tagged and a check built on it cannot tell a working
+composer key binding from a missing one. `raw {hex}` writes the bytes a protocol-less terminal sends,
+which covers the decoding, but a keymap layer can still be registered against the wrong prompt or be
+outranked by a layer that mounts later, and neither is visible from bytes alone. Both of those
+shipped as "verified" fixes that did nothing for Jon.
+
+Three tracked tools press the real keys instead:
+
+- `scripts/record-terminal-keys.ts` records what a terminal actually sends and what the host's own
+  decoder makes of it. Run it in a real window; it also reports whether the terminal answers the
+  kitty keyboard query.
+- `scripts/run-host-window.ps1` runs a prepared candidate host in its own new Windows Terminal
+  window, with the host's state redirected into the output directory, and prints the window handle.
+- `scripts/press-keys.ps1` takes that handle and a JSON-lines scenario, injects each press at the
+  Win32 input layer so the terminal's own encoder produces the bytes, and photographs the window
+  after each step.
+
+Address the window by **handle**, never by title: once the host starts, its window is titled
+"OpenCode", which is also what Jon's own live window is called. `press-keys.ps1` refuses to send
+unless the foreground window is the handle it was given, which is what keeps these keystrokes out of
+his session.
