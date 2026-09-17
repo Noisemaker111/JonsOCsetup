@@ -114,25 +114,46 @@ The giver-location gate is explicit in `service.ts`: only the registered giver d
 - `quest/host-adapter.ts` (`installQuestHost`) was imported only by `quest/quest-tui.tsx`, and `quest/host.ts` (the only consumer of `renderFrame`) had no importer at all. The chain was dead, not an alternate authority. **Removed.**
 - `quest/tui-model.ts` `renderFrame`/`detail`/`formatQuestLine`, `questIndicator` and `questLaneCounts` served only that dead chain, and the two live TUI files imported `questIndicator` without using it. **Removed**; `filterQuests` and the filter vocabulary remain, and `filterQuests` now asks the shared reachability read what "active" means. The chain's one remaining helper, `artifactChainSummary` in `quest/artifacts.ts`, had no caller left once `detail()` went and was removed with it.
 
-## The composed read every surface draws (this branch)
+## The one derivation every surface draws
 
-`quest/reachability.ts` is the one authority. It composes the layers above and keeps them named:
+`quest/reachability.ts` is the one authority, and `questTruth(quest, observation)` is the single entry point. It composes the layers above and keeps them named:
 
-- `runReachability(run, observation)` — one run: the observed state normalized to one vocabulary (`running`, `blocked`, `completed`, `failed`, `cancelled`, `missing`, `stale`, `interrupted`, `unreachable`, `unknown`, `external`, `queued`, `launching`), with `confirmed` (host-confirmed live execution), `terminal` (the saved row is over), `over`, the owner's reason, `pendingPermissions` and the recorded `decisions`. A settled run reports the outcome we recorded (`observedRun`), never a live inspection.
-- `questLifecycle(q)` — the saved workflow state as a lane label with no live claim (`ATTENTION`, `REVIEW`, `VERIFYING`, `RECORDED`, `PLANNED`, `ARCHIVED`).
-- `questReachability(q, observation)` — the newest saved owned attempt's run reachability, else the lifecycle. `tone` is the one colour input (`live`, `blocked`, `uncertain`, `failed`, `done`, `idle`), mapped to the palette once by `toneColor` in `quest-board.tsx`.
-- `reachLabel(q, observation)` (TUI) — the row/badge label from that same read.
+- `runReachability(run, observation)` -- one run: the observed state normalized to one vocabulary (`running`, `blocked`, `completed`, `failed`, `cancelled`, `missing`, `stale`, `interrupted`, `unreachable`, `unknown`, `external`, `queued`, `launching`), with `confirmed` (host-confirmed live execution), `terminal` (the saved row is over), `over`, the owner's reason, the `pending` requests with their action and resource, and the recorded `decisions`. A settled run reports the outcome we recorded, never a live inspection.
+- `questTruth(quest, observation)` -- **the state every surface shows.** `Working` means the owning host confirms an active execution for an attempt this Quest still owns. `executing` is written by prompt-admission bookkeeping when the prompt is sent, never by host confirmation, so a recorded-executing run nothing is running derives to `Waiting` -- or `Needs attention` when a step is already blocked -- carrying the reason. It also returns `recordedState`, `recordedExecuting`, the lane, the report group and every owned run's reachability.
+- `questReachability` / `questLifecycle` -- the row label and the saved lane, both taking the derived state so a lane cannot contradict it. The representative run is a host-confirmed one when there is one, then one with a pending request, then the most recently touched; taking the last array element meant a confirmed worker could be represented by a stale `planned` sibling.
+- `questGroup` / `questCounts` -- the four report groups and the one counting function. The CLI's `counts`, the composer footer's "N open", the board's filter counts and the giver's report all call it on the same records with the same observation.
+- `observationFromActivity` (`quest/activity.ts`) turns the tools' single `host.active` read into an ordinary observation, so the tool path and the TUI path reach the same conclusion from the same host instead of composing separately.
 
-Board rows, board detail badge, sidebar glyphs, footer lines, session banner and the filter dialog all call these functions, so one Quest cannot read RUNNING on one surface and UNKNOWN on another. `scripts/verify-quest-surface-trace.ts` pins the call sites and the removed files.
+Board rows, board detail badge, sidebar glyphs, footer lines, session banner, the filter dialog, `quests.list/get/status/plan`, the CLI and the giver's report all derive through these, so one Quest cannot read RUNNING on one surface and UNKNOWN on another, or Working in `quests.get` and Waiting in the footer. `test/quest-one-run-state-derivation.test.ts` builds a real temporary ledger with recorded-executing-but-unconfirmed, confirmed, blocked and archived records and asserts every projection agrees; it also pins that no TUI file keeps its own `q.state === "Working"` table to disagree with. `scripts/verify-quest-surface-trace.ts` pins the call sites and the removed files.
 
-## Concrete divergences found (same Quest, two answers)
+## The report is built by code
 
-These were the pre-change state at `6f66244`; 2, 3 and 4 are closed by the composed read above (row, badge and sidebar all draw `questReachability`, and `filterQuests("active")` means host-confirmed execution). 1 and 5 remain, deliberately: they are tool-vs-TUI projection and location-scoped permission discovery, not the board's reachability labels.
+`quest/quest-report.ts` projects the derived states into Jon's four groups: YOU, WORKING, QUEUED, DONE, in order, empty groups skipped, one bullet per Quest as name + one sentence + the ask. `list` returns it under `report` when the query asks for `view: "report"`, alongside `counts` and `scope` for every matched record and the serving generation when `devQueueGeneration()` knows it. The giver relays it; `agent/quest-giver.md` no longer carries the form, because a prompt cannot be relied on to reproduce it -- the running generation on 2026-09-17 predated the corrected form and Jon could not see the fix at all.
 
-1. **Within one `quests.get`/`quests.status` response**: `state` is rewritten by `withQuestActivity` (`Working → Waiting/Needs attention` when no host-confirmed execution) while `runs[].state` and the TUI show saved session states. `recordedState`/`recordedExecuting` exist only on the activity path.
-2. **Board vs tools**: the board's detail header prints `RUNNING` for `state === "Working"`; the same Quest's tool `state` prints `Waiting` when `activity.running === 0`.
-3. **Board vs sidebar**: the footer/board row labels come from host observation (`running`, `blocked`, …); the sidebar colours from persisted `Working`/`Needs attention`/ready states. A stalled `executing` run is green in the sidebar and `unknown` (or `unreachable`) in the footer.
-4. **Driver vs list**: board rows are ordered/sectioned by persisted step/session counts (`group`), while the footer count dialog filters by observation; a Quest can be "Active" in the dialog and sit in "Current Quest" with no live label.
-5. **Permission visibility**: a pending request is only discoverable through the permission domain of the location that raised it. The giver-location readers (`worker-observation.tsx`, `worker-permissions.ts`) and the worker-location discoverer (`worker-returns.tick(directory)`) disagree until the reviewer at the owning location records the decision; the run then reads `blocked` even though the giver surface showed nothing.
-6. **Archived vs reopened**: `archive` flag and `state === "Archived"` are checked separately by `start-request` (`quest.archive || state`), `worker-returns` (`state` only) and the sidebar (`state` only); a record whose flag and state disagree is handled differently per reader.
-7. **Terminal membership**: `TERMINAL_RUN` includes `missing`/`stale`, but `worker-returns` delivers only `completed/failed/cancelled`; `toolStatus` lists only `planned/executing/waiting/blocked` runs, so a `stale`/`missing` run disappears from `status.runs` while still appearing in `inspect.section:runs`.
+`quest/giver-wake.ts` decides what is worth a giver turn: a turned-in Quest, a superseded attempt, a route failure the runtime already re-dispatched and an outcome the ledger already reflects all settle with a recorded reason and no prompt; what does wake carries that Quest's report line. A permission notice is deduped on the request id, names the request, the action and the resource, and says the one control that resolves it. A review whose authority digest moved mid-flight is reviewed again rather than escalated, because that escalation is what queued the identical unactionable notice at 01:38 and again at 02:37 UTC on 2026-09-17.
+
+## Project scope and missing project roots
+
+`allProjectsByDefault` and `scopeLabel` (`quest/board-project.ts`) are the one rule and the one wording: the registered giver holds one conversation across projects, so its board, footer and CLI reads are the whole shared ledger; any other session reads its own project. `list` returns that same string as `scope`.
+
+Reading a saved record never depends on its project still existing. `get`, `status`, `plan` and `inspect` read the ledger and nothing else; `list` names the deleted roots in `diagnostics`; only `run` refuses, with `PROJECT_ROOT_MISSING` and the move that fixes it. On 2026-09-17, 92 of 110 records named roots that were gone and every read of them failed while `list` returned them.
+
+## Divergences that were closed
+
+These were the pre-change state at `6f66244` and are closed by the derivation above:
+
+1. **Within one `quests.get`/`quests.status` response**: `state` was rewritten by `withQuestActivity` while `runs[].state` and the TUI showed saved session states. Both now derive from `questTruth`; `recordedState`/`recordedExecuting` remain, as what the ledger saved.
+2. **Board vs tools**: the board's detail header printed `RUNNING` for `state === "Working"` while the tool printed `Waiting`. The board's own `status()`/`badge()` tables are removed.
+3. **Board vs sidebar**: the sidebar coloured from the persisted state and the footer from observation.
+4. **Driver vs list**: rows were sectioned by persisted counts while the count dialog filtered by observation.
+5. **Archived vs reopened** and **terminal membership** remain as recorded below; they are reducer and delivery concerns, not surface labels.
+
+One divergence remains deliberately: **permission visibility** is location-scoped. A pending request is discoverable only through the permission domain of the location that raised it, so the giver-location readers and the worker-location discoverer disagree until the reviewer at the owning location records the decision. Silence on one surface is not "no permission needed".
+
+## Superseded readers removed on this branch
+
+- `quest/quest-tui.tsx` (`questOverview`, `setupQuestTUI`) had no callers anywhere in the tree. **Removed.**
+- `quest/host-adapter.ts` (`installQuestHost`) was imported only by `quest/quest-tui.tsx`, and `quest/host.ts` had no importer at all. **Removed.**
+- `quest/tui-model.ts` `renderFrame`/`detail`/`formatQuestLine`, `questIndicator` and `questLaneCounts` served only that dead chain. **Removed**; `filterQuests` remains and now filters derived states.
+- `quest-board.tsx` `status()` and `badge()`, which mapped the saved ledger state to RUNNING/STOPPED/ACCEPTED on their own. **Removed**; the board draws `reachLabel`, which is `questTruth`.
+- `quest/activity.ts` `ownedRuns`, `observedRun` and the native-id helper moved to `quest/session-lineage.ts`, so the derivation does not depend on the host-read module.

@@ -1,4 +1,4 @@
-import { appendFileSync,existsSync,mkdirSync,readFileSync,renameSync,writeFileSync } from "node:fs"
+import { appendFileSync,closeSync,existsSync,fstatSync,mkdirSync,openSync,readFileSync,readSync,renameSync,writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 import { createHash } from "node:crypto"
 import { acquireLock } from "../quest/locking"
@@ -7,19 +7,48 @@ import { TELEMETRY_FILE } from "./telemetry-store"
 import { predictAllowance,routeKey,canonicalRouteKey,type Calibration,type Observation } from "./calibration"
 import type { RequestRecord } from "./telemetry"
 export const accountRegime=(account:AccountUsage)=>createHash("sha256").update(JSON.stringify({provider:account.provider,name:account.plan.name,tier:account.plan.rateLimitTier,multiplier:account.plan.multiplier})).digest("hex").slice(0,16)
+/**
+ * The observation log only grows, and every reader wants its recent end. Reading the tail keeps a
+ * seven-day pacing question off a file that holds months: the bytes scanned follow the window asked
+ * for, not the history kept. Without `from` the whole file is still read, for the offline reports
+ * that genuinely want all of it.
+ */
+function readTail(file:string,from:number):{text:string;complete:boolean} {
+ const fd=openSync(file,"r")
+ try {
+  const size=fstatSync(fd).size
+  let span=Math.min(size,1<<20)
+  for(;;){
+   const buffer=Buffer.alloc(span)
+   readSync(fd,buffer,0,span,size-span)
+   const text=buffer.toString("utf8")
+   // A partial first line is dropped unless the whole file fits in the span.
+   const body=span===size?text:text.slice(text.indexOf("\n")+1)
+   const first=body.slice(0,body.indexOf("\n")+1||undefined)
+   let at=NaN
+   try{at=JSON.parse(first).at}catch{}
+   if(span===size||(Number.isFinite(at)&&at<=from))return {text:body,complete:span===size}
+   if(span>=size)return {text:body,complete:true}
+   span=Math.min(size,span*4)
+  }
+ } finally { closeSync(fd) }
+}
 export function recordQuotaObservations(snapshot:AccountSnapshot,file=TELEMETRY_FILE+".observations") {
  const lock=acquireLock(dirname(file),"quota-observations")
- try { const prior=readQuotaObservations(file),ids=new Set(prior.observations.map(o=>o.id));mkdirSync(dirname(file),{recursive:true})
+ // Identity embeds the observation time, so only recent rows can collide with a new one.
+ try { const prior=readQuotaObservations(file,{from:Date.now()-86400000}),ids=new Set(prior.observations.map(o=>o.id));mkdirSync(dirname(file),{recursive:true})
   for(const a of snapshot.accounts)for(const w of a.windows){if(w.usedPercent===null||!Number.isFinite(Date.parse(w.observedAt)))continue
    const row:Observation={id:createHash("sha256").update([a.id,w.id,w.observedAt,w.usedPercent,w.resetAt,accountRegime(a)].join(":")).digest("hex"),accountID:a.id,windowID:w.id,at:Date.parse(w.observedAt),usedPoints:w.usedPercent,resetAt:w.resetAt?Date.parse(w.resetAt):null,regime:accountRegime(a),precisionPoints:w.precisionPoints??null,reportingDelayMilliseconds:w.reportingDelayMilliseconds??null}
    if(!ids.has(row.id)){appendFileSync(file,JSON.stringify(row)+"\n",{mode:0o600});ids.add(row.id)}
   }
  }finally{lock.release()}
 }
-export function readQuotaObservations(file=TELEMETRY_FILE+".observations") {
+export function readQuotaObservations(file=TELEMETRY_FILE+".observations",options:{from?:number}={}) {
  const observations:Observation[]=[],diagnostics:string[]=[]
- if(existsSync(file))for(const [i,line]of readFileSync(file,"utf8").split("\n").entries()){if(!line.trim())continue;try{const o=JSON.parse(line);if(!o.id||!Number.isFinite(o.usedPoints))throw new Error();observations.push(o)}catch{diagnostics.push("Invalid quota observation at line "+(i+1))}}
- return {observations,diagnostics}
+ if(!existsSync(file))return {observations,diagnostics,complete:true}
+ const {text,complete}=options.from===undefined?{text:readFileSync(file,"utf8"),complete:true}:readTail(file,options.from)
+ for(const [i,line] of text.split("\n").entries()){if(!line.trim())continue;try{const o=JSON.parse(line);if(!o.id||!Number.isFinite(o.usedPoints))throw new Error();if(options.from!==undefined&&o.at<options.from)continue;observations.push(o)}catch{diagnostics.push("Invalid quota observation at "+(complete?"line ":"tail line ")+(i+1))}}
+ return {observations,diagnostics,complete}
 }
 export function saveCalibration(calibration:Calibration,file=TELEMETRY_FILE+".calibrations") {
  const lock=acquireLock(dirname(file),"calibrations")

@@ -1,47 +1,51 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { homedir, uptime } from 'node:os'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { request as httpRequest } from 'node:http'
 import { questOperations } from './operations.mjs'
+import { readRegistry } from './api-registry.mjs'
 
 export class QuestAPIError extends Error {
   constructor(code, message) { super(message); this.name = 'QuestAPIError'; this.code = code }
 }
 
-/** Discover only a live service. Clients never import implementation or open the ledger. */
-export async function discoverQuestAPI({ registry = process.env.QUEST_API_REGISTRY ?? join(process.env.OPENCODE_QUEST_ROOT ?? join(homedir(), '.config/opencode/.channels/state/dev/quests'), '.opencode/.quest-runtime/quest-api'), signal = AbortSignal.timeout(15000) } = {}) {
-  let files
-  try { files = readdirSync(registry).filter(name => name.endsWith('.json')) }
-  catch { throw new QuestAPIError('UNAVAILABLE', 'Open the Quest Giver in oc before using the Quest API.') }
-  const unavailable = []
-  let outdated = 0
-  // A receipt is written when a backend starts, so one written before this boot describes a
-  // service that no longer exists -- whatever its recorded PID now belongs to. Windows reassigns
-  // those PIDs freely: of 260 receipts on the machine this was found on, 212 predated the boot,
-  // and probing them spent the whole discovery budget on EPERM and hung sockets belonging to
-  // unrelated processes, so a Quest Giver that was serving normally reported UNAVAILABLE.
-  const bootedAt = Date.now() - uptime() * 1000
-  const candidates = await Promise.all(files.map(async name => {
+export const defaultQuestRegistry = () => process.env.QUEST_API_REGISTRY ?? join(process.env.OPENCODE_QUEST_ROOT ?? join(homedir(), '.config/opencode/.channels/state/dev/quests'), '.opencode/.quest-runtime/quest-api')
+
+/**
+ * Discover only a live service. Clients never import implementation or open the ledger.
+ *
+ * Every candidate used to share one 15-second AbortSignal, so the receipts ahead of the real server
+ * in directory order spent the whole budget on hung sockets belonging to unrelated processes and the
+ * one server that would have answered was never asked. Each candidate now gets its own deadline, they
+ * are probed together, and the newest ready one wins -- a restarted host is the one a caller means.
+ * When none answers the error says how many receipts were tried and what each of them said, because
+ * "No ready Quest Giver responded ... Discovery: EPERM; ECONNREFUSED; discovery timed out" named
+ * neither how many were involved nor which of them was the Quest Giver.
+ */
+export async function discoverQuestAPI({ registry = defaultQuestRegistry(), signal, candidateMilliseconds = 3000 } = {}) {
+  const { endpoints, removed } = readRegistry(registry)
+  const swept = removed ? ' Removed ' + removed + ' receipt' + (removed === 1 ? '' : 's') + ' whose host is gone.' : ''
+  if (!endpoints.length) throw new QuestAPIError('UNAVAILABLE', 'No Quest API receipt names a running host. Open the Quest Giver in oc before using the Quest API.' + swept)
+  const answers = endpoints.map(async endpoint => {
+    const deadline = AbortSignal.timeout(candidateMilliseconds)
+    const bound = signal ? AbortSignal.any([signal, deadline]) : deadline
+    const started = Date.now()
     try {
-      const path = join(registry, name)
-      if (statSync(path).mtimeMs < bootedAt) return
-      const endpoint = JSON.parse(readFileSync(path, 'utf8'))
-      if (endpoint.version !== 2) { outdated++; return }
-      if (!Number.isSafeInteger(endpoint.pid) || endpoint.pid <= 0) return
-      try { process.kill(endpoint.pid, 0) } catch (error) { if (error.code === 'ESRCH') return; throw error }
-      if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(endpoint.url) || typeof endpoint.token !== 'string') return
-      const response = await fetch(endpoint.url + '/health', { headers: { authorization: 'Bearer ' + endpoint.token }, signal })
-      const health = response.ok && await response.json()
-      if (health?.ready && health.instance === endpoint.instance) return endpoint
+      const response = await fetch(endpoint.url + '/health', { headers: { authorization: 'Bearer ' + endpoint.token }, signal: bound })
+      if (!response.ok) return { endpoint, answer: 'HTTP ' + response.status }
+      const health = await response.json()
+      if (health?.instance !== endpoint.instance) return { endpoint, answer: 'a different service now holds that port' }
+      if (!health.ready) return { endpoint, answer: 'serving, but no Quest Giver is bound to it yet' }
+      return { endpoint: { ...endpoint, health, healthMilliseconds: Date.now() - started }, answer: 'ready', ready: true }
     } catch (error) {
-      // Keep failures visible without disclosing credentials or changing a saved admission.
-      unavailable.push(error.name === 'TimeoutError' ? 'discovery timed out' : error.cause?.code ?? error.code ?? error.message)
+      return { endpoint, answer: error.name === 'TimeoutError' || error.cause?.name === 'TimeoutError' ? 'no answer within ' + candidateMilliseconds + ' ms' : error.cause?.code ?? error.code ?? error.message }
     }
-  }))
-  const live = candidates.filter(Boolean)
-  if (live.length !== 1) throw new QuestAPIError('UNAVAILABLE', live.length ? 'Several Quest Givers are serving this registry; select the intended registry explicitly.' : 'No ready Quest Giver responded. Open oc and try again.' + (outdated ? ' Older discovery records exist; reopen oc with the current agents code.' : '') + (unavailable.length ? ' Discovery: ' + [...new Set(unavailable)].join('; ') : ''))
-  return live[0]
+  })
+  // Newest first, because that is the order readRegistry returns and the newest receipt is the host a
+  // caller means. Every probe is already in flight, so this waits for the newest, not for all of them.
+  for (const pending of answers) { const result = await pending; if (result.ready) return result.endpoint }
+  const said = (await Promise.all(answers)).map(r => 'pid ' + r.endpoint.pid + ' on ' + r.endpoint.url + ' — ' + r.answer).join('; ')
+  throw new QuestAPIError('UNAVAILABLE', 'No ready Quest Giver answered. Tried ' + endpoints.length + ' receipt' + (endpoints.length === 1 ? '' : 's') + ': ' + said + '.' + swept + ' Open oc and try again.')
 }
 
 /**
