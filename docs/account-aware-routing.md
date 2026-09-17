@@ -34,7 +34,7 @@ The installed verification gate also uses that planner rather than list order.
 ## Task and model measurements
 
 Every observed request retains its token components, saved price schedule, timing,
-account and exact model settings. `usage_status` reports all observed models over
+account and exact model settings. `usage_status({view:"models"})` reports observed models over
 its selected time range (28 days by default), including models whose account
 identity is unavailable. No model names are enumerated in the measurement path.
 
