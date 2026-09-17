@@ -52,13 +52,20 @@ function GenerationFooter(props: { context: any }) {
     // What is running is always sayable, even when nothing about ahead can be known.
     render()
     let repositoryDir: string
-    try {
-      repositoryDir = sourceRepository()
-    } catch {
-      // This machine's layout differs from the maintained one. The plain default path is all we
-      // can name without the canonicalizing spawn; if it is not a checkout there is nothing more
-      // to say, and the line above stays at "Running: <subject>" with no ahead claim.
-      repositoryDir = defaultSourceRepository()
+    // Same override family as OPENCODE_QUEST_ROOT/OPENCODE_DB/OPENCODE_TELEMETRY_FILE: an isolated
+    // verification drive points this at a throwaway checkout instead of the real one, without
+    // touching homedir() or any other module that resolves the real registry from it.
+    if (process.env.OPENCODE_SOURCE_REPOSITORY) {
+      repositoryDir = process.env.OPENCODE_SOURCE_REPOSITORY
+    } else {
+      try {
+        repositoryDir = sourceRepository()
+      } catch {
+        // This machine's layout differs from the maintained one. The plain default path is all we
+        // can name without the canonicalizing spawn; if it is not a checkout there is nothing more
+        // to say, and the line above stays at "Running: <subject>" with no ahead claim.
+        repositoryDir = defaultSourceRepository()
+      }
     }
     if (!existsSync(join(repositoryDir, ".git"))) return
     const refresh = () => {
