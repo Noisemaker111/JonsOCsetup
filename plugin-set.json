@@ -14,7 +14,8 @@
     "quest/tui-active/quests.tsx",
     "composer/tui-active/composer.tsx",
     "context-graph/tui-active/context-graph.tsx",
-    "duration-graph/tui-active/duration-graph.tsx"
+    "duration-graph/tui-active/duration-graph.tsx",
+    "generation-indicator/tui-active/generation-indicator.tsx"
   ],
   "entrypointOwners": {
     "composer/tui-active/composer.tsx": "composer",
@@ -22,6 +23,8 @@
     "tui-bootstrap/context-graph/tui.tsx": "context-graph",
     "duration-graph/tui-active/duration-graph.tsx": "duration-graph",
     "tui-bootstrap/duration-graph/tui.tsx": "duration-graph",
+    "generation-indicator/tui-active/generation-indicator.tsx": "generation-indicator",
+    "tui-bootstrap/generation-indicator/tui.tsx": "generation-indicator",
     "tui-bootstrap/composer/tui.tsx": "composer",
     "project-router/server.ts": "project-router",
     "plugins-active/models.ts": "models",
@@ -98,6 +101,7 @@
     "project-router/plugin.json",
     "composer/plugin.json",
     "context-graph/plugin.json",
-    "duration-graph/plugin.json"
+    "duration-graph/plugin.json",
+    "generation-indicator/plugin.json"
   ]
 }

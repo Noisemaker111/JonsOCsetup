@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "name": "opencode-generation-indicator",
+  "description": "Always-visible footer naming the running code and how far origin/agents has moved past it",
+  "tui": "generation-indicator/tui-active/generation-indicator.tsx"
+}

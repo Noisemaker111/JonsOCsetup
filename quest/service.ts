@@ -45,7 +45,7 @@ async function originatingUserTurn(store:QuestStore,host:QuestHost,sessionID:str
 }
 export function createQuestService(store:QuestStore,host:QuestHost,options:{policyFile?:string;settingsFile?:string;startRun?:StartRun;directory?:string;onDispose?:(dispose:()=>void)=>void}={}) {
  const {start,returns}=questDispatch(store,host,options)
- const continuation=new QuestContinuation(store,start,{verifyContext:async(context)=>{const result=await host.get({sessionID:context.sessionID});verifyGiverBinding(store,context,result?.data??result)}})
+ const continuation=new QuestContinuation(store,start,{verifyContext:async(context)=>{const result:any=await boundedInspection((signal:AbortSignal)=>host.get({sessionID:context.sessionID},{signal}));verifyGiverBinding(store,context,result?.data??result)}})
  const poll=(name:string,run:()=>Promise<unknown>)=>{
   let running=false
   return async()=>{

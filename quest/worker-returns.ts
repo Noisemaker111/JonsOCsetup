@@ -4,6 +4,7 @@ import {existsSync,mkdirSync,readFileSync,readdirSync,statSync,writeFileSync,ren
 import {join} from 'node:path'
 import {acquireLock} from './locking'
 import {hostPermissions} from './host-observation'
+import {boundedInspection} from './worker-observation.mjs'
 import {physicalDirectory} from './project'
 import {permissionKey,workerSessionID} from './worker-permissions'
 import {PermissionReviewer,type PermissionReview} from './permission-reviewer'
@@ -16,6 +17,15 @@ import type {QuestHost} from './runtime'
 type Notice={questID:string;runID:string;context:QuestContext;agent?:string;model?:unknown;state:'waiting'|'sending'|'accepted'|'unknown';error?:string;settled?:string;permissions?:Record<string,PermissionReview>;
  /** Request id -> when the giver was asked about it. Dedupe is the request, never the review's rotating authority digest. */
  notified?:Record<string,string>}
+/**
+ * Every host read this file makes carries a deadline.
+ *
+ * These run on timers inside the host, so an unbounded read is a poll that can stop advancing for as
+ * long as the host takes to answer -- which on 2026-09-17 was between 13 and 40 seconds for an endpoint
+ * that reads one small file. `boundedInspection` passes the signal to the host, so a read that gives up
+ * is also cancelled rather than left running. The prompt that delivers a result is deliberately not
+ * bounded: abandoning a delivery is not the same as abandoning a question.
+ */
 /** Direct Quest runs have a return address even when no project_route was used. */
 export class QuestWorkerReturns {
  private unreadable=new Map<string,string>()
@@ -53,7 +63,7 @@ export class QuestWorkerReturns {
  private settled(directory:string,name:string){this.worklist.get(directory)?.names.delete(name)}
  private save(row:Notice,directory=this.directory()){const path=join(directory,row.runID+'.json');mkdirSync(directory,{recursive:true});const tmp=path+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(row));renameSync(tmp,path)}
  async watch(input:Parameters<StartRun>[0]){
-  const parent=await this.host.get({sessionID:input.context.sessionID}),session=parent?.data??parent
+  const parent=await boundedInspection(signal=>this.host.get({sessionID:input.context.sessionID},{signal})),session=(parent as any)?.data??parent
   const lock=acquireLock(this.store.runtime,'worker-return-'+input.runID)
   try{if(existsSync(join(this.directory(),input.runID+'.json')))return;this.save({questID:input.quest.id,runID:input.runID,context:input.context,agent:session?.agent,model:session?.model,state:'waiting'})}finally{lock.release()}
  }
@@ -70,7 +80,7 @@ export class QuestWorkerReturns {
   const readQuest=(id:string)=>{if(!authoritative.has(id))authoritative.set(id,this.store.read(id));return authoritative.get(id)}
   const giverSession=async(sessionID:string)=>{
    let pending=sessions.get(sessionID)
-   if(!pending){pending=this.host.get({sessionID}).then(value=>value?.data??value);sessions.set(sessionID,pending)}
+   if(!pending){pending=boundedInspection(signal=>this.host.get({sessionID},{signal})).then((value:any)=>value?.data??value);sessions.set(sessionID,pending)}
    return pending
   }
   for(const directory of directories){
@@ -117,13 +127,16 @@ export class QuestWorkerReturns {
     // their own active assignment, but never coordinate or deliver board results.
     if(permissionDirectory){
      if(terminal||typeof run.scope?.worktree!=='string'||physicalDirectory(run.scope.worktree)!==permissionDirectory)continue
-     const workerID=workerSessionID(run),response=workerID?await this.host.get({sessionID:workerID}):undefined,worker=response?.data??response
+     const workerID=workerSessionID(run),response=workerID?await boundedInspection(signal=>this.host.get({sessionID:workerID},{signal})):undefined,worker=(response as any)?.data??response
      if(worker?.id!==workerID||typeof worker?.location?.directory!=='string'||physicalDirectory(worker.location.directory)!==permissionDirectory)continue
     }
     if(!terminal&&(!['executing','waiting','blocked'].includes(run.state)||run.harness||run.runtime==='claude-code'))continue
     // Every open receipt names the same giver session, so this asked the host for the same row once
     // per receipt. One read serves the tick.
-    const session=await giverSession(row.context.sessionID)
+    // An unreachable giver retains its receipts and the pass keeps going. Letting the read escape
+    // would end the whole tick at the first unanswered session, and the queue spans generations.
+    let session
+    try{session=await giverSession(row.context.sessionID)}catch(error){row.error=String(error);save(row);continue}
     try{verifyGiverBinding(this.store,row.context,session)}catch(error){row.error=String(error);save(row);continue}
      if(JSON.stringify(session?.model)!==JSON.stringify(row.model)){row.error='Giver model changed; return retained for inspection';save(row);continue}
     if(!terminal){

@@ -1,6 +1,7 @@
 import {classifyDispatch} from '../models/task-demand'
 import {readContinuations} from './runtime-queues'
 import {TERMINAL_RUN} from './session-lineage'
+import {readAllQuests} from './index'
 import {workspaceSettings} from "./workspace-settings"
 import {existsSync,readFileSync,writeFileSync,renameSync,mkdirSync} from 'node:fs'
 import {join} from 'node:path'
@@ -8,7 +9,7 @@ import {acquireLock} from './locking'
 import {QuestStore} from './store'
 import type {StartRun,QuestContext} from './api'
 import {QuestError,questsAPI} from './api'
-import {readSessionLedgerRows,beginWorkflowRun,observeWorkflowRun,readWorkflowOutcomes,TELEMETRY_FILE,type LedgerRow,type WorkflowRoute} from '../usage/telemetry-api'
+import {readSessionLedgerRowsBatch,beginWorkflowRun,observeWorkflowRun,readWorkflowOutcomes,TELEMETRY_FILE,type LedgerRow,type WorkflowRoute} from '../usage/telemetry-api'
 export const workflowFile=()=>process.env.OPENCODE_WORKFLOW_OUTCOMES_FILE??TELEMETRY_FILE+'.workflows.json'
 type Registration={questID:string;projectID:string;workflowTitle:string;runID:string;stepID:string;taskTags:string[];startedAt:number}
 type Config={questID:string;tags:Record<string,string[]>;maxConcurrent:number}
@@ -32,6 +33,17 @@ export function trackedStart(store:QuestStore,start:StartRun,settingsFile?:strin
 const keys=['input','cacheRead','cacheWrite','output','reasoning'] as const
 const route=(r:LedgerRow):WorkflowRoute=>({accountID:r.accountID??'unknown',providerID:r.route.providerID,modelID:r.route.modelID,reasoning:r.route.reasoning??r.route.variant??'unknown',harness:r.route.harness??'unknown',version:'unknown',planRegime:r.regime??'unknown',serviceTier:r.route.serviceTier??'unknown'})
 /**
+ * The Quest records this collection reads, from the Markdown ledger rather than `store.read`.
+ *
+ * Traced, not inferred: `store.read` replays a Quest's whole journal on top of its record, and one of
+ * this installation's journals is 2.2 MB. Reading the 27 Quests behind its unsettled registrations was
+ * 683 ms of the 683 ms this function cost -- the telemetry ledger answers all of those session queries
+ * in 2 ms. What is read here is a run's state, session and route, and `QuestStore.apply` writes the
+ * Markdown with each event already folded in, so the record is current; `readAllQuests` caches it by
+ * mtime and re-derives only when a file changes.
+ */
+const questRecords=(store:QuestStore)=>new Map<string,any>(readAllQuests(store.projectRoot,{includeArchived:true}).flatMap(row=>row.quest?[[row.quest.id,row.quest] as const]:[]))
+/**
  * Query only directly-owned native session records; host corroboration and descendants are not added twice.
  *
  * Every registration ever made stayed in `workflow-tracking.json`, and each one opened the 90 MB
@@ -43,14 +55,20 @@ const route=(r:LedgerRow):WorkflowRoute=>({accountID:r.accountID??'unknown',prov
  * walk is the runs that have not finished.
  */
 export function collectWorkflowOutcomes(store:QuestStore,options:{file?:string;now?:number;rows?:(sessionID:string)=>LedgerRow[]}={}){
- const target=options.file??workflowFile(),now=options.now??Date.now(),known=new Map(readWorkflowOutcomes(target).runs.map(r=>[r.runID,r])),quests=new Map<string,ReturnType<QuestStore['read']>>(),diagnostics:string[]=[];let observed=0
+ const target=options.file??workflowFile(),now=options.now??Date.now(),known=new Map(readWorkflowOutcomes(target).runs.map(r=>[r.runID,r])),quests=questRecords(store),diagnostics:string[]=[];let observed=0
  const settled=new Set<string>()
+ // Resolve every registration against the cached ledger, then ask the telemetry ledger once.
+ const pending:{meta:Registration;q:any;run:any;sessionID:string}[]=[]
  for(const meta of read(store).runs){try{
   const recorded=known.get(meta.runID)?.observation
   if(recorded&&recorded.state!=='running'){settled.add(meta.runID);continue}
-  if(!quests.has(meta.questID))quests.set(meta.questID,store.read(meta.questID));const q=quests.get(meta.questID),run=q?.sessions.find(s=>s.runID===meta.runID),sessionID=run?.openCodeSessionId??run?.sessionID
+  const q=quests.get(meta.questID),run=q?.sessions.find((s:any)=>s.runID===meta.runID),sessionID=run?.openCodeSessionId??run?.sessionID
   if(!q||!run||!sessionID)continue
-  const raw=options.rows?options.rows(sessionID):readSessionLedgerRows(sessionID,meta.startedAt-1000,now)
+  pending.push({meta,q,run,sessionID})
+ }catch(error){diagnostics.push(meta.runID+': '+(error instanceof Error?error.message:String(error)))}}
+ const batched=options.rows?undefined:readSessionLedgerRowsBatch(pending.map(p=>({sessionID:p.sessionID,from:p.meta.startedAt-1000,to:now})))
+ for(const [index,{meta,q,run,sessionID}] of pending.entries()){try{
+  const raw=options.rows?options.rows(sessionID):batched![index]
   const records=[...new Map(raw.filter(r=>r.source==='opencode'&&r.sessionID===sessionID&&r.startedAt>=meta.startedAt-1000).map(r=>[r.id,r])).values()]
   if(records.some(r=>!Number.isFinite(r.at)||!Number.isFinite(r.startedAt)||r.at>now||r.at<r.startedAt)||!Number.isFinite(Date.parse(run.updatedAt))||Date.parse(run.updatedAt)>now)throw Error('Invalid or future observation timestamp')
   const prior=known.get(meta.runID),first=records[0]
