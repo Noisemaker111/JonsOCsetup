@@ -226,10 +226,22 @@ export function startPassiveUsage() {
  const timer=setInterval(tick,30000);timer.unref?.();const stop=()=>{clearInterval(timer);delete state[KEY]};state[KEY]={stop};tick();return stop
 }
 
-/** Numeric direct-session lookup for passive workflow capture; avoids loading global quota history per worker. */
-export function readSessionLedgerRows(sessionID:string,from:number,to:number,file=PASSIVE_LEDGER_FILE):LedgerRow[]{
- if(!sessionID||!Number.isFinite(from)||!Number.isFinite(to)||to<from)throw Error("Invalid session ledger query")
- if(!existsSync(file))return []
+/**
+ * Direct per-session lookups for passive workflow capture, answered on one connection.
+ *
+ * This avoids loading global quota history per worker, but it used to open the ledger once per
+ * session, and workflow collection asks about every run it has not settled. Opening this file is not
+ * free: on the 90 MB ledger this installation carries, 79 unsettled registrations spent 695-918 ms
+ * almost entirely in open and close. The query itself is indexed and small. One connection, one
+ * prepared statement, one answer per query in the order asked.
+ */
+export function readSessionLedgerRowsBatch(queries:{sessionID:string;from:number;to:number}[],file=PASSIVE_LEDGER_FILE):LedgerRow[][]{
+ for(const q of queries)if(!q.sessionID||!Number.isFinite(q.from)||!Number.isFinite(q.to)||q.to<q.from)throw Error("Invalid session ledger query")
+ if(!queries.length)return []
+ if(!existsSync(file))return queries.map(()=>[])
  const db=readonlyDatabase(file)
- try{return (db.query("SELECT body FROM records WHERE session=? AND source='opencode' AND at>=? AND at<=? ORDER BY at,id").all(sessionID,from,to) as {body:string}[]).map(r=>JSON.parse(r.body) as LedgerRow)}finally{db.close()}
+ try{
+  const statement=db.query("SELECT body FROM records WHERE session=? AND source='opencode' AND at>=? AND at<=? ORDER BY at,id")
+  return queries.map(q=>(statement.all(q.sessionID,q.from,q.to) as {body:string}[]).map(r=>JSON.parse(r.body) as LedgerRow))
+ }finally{db.close()}
 }

@@ -13,7 +13,7 @@ export {sessionBurn,sessionBurnLines} from "./session-burn"
 
 export {portfolioPacing,portfolioPacingLines,getUsagePacing} from "./portfolio-pacing"
 
-export {readSessionLedgerRows} from "./passive-ledger"
+export {readSessionLedgerRowsBatch} from "./passive-ledger"
 export type {LedgerRow} from "./passive-ledger"
 export {recordWorkflowSupport,beginWorkflowRun,observeWorkflowRun,judgeWorkflowRun,readWorkflowOutcomes,reportWorkflowOutcomes} from "./workflow-outcomes"
 export type {WorkflowBegin,WorkflowRun,WorkflowObservation,WorkflowJudgment,WorkflowRoute} from "./workflow-outcomes"
