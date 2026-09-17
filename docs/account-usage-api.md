@@ -36,8 +36,16 @@ The API returns account IDs, discovered connection owners, the connection that
 provided the latest observation, plan metadata, scoped quota windows, absolute
 reset timestamps, per-account freshness, retry times, and errors. It never returns
 access tokens, refresh tokens, upstream account IDs, email addresses, or raw
-provider error bodies. The model context receives a bounded summary; full
-observations are available on demand through the tool or CLI.
+provider error bodies.
+
+`usage_status` answers with a digest whose size does not depend on how much history
+the machine holds: the accounts and their pools, pacing, the calling conversation's
+own request and token counters, and collector freshness. History is behind a named
+`view`, each one a page the caller sizes with `offset` and `limit` and each one
+reporting `total` and `nextOffset`: `requests`, `sessions`, `timeline`,
+`pools` (needs an exact `accountID`), `models`, `workloads`, `harvest`. The text
+format follows the same rule. `usage_pacing` remains the compact controller view
+and `usage_experience` the cached-evidence view.
 
 ## Identity and authentication
 
@@ -114,7 +122,10 @@ Legacy local spending/history for other providers remains in the usage view.
 |---|---|
 | Many callers in one process | One shared in-flight promise per cache |
 | TUI, CLI, collector, different generations | One file lock and atomic shared cache |
-| Healthy account | Refresh every 30 seconds while the usage server is running; refresh on demand otherwise |
+| Several host processes on one machine | One holds the refresh lease and polls; the rest read the cache it writes |
+| A lease that stops being renewed | Another process takes it over; no process inspection or termination |
+| Healthy account | The lease holder refreshes every 30 seconds while the usage server is running; refresh on demand otherwise |
+| Repeated provider throttling | The interval widens with each consecutive rejection, starting at the refresh interval and stopping at five minutes; Retry-After is a floor, never a ceiling |
 | Approaching reset | Next refresh scheduled at the observed boundary when sooner than the normal TTL |
 | Reset passed | Old observation cannot authorize restored capacity |
 | One provider fails | Other accounts still refresh |
@@ -160,7 +171,9 @@ The account service supplies quota facts. The [dispatch planner](account-aware-r
 
 ## Request and task telemetry
 
-`usage_status` accepts `sessionID`, `questID`, `accountID`, `from`/`to` (Unix milliseconds), `includeWorkers`, `offset`, and `limit`. The same status API supplies the terminal usage view. Its context size is the last observed primary request, not a sum of historical token use or a guarantee of the next request size.
+`usage_status` accepts `view`, `sessionID`, `questID`, `accountID`, `from`/`to` (Unix milliseconds), `includeWorkers`, `allSessions`, `offset`, and `limit`. Without `sessionID` it scopes to the calling conversation; `allSessions` widens it. The same status API supplies the terminal usage view. Its context size is the last observed primary request, not a sum of historical token use or a guarantee of the next request size.
+
+Captured requests reach the SQLite ledger beside the request log as they happen, and the passive collector backfills only what the events missed: the bytes appended to the request log since its recorded cursor, the Codex rollouts whose size or modification time moved, and the host messages recorded since the last host scan. A collection tick that finds nothing new writes no request rows. The request log remains the durable append-only record; the ledger is what every bounded query reads.
 
 Captured requests retain account and exact route identity, request kind, exclusive input/cache/output/reasoning counters, timing, and a saved price schedule when available. Auxiliary calls and failed attempts remain visible. Repeated observations are deduplicated by request identity. Stored telemetry does not contain prompt/response prose or credentials.
 
