@@ -43,6 +43,9 @@ export type AccountUsage = {
   attemptedAt: string | null
   nextAttemptAt: string | null
   failures: number
+  /** Consecutive provider rejections that asked us to slow down, and when the last one arrived. */
+  throttles?: number
+  throttledAt?: string | null
   error: string | null
 }
 export type AccountSnapshot = {

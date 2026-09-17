@@ -1,6 +1,6 @@
 # Usage pacing and reset planning
 
-Use `usage_status` for detailed accounting and `usage_pacing` for the compact controller view. Accounts and quota pools keep their own scope, observation time, reset, and freshness. Never combine percentages from different windows or treat an elapsed reset as proof of restored capacity.
+Use `usage_status` for the account digest and its named detail views, and `usage_pacing` for the compact controller view on its own. Accounts and quota pools keep their own scope, observation time, reset, and freshness. Never combine percentages from different windows or treat an elapsed reset as proof of restored capacity.
 
 ## Measures and targets
 
@@ -22,7 +22,7 @@ Published price or credit schedules are dated estimates. An unknown route, servi
 
 Quota estimates require a fresh, identifiable calibration for the exact account, plan, route, and window. Missing, expired, drifting, or ambiguous evidence stays unknown. Overlapping quota windows are not summed. An upper estimate is neither a guarantee nor an admission grant.
 
-`accounting.sessionBurn` exposes account/plan/pool/reset scopes, observed session and route counters, pending requests, and recent wall-clock rates. Corroborating host records are not charged again. Unknown external activity, reporting lag, meter precision, and correlated token mixes can prevent attribution.
+`usage_status({view:"pools", accountID})` exposes account/plan/pool/reset scopes, observed session and route counters, pending requests, and recent wall-clock rates, one page of sessions and intervals at a time. Corroborating host records are not charged again. Unknown external activity, reporting lag, meter precision, and correlated token mixes can prevent attribution.
 
 For a private offline report, run from this repository:
 

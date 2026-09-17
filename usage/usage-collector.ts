@@ -911,7 +911,7 @@ async function collectMain() {
   const apiCapDetail = goMerge.apiCapDetail ?? `Go usage API unavailable (${goProbe.status})`
   if (apiCapHit) log(`GO CAP HIT (${apiCapDetail})`)
   applyPriorCache(bySource, previous)
-  const cache = { ...buildCache(bySource, probes, plans, now, { "opencode-go": { apiCapHit, apiCapDetail } }), telemetry: (await getUsageStatus({from:now.getTime()-WINDOWS[2].ms})).telemetry }
+  const cache = { ...buildCache(bySource, probes, plans, now, { "opencode-go": { apiCapHit, apiCapDetail } }), usage: await getUsageStatus({ allSessions: true, from: now.getTime()-WINDOWS[2].ms }) }
 
   if (!dry) {
     try {
