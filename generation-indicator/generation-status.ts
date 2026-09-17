@@ -158,19 +158,65 @@ export function defaultSourceRepository(): string {
 }
 
 /**
- * The one footer line, in plain language. Nothing is invented: when the count is unknowable the
- * line says only what is running, and the short hash sits directly next to the subject it names.
+ * Fit a label at a word boundary, with an ellipsis when shortened.
+ *
+ * Vendored from quest/tui-active/quest-board.tsx's fitTitle rather than imported: quest/tui-active/*
+ * is owned by quests and out of scope for this plugin (also currently being rewritten elsewhere),
+ * and fitTitle is not a surface plugin-set.json declares for cross-plugin import. Behavior kept
+ * identical on purpose — the renderer's own ellipsis is a middle cut with no word-boundary setting,
+ * which is exactly the defect this exists to avoid.
  */
-export function formatIndicator({ subject, commit, count, asOf }: {
+export function fitTitle(title: string, max: number): string {
+  const clean = title.replace(/\s+/g, " ").trim()
+  if (max <= 1) return "…"
+  if (clean.length <= max) return clean
+  const words = clean.split(" ")
+  let out = ""
+  for (const word of words) {
+    const next = out ? `${out} ${word}` : word
+    if (next.length > max - 1) break
+    out = next
+  }
+  if (!out) out = clean.slice(0, max - 1)
+  return `${out.replace(/[\s,;:·—–-]+$/, "")}…`
+}
+
+/**
+ * The part of the line that matters and must never be cut: what state agents is in. Undefined when
+ * the state is unknowable, so the caller can fall back to naming only what is running.
+ */
+export function indicatorState({ count, asOf }: { count: number | undefined; asOf?: number }): string | undefined {
+  if (count === undefined) return undefined
+  const time = asOf ? new Date(asOf).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : undefined
+  if (count === 0) return "Up to date with agents" + (time ? " as of " + time : "")
+  return "agents is " + count + " merge" + (count === 1 ? "" : "s") + " ahead" + (time ? " as of " + time : "") + " · relaunch oc"
+}
+
+/** What is running, named: the subject with a short hash directly next to it. Nothing invented. */
+export function subjectLabel({ subject, commit }: { subject: string | undefined; commit: string | undefined }): string {
+  const hash = commit ? commit.slice(0, 7) : undefined
+  return (subject ?? "") + (hash ? " (" + hash + ")" : "")
+}
+
+/**
+ * The one footer line. The state leads and is never shortened; only the subject that follows it is
+ * fit to whatever room `width` leaves, on a word boundary, so a narrow composer row cuts the name of
+ * what is running rather than the fact Jon actually needs — the one middle-cut originally did.
+ * `width` is the box's own measured width (in cells), not the terminal's; omit it to render
+ * unshortened (used by the core suite, which has no render context to measure).
+ */
+export function formatIndicator({ subject, commit, count, asOf, width }: {
   subject: string | undefined
   commit: string | undefined
   count: number | undefined
   asOf?: number
+  width?: number
 }): string {
-  const hash = commit ? commit.slice(0, 7) : undefined
-  const time = asOf ? new Date(asOf).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : undefined
-  const running = "Running: " + subject + (hash ? " (" + hash + ")" : "")
-  if (count === undefined) return running
-  if (count === 0) return running + " · up to date with agents" + (time ? " as of " + time : "")
-  return running + " · agents is " + count + " merge" + (count === 1 ? "" : "s") + " ahead" + (time ? " as of " + time : "") + " · relaunch oc to load them"
+  const state = indicatorState({ count, asOf })
+  const label = subjectLabel({ subject, commit })
+  if (!state) return "Running: " + label
+  if (width === undefined) return state + " · " + label
+  const separator = " · "
+  const room = width - state.length - separator.length
+  return state + separator + fitTitle(label, Math.max(8, room))
 }

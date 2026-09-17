@@ -10,7 +10,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "nod
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { git } from "../quest/cleanup-git.mjs"
-import { loadedGeneration, readRemoteRefTip, aheadCount, formatIndicator } from "../generation-indicator/generation-status"
+import { loadedGeneration, readRemoteRefTip, aheadCount, formatIndicator, fitTitle } from "../generation-indicator/generation-status"
 
 /** An origin repo and a clone holding a real refs/remotes/origin/agents, like the maintained pair. */
 function sourcePair(home: string) {
@@ -77,7 +77,8 @@ test("the indicator never calls the loaded code current once agents has moved pa
     expect(current?.count).toBe(0)
     expect(current?.source).toBe("current")
     const steady = formatIndicator({ subject: "shared", commit: loaded, count: current?.count, asOf: current?.asOf })
-    expect(steady).toContain("up to date")
+    // The state leads the line, so it reads before any truncation could ever reach it.
+    expect(steady.startsWith("Up to date with agents")).toBe(true)
     expect(steady).not.toContain("ahead")
 
     // agents gains a commit on the remote; the clone fetches it, moving the ref the indicator reads.
@@ -90,8 +91,9 @@ test("the indicator never calls the loaded code current once agents has moved pa
     expect(moved?.count).toBe(1)
     expect(moved?.source).toBe("git")
     const stale = formatIndicator({ subject: "shared", commit: loaded, count: moved?.count, asOf: moved?.asOf })
-    expect(stale).toContain("1 merge ahead")
-    expect(stale).not.toContain("up to date")
+    expect(stale.startsWith("agents is 1 merge ahead")).toBe(true)
+    expect(stale).toContain("relaunch oc")
+    expect(stale).not.toContain("Up to date")
 
     // Nothing moved since: the same answer comes back from the cache, not from a second git spawn.
     const again = aheadCount({ repositoryDir: repository, loadedCommit: loaded, cacheFile })
@@ -103,6 +105,39 @@ test("the indicator never calls the loaded code current once agents has moved pa
     const unknown = formatIndicator({ subject: "shared", commit: loaded, count: undefined })
     expect(unknown).toBe("Running: shared (" + loaded.slice(0, 7) + ")")
   } finally { rmSync(home, { recursive: true, force: true }) }
+})
+
+/**
+ * @core-prevents the renderer's own middle-cut truncate reaching "agents is N merges ahead" the way
+ * it cut "Running: Add an a...ch oc to load them" down to an unreadable fragment in this plugin's
+ * first live capture: the part Jon actually needs to read must never be the part a narrow row cuts.
+ * @core-observed 2026-09-17: the footer's first product capture, driven at prompt.footer's real
+ * shared-row width, rendered as "Running: Add an a...ch oc to load them" — every word of the state
+ * was gone.
+ */
+test("a narrow width only ever shortens the subject, at a word boundary, never the state", () => {
+  const commit = "b".repeat(40)
+  const longSubject = "Add an always-visible generation indicator to the OpenCode footer"
+
+  // fitTitle itself: a word-boundary cut with an ellipsis, never a mid-word chop.
+  expect(fitTitle("Add an always-visible generation indicator", 12)).toBe("Add an…")
+  expect(fitTitle("short", 12)).toBe("short")
+  expect(fitTitle("x", 0)).toBe("…")
+
+  const ahead = formatIndicator({ subject: longSubject, commit, count: 23, asOf: undefined, width: 40 })
+  const state = "agents is 23 merges ahead · relaunch oc"
+  // The full state survives untouched, at the front of the line, for every width down to its own length.
+  expect(ahead.startsWith(state)).toBe(true)
+  expect(ahead).not.toContain("…ch oc")
+  expect(ahead).not.toContain("a…")
+  // Only the subject after it was cut, and on a word boundary (an ellipsis, not a chopped word).
+  expect(ahead.slice(state.length + 3)).toMatch(/^[^…]*…$/)
+
+  const evenNarrower = formatIndicator({ subject: longSubject, commit, count: 23, asOf: undefined, width: state.length + 4 })
+  expect(evenNarrower.startsWith(state)).toBe(true)
+
+  const current = formatIndicator({ subject: longSubject, commit, count: 0, asOf: undefined, width: 30 })
+  expect(current.startsWith("Up to date with agents")).toBe(true)
 })
 
 test("the ref tip is read loose or packed, with no git spawn", () => {
