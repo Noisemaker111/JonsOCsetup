@@ -13,6 +13,7 @@ import { join } from 'node:path'
 import { QuestStore } from '../quest/store'
 import { clearQuestParseCache, readQuestLedger } from '../quest/index'
 import { questMemberships } from '../quest/shared-guard'
+import { createQuestService } from '../quest/service'
 
 function ledger() {
   const root = mkdtempSync(join(tmpdir(), 'quest-toolcall-'))
@@ -65,4 +66,29 @@ test('the archived view and the active view do not share one derivation', () => 
   const active = readQuestLedger(store.projectRoot)
   expect(active.fingerprint).not.toBe(archived.fingerprint)
   expect(active.rows).toHaveLength(1)
+})
+
+/**
+ * A listing is the most-repeated Quest API call there is: the board, the footer, the giver's own
+ * inventory and `quest list` all make it. It read each Quest's journal-backed record twice per row.
+ */
+test('a listing reads each Quest once, not once per projection', async () => {
+  const { store } = ledger()
+  for (const n of [1, 2]) {
+    const q = store.create({ id: String(n).repeat(26), title: 'More work ' + n, objective: 'o', description: 'd' })
+    store.apply(q.id, 'stage-state', { id: 'work', title: 'Do it', detail: 'detail', status: 'pending' }, 'test')
+  }
+  const host: any = { get: async ({ sessionID }: any) => ({ id: sessionID, agent: 'quest-giver', location: { directory: store.projectRoot } }), active: async () => ({ data: {} }) }
+  let dispose = () => {}
+  const service = createQuestService(store, host, { directory: store.projectRoot, onDispose: (fn: any) => { dispose = fn }, startRun: async () => { throw Error('No dispatch') } })
+  try {
+    const reads: string[] = []
+    const real = store.read.bind(store)
+    ;(store as any).read = (id: string) => { reads.push(id); return real(id) }
+
+    const listing = await service.call('list', { allProjects: true }, { sessionID: 'ses_giver', id: 'list-1' })
+    expect(listing.items.length).toBe(3)
+    expect(reads.length).toBe(listing.items.length)
+    expect(new Set(reads).size).toBe(listing.items.length)
+  } finally { dispose() }
 })

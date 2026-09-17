@@ -144,9 +144,15 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
       ...(blocking?outcome.changed?{}:{steering:waitSteering(after,runID,outcome.milliseconds)}:{settled:true,steering:'No active run to wait for; this is the settled saved state.'})}
     }
    }
-   if(input.action==='list')result={diagnostics:result.diagnostics.slice(0,10),items:result.items.map((item:any)=>listView==='plan'?toolPlan(store.read(item.id)!,continuation.status(item.id)):toolSummary(store.read(item.id)!)),total:result.total,nextOffset:result.nextOffset}
+   // One authoritative read per Quest in this answer. `store.read` replays a Quest's whole journal on
+   // top of its record, and a listing did it twice for every row -- once to project the summary and
+   // once to attach activity -- so `quest list` over this installation's 22 open Quests paid 44
+   // journal replays, 922 ms of them.
+   const listed=new Map<string,any>()
+   const record=(id:string)=>{if(!listed.has(id))listed.set(id,store.read(id));return listed.get(id)}
+   if(input.action==='list')result={diagnostics:result.diagnostics.slice(0,10),items:result.items.map((item:any)=>listView==='plan'?toolPlan(record(item.id)!,continuation.status(item.id)):toolSummary(record(item.id)!)),total:result.total,nextOffset:result.nextOffset}
    if(['get','update'].includes(input.action)){
-    const q=store.read(input.id)!
+    const q=record(input.id)!
     if(input.inspect){
      const section=input.inspect.section
      const values:Record<string,()=>unknown>={cleanup:()=>cleanupStatus(store,q),description:()=>q.description,reward:()=>q.reward,steps:()=>q.stages,runs:()=>q.sessions,artifacts:()=>q.evidence,changes:()=>questChanges(q,workspaces),continuation:()=>continuation.status(q.id)}
@@ -160,11 +166,11 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
     else result=toolDetail(q,continuation.status(q.id))
    }
    if(input.action==='list'){
-    const records=result.items.map((item:any)=>store.read(item.id)!)
+    const records=result.items.map((item:any)=>record(item.id)!)
     const activity=await readQuestActivity(host,records)
     result={...result,items:result.items.map((item:any,index:number)=>withQuestActivity(records[index],item,activity))}
    }else if(!input.inspect&&result?.id&&result.state){
-    const q=store.read(result.id)
+    const q=record(result.id)
     if(q)result=withQuestActivity(q,result,await readQuestActivity(host,[q]))
    }
    if(waited)result={...result,waited}
