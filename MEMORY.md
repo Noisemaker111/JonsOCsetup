@@ -67,12 +67,15 @@ stale line in place, delete a wrong one. User instructions outrank memory.
   faster disk changes nothing. The measured incident and its figures live in the `@core-observed`
   block of `drive-settle`; re-measure them before quoting, because they drift as the session database
   grows.
-- The running `oc` TUI is its own Windows Terminal window titled `OpenCode`, not a tab of the window
-  Jon reads chat in, so `wt -w 0 focus-tab` and `wt -w 0 focus-pane` land in the wrong window and look
-  like focus refusing to move. Find it by enumerating top-level `CASCADIA_HOSTING_WINDOW_CLASS`
-  windows for the WindowsTerminal process and matching the title; never store the HWND, it changes
-  every launch. Drive it natively: force foreground, confirm the foreground handle equals the one you
-  found before sending anything, then send keys and capture the window rect. Refusing to send when the
+- The running `oc` TUI is its own Windows Terminal window, not a tab of the window Jon reads chat
+  in, so `wt -w 0 focus-tab` and `wt -w 0 focus-pane` land in the wrong window and look like focus
+  refusing to move. Its title is `OC | <session title>` while a session is open and plain `OpenCode`
+  right after `/new`, so match the prefix. Find it by enumerating top-level
+  `CASCADIA_HOSTING_WINDOW_CLASS` windows for the WindowsTerminal process; never store the HWND, it
+  changes every launch. Drive it natively: `WScript.Shell.AppActivate`, and when Windows still refuses
+  the foreground change from a background process, send a lone Alt (`SendKeys "%"`) and call
+  `SetForegroundWindow` again; confirm the foreground handle equals the one you found before sending
+  anything, then send keys and capture the window rect. Refusing to send when the
   focus check fails is what keeps stray keystrokes out of his other tabs. This is the visible-window
   control surface he asks for; `runtime:drive` spawns a separate PTY and does not exercise the session
   he is looking at.

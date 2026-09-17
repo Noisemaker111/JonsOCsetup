@@ -6,6 +6,9 @@ export type QuotaWindow = {
   id: string
   remaining: number
   resetAt: string
+  /** The provider's own verdict when it reported one. `exhausted` vetoes admission by itself;
+   *  an unknown reading is a missing measurement, never an exhausted window. */
+  state?: "available" | "exhausted" | "unknown"
   /** Same units as remaining; reservations include already dispatched work. */
   reserved: number
   /** Total capacity of the next window, if the provider actually reports it. */
@@ -154,6 +157,12 @@ const finite = (n: number) => typeof n === "number" && Number.isFinite(n)
 const nonnegative = (n: number) => finite(n) && n >= 0
 const positive = (n: number) => finite(n) && n > 0
 const date = (s: string) => typeof s === "string" ? Date.parse(s) : NaN
+/** A refusal the giver can repeat: it names the account, the window and the reset, never a bare code. */
+function quotaRefusal(account: Pick<Account, "id">, window: QuotaWindow, cause: string) {
+  const reset = date(window.resetAt)
+  return cause + " on account " + account.id + " window " + window.id +
+    (finite(reset) ? " (resets " + window.resetAt + ")" : " (reset unknown; refresh the account observation)")
+}
 
 function validateRequest(r: RoutingRequest) {
   if (r.missingSubscriptionUsage !== undefined && !["wait", "attempt"].includes(r.missingSubscriptionUsage)) throw new Error("Invalid missing subscription usage policy")
@@ -228,7 +237,10 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
       if (account.dispatchHold) reasons.push(account.dispatchHold)
       if (chosen && account.billing === "metered" && !req.cashBudget) reasons.push("configured metered choice requires a cash budget")
       if (!account.authenticated) reasons.push("account is not authenticated")
-      if (account.capacity !== "available" && !(attemptWithoutUsage && account.capacity === "unknown")) reasons.push("account capacity is " + account.capacity)
+      if (account.capacity !== "available" && !(attemptWithoutUsage && account.capacity === "unknown")) {
+        const drained = account.windows.filter(w => w.state === "exhausted").map(w => w.id + (finite(date(w.resetAt)) ? " resets " + w.resetAt : " reset unknown"))
+        reasons.push("account " + account.id + " capacity is " + account.capacity + (drained.length ? ": " + drained.join(", ") : ""))
+      }
       const age = now - date(account.observedAt)
       if (age < 0 || (!attemptWithoutUsage && (!finite(age) || age >= req.maxUsageAgeSeconds * 1000))) reasons.push("usage observation is stale or invalid")
       if (account.billing === "subscription" && !windows.length && !attemptWithoutUsage) reasons.push("subscription windows are unknown")
@@ -283,27 +295,35 @@ function planEligibleRoutes(input: PlannerInput): RoutingDecision {
       for (const window of windows) {
         const burn = route.quotaPerTask[window.id]
         const reset = date(window.resetAt)
-        // Missing/reset telemetry can permit an attempt, but a known exhausted window still vetoes it.
-        if (attemptWithoutUsage && (!finite(window.remaining) || !finite(reset) || reset <= now)) {
-          if (finite(window.remaining) && window.remaining <= 0 && (!finite(reset) || reset > now)) reasons.push("insufficient unreserved quota in " + window.id)
-          if (finite(window.remaining) && window.remaining < 0 || !nonnegative(window.reserved)) reasons.push("invalid quota in " + window.id)
+        const future = !finite(reset) || reset > now
+        if ((finite(window.remaining) && window.remaining < 0) || !nonnegative(window.reserved)) {
+          reasons.push(quotaRefusal(account, window, "invalid allowance reading"))
           continue
         }
-        if ((!positive(burn) && (!chosen || burn !== undefined)) || !nonnegative(window.remaining) || !nonnegative(window.reserved) ||
-            !finite(reset) || reset <= now ||
+        // A provider-reported exhausted window, or a zero measured allowance, is a hard veto: it
+        // stays refused however the route was authorized and whatever policy says about missing
+        // telemetry. Once its reset has passed, the reading describes a window that no longer
+        // exists and the missing-telemetry policy applies again.
+        if ((window.state === "exhausted" || window.remaining === 0) && future) {
+          reasons.push(quotaRefusal(account, window, "allowance is exhausted"))
+          continue
+        }
+        // Missing/reset telemetry can permit an attempt; a known exhausted window was already refused.
+        if (attemptWithoutUsage && (!finite(window.remaining) || !finite(reset) || reset <= now)) continue
+        if ((!positive(burn) && (!chosen || burn !== undefined)) || !nonnegative(window.remaining) || !finite(reset) || reset <= now ||
             (window.nextCapacity !== undefined && !positive(window.nextCapacity)) ||
             (window.periodSeconds !== undefined && !positive(window.periodSeconds))) {
-          reasons.push("unknown or invalid quota/reset/consumption for " + window.id)
+          reasons.push(quotaRefusal(account, window, "unknown or invalid quota/reset/consumption"))
           continue
         }
         const reserve = req.reserveByAccount?.[account.id]?.[window.id] ?? window.remaining * req.reserveFraction
-        if (!nonnegative(reserve)) { reasons.push("invalid reserve for " + window.id); continue }
+        if (!nonnegative(reserve)) { reasons.push(quotaRefusal(account, window, "invalid reserve")); continue }
         if (chosen && !positive(burn)) {
-          if (window.remaining - reserve - window.reserved <= 0) reasons.push("insufficient unreserved quota in " + window.id)
+          if (window.remaining - reserve - window.reserved <= 0) reasons.push(quotaRefusal(account, window, "insufficient unreserved quota"))
           continue // Unknown consumption is not a zero-token forecast. Concurrency follows explicit policy.
         }
         const slots = (window.remaining - reserve - window.reserved) / burn
-        if (slots < 1) reasons.push("insufficient unreserved quota in " + window.id)
+        if (slots < 1) reasons.push(quotaRefusal(account, window, "insufficient unreserved quota"))
         valid.push({ window, slots, reset })
       }
       // Deadline matters: slots that cannot be completed before expiry are not useful capacity.
