@@ -13,3 +13,16 @@ export async function resolveBoardProject(context:any, sessionID?:string,returnD
   }
   return boardProject(context?.location?.directory??context?.state?.path?.directory)
 }
+
+/**
+ * The project scope every surface applies, chosen once.
+ *
+ * The registered Quest Giver holds one conversation across every project, so its board, its footer
+ * and its CLI reads are the whole shared ledger; any other session sees the project it is in. The
+ * choice used to be re-decided in the board, in the composer footer and in the service, which is how
+ * three surfaces counted three different backlogs from one ledger.
+ */
+export const allProjectsByDefault = (isUserGiver: unknown) => Boolean(isUserGiver)
+/** The words every surface uses for the set it counted; the CLI returns the same string. */
+export const scopeLabel = (allProjects: boolean, root?: string) =>
+  allProjects ? "all projects" : "this project (" + (root?.split(/[\\/]/).filter(Boolean).at(-1) ?? "location unavailable") + ")"

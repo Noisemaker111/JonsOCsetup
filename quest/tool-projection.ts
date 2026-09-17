@@ -1,5 +1,8 @@
 import { compactQuestSummary } from './context'
 import { questWorkflow } from './workflow'
+import { observationFromActivity, withQuestActivity, type ActivitySnapshot } from './activity'
+import { questCounts, questTruth } from './reachability'
+import { questReport } from './quest-report'
 import type { Quest, QuestSession } from './types'
 
 const active = (run: QuestSession) => ['planned', 'executing', 'waiting', 'blocked'].includes(run.state)
@@ -67,4 +70,31 @@ export function toolSection(value: unknown, section: string, offset = 0, limit =
   }
   return { section, offset, totalItems: value.length, data,
     nextOffset: offset + data.length < value.length ? offset + data.length : null }
+}
+
+/**
+ * The whole `list` answer, assembled once.
+ *
+ * Every field here is derived from the same records and the same single host activity read:
+ * each item's state, the `counts` by group, and -- for `view=report` -- Jon's four groups. That is
+ * what stops the CLI, the board's filter counts, the composer footer and the giver's report from
+ * answering four different numbers for one ledger, which is what 110 records did on 2026-09-17.
+ */
+export function questListResult(
+  result: { diagnostics: string[]; items: any[]; records: Quest[]; page: Quest[]; scope: string; total: number; nextOffset: number | null },
+  activity: ActivitySnapshot,
+  project: (item: any) => any,
+  view?: string,
+) {
+  const observation = observationFromActivity(activity)
+  const truths = result.records.map(q => questTruth(q, observation))
+  const byID = new Map(truths.map(truth => [truth.quest.id, truth]))
+  const page = result.page.flatMap(q => byID.get(q.id) ?? [])
+  return {
+    diagnostics: result.diagnostics.slice(0, 10),
+    items: result.items.map(item => withQuestActivity(byID.get(item.id)!.quest, project(item), activity)),
+    scope: result.scope, counts: questCounts(truths),
+    ...(view === 'report' ? { report: questReport(page, truths, result.scope) } : {}),
+    total: result.total, nextOffset: result.nextOffset,
+  }
 }
