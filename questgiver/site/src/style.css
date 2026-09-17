@@ -31,7 +31,8 @@ input.code { font: 600 1.6rem ui-monospace, Consolas, monospace; letter-spacing:
 .events { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: .75rem; max-height: 24rem; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: .75rem }
 select, textarea { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: .5rem .6rem }
 .small { font-size: .8rem } .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.workspace { display: grid; grid-template-columns: 20rem 1fr; height: calc(100dvh - 3rem) }
+.machine { display: flex; flex-direction: column; height: calc(100dvh - 3rem) } .machine .tabs { padding: 0 .75rem; align-items: center } .tabs .name { font-weight: 600; margin-right: .75rem }
+.workspace { display: grid; grid-template-columns: 20rem 1fr; flex: 1; min-height: 0 }
 .sessions { border-right: 1px solid var(--line); padding: .75rem; display: flex; flex-direction: column; gap: .6rem; overflow: auto; min-width: 0 }
 .sessions .list li { padding: .35rem .5rem } .sessions .list li.selected { background: color-mix(in srgb, var(--accent) 14%, transparent) } .sessions .list button { min-width: 0 }
 .pane { min-width: 0; display: flex; flex-direction: column; height: 100% } .pane.empty { place-content: center; align-items: center }
@@ -57,3 +58,13 @@ details > .prose { padding: .6rem; border-top: 1px solid var(--line); color: var
 .bubble.queued { opacity: .6; border-style: dashed }
 .modelbar { max-width: 54rem; width: 100%; margin: 0 auto; padding: .4rem 1rem 0 } .modelbar input { width: 100%; font-size: .8rem; padding: .3rem .6rem; color: var(--quiet) }
 .conversation > .error { max-width: 52rem; width: 100%; margin: 0 auto; padding: 0 1rem }
+.tabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--line) } .tabs button { padding: .4rem .6rem; color: var(--quiet); border-bottom: 2px solid transparent } .tabs button.current { color: var(--text); border-color: var(--accent) }
+.pane.scroll { overflow: auto; display: block } .board { max-width: 52rem; margin: 0 auto; padding: 1rem; display: grid; gap: .75rem }
+.board .list li { align-items: flex-start } .board .list button { display: grid; gap: .15rem } .ask { color: var(--accent) }
+.state { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--quiet); min-width: 5.5rem; padding-top: .2rem } .state.done, .state.completed { color: var(--good) } .state.failed, .state.blocked { color: var(--bad) }
+.account { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: .75rem; display: grid; gap: .4rem }
+.meter { display: grid; grid-template-columns: 5rem 1fr 3rem 8rem; gap: .5rem; align-items: center; font-size: .85rem } .meter .value { text-align: right }
+.bar { height: .5rem; background: var(--line); border-radius: 99px; overflow: hidden } .bar span { display: block; height: 100%; background: var(--accent) } .bar span.hot { background: var(--bad) }
+@media (max-width: 760px) { .meter { grid-template-columns: 4rem 1fr 3rem } .meter .reset { grid-column: 2 / -1 } }
+.workspace.solo { grid-template-columns: 1fr } .workspace.solo .sessions { display: none }
+@media (max-width: 760px) { .workspace.solo .pane { display: block } }

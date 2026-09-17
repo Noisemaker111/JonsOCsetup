@@ -76,8 +76,8 @@ Source lives in `questgiver/` in this repository: `protocol/`, `relay/`, `connec
   that server with `--server` and becomes one more client of the same giver. How the giver's
   location is woken without a TUI is to be traced, not assumed.
 - **The Quest API gets a change stream.** `GET /events` (same credential, same no-`Origin` rule),
-  one line per saved change carrying the Quest id and revision, driven by the signal `wait` already
-  uses. The board updates live from it.
+  one line per saved change carrying the Quest id. Every change, from any process, appends to
+  `journals/<questID>.jsonl`, so the stream watches that directory. The board updates live from it.
 - **Nothing about the Quest API's local rules changes.** It stays on 127.0.0.1, keeps refusing
   browser-origin requests and keeps its per-boot token. The connector is a local client like `quest`.
 

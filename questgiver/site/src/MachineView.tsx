@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { call, machinePath, type Machine } from './api'
+import { Board } from './Board'
 import { Conversation, type Session } from './Conversation'
+import { Usage } from './Usage'
+
+const tabs = ['Conversation', 'Board', 'Usage'] as const
 
 export function MachineView({ machine }: { machine?: Machine }) {
   const [sessions, setSessions] = useState<Session[]>([])
@@ -9,6 +13,7 @@ export function MachineView({ machine }: { machine?: Machine }) {
   const [open, setOpen] = useState<Session>()
   const [search, setSearch] = useState('')
   const [failure, setFailure] = useState<string>()
+  const [tab, setTab] = useState<(typeof tabs)[number]>(() => tabs.find(name => '#' + name.toLowerCase() === location.hash) ?? 'Conversation')
   const id = machine?.id, online = machine?.online
 
   const load = useCallback(() => {
@@ -29,10 +34,11 @@ export function MachineView({ machine }: { machine?: Machine }) {
   if (!machine) return <main className="narrow"><p className="error">No such computer.</p></main>
   const create = () => call<{ data: Session }>(machinePath(machine.id, 'host', '/api/session'), { method: 'POST', json: { agent } }).then(answer => { setOpen(answer.data); load() }, error => setFailure(error.message))
   return (
-    <main className={'workspace' + (open ? ' reading' : '')}>
+    <div className="machine">
+    <nav className="tabs"><span className="name"><span className={'dot ' + (machine.online ? 'on' : 'off')} />{machine.name}</span>{tabs.map(name => <button key={name} className={'plain' + (tab === name ? ' current' : '')} onClick={() => { setTab(name); history.replaceState(null, '', '#' + name.toLowerCase()) }}>{name}</button>)}</nav>
+    <main className={'workspace' + (tab !== 'Conversation' ? ' solo' : open ? ' reading' : '')}>
       <aside className="sessions">
-        <div className="row"><span className={'dot ' + (machine.online ? 'on' : 'off')} /><strong className="grow">{machine.name}</strong></div>
-        {!machine.online && <p className="quiet">This computer is offline. It reconnects by itself when it is back.</p>}
+                {!machine.online && <p className="quiet">This computer is offline. It reconnects by itself when it is back.</p>}
         <div className="row">
           <select value={agent} onChange={event => setAgent(event.target.value)}>{agents.map(name => <option key={name}>{name}</option>)}</select>
           <button className="button primary grow" disabled={!machine.online || !agent} onClick={create}>New session</button>
@@ -50,8 +56,10 @@ export function MachineView({ machine }: { machine?: Machine }) {
           ))}
         </ul>
       </aside>
-      {open ? <div className="pane"><button className="plain quiet back" onClick={() => setOpen(undefined)}>← Sessions</button><Conversation key={open.id} machine={machine.id} session={open} /></div>
+      {tab !== 'Conversation' ? <div className="pane scroll">{machine.online && (tab === 'Board' ? <Board machine={machine.id} /> : <Usage machine={machine.id} />)}</div>
+        : open ? <div className="pane"><button className="plain quiet back" onClick={() => setOpen(undefined)}>← Sessions</button><Conversation key={open.id} machine={machine.id} session={open} /></div>
         : <div className="pane empty quiet">Pick a session, or start one.</div>}
     </main>
+    </div>
   )
 }
