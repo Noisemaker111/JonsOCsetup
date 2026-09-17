@@ -19,7 +19,7 @@ import { TASK_CLASSES } from "../models/task-demand"
 export class QuestError extends Error {
   constructor(public code: string, message: string, public retryable = false, public runID?: string) { super(message) }
 }
-export type QuestContext = { project: ProjectIdentity; /** Internal host-derived location; never tool input. */ directory?: string; /** Verified user-giver origin, separate from the selected worker project. */ giverDirectory?: string; sessionID: string; requestID: string; /** Persisted user instruction identity, not the per-response assistant ID. */ turnID?: string }
+export type QuestContext = { project: ProjectIdentity; /** Internal host-derived location; never tool input. */ directory?: string; /** Verified user-giver origin, separate from the selected worker project. */ giverDirectory?: string; /** The recorded project folder, when it is no longer on disk: readable, not dispatchable. */ missingDirectory?: string; sessionID: string; requestID: string; /** Persisted user instruction identity, not the per-response assistant ID. */ turnID?: string }
 export type CreateQuest = { workflow?: QuestWorkflow; title: string; description: string; steps: { title: string; detail?:string; needs?: string[]; id?: string; commandID?: string }[]; reward?: string }
 export type UpdateQuest = { workflow?: QuestWorkflow; projectRoot?: string; title?: string; description?: string; reward?: string; steps?: { id: string; state: QuestStageStatus; title?: string; detail?: string; needs?: string[]; note?: string; commandID?: string | null; verification?: { command: string; exitCode: number; artifact?: string } }[]; artifacts?: { name: string; path?: string; uri?: string; label?: string }[]; archive?: { reason?: string; accepted: boolean } | null }
 /** `task` is what kind of work this dispatch is: coding, review, planning or utility. It is the
@@ -155,6 +155,11 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
         const identity = projectIdentity(text(input.projectRoot, "Project root"))
         if (!existsSync(join(identity.root, ".git"))) throw new QuestError("PROJECT_NOT_A_CHECKOUT", identity.root + " is not a Git checkout, so a worker would still have nothing to bind. Name the maintained source project.")
         patch.project = identity
+        // The recorded giver source is where the Quest was created, and giverContext prefers it over
+        // the project root. Leaving it behind on a move made the very operation the board recommends
+        // -- "Move one with update projectRoot" -- answer PROJECT_MISMATCH on the next read.
+        const {giverSourceDirectory:_moved,...extensions}=(patch.extensions??q.extensions) as Record<string,unknown>
+        patch.extensions=extensions
       }
       for (const key of ["title", "description", "reward"] as const) if (input[key] !== undefined) {
         if (typeof input[key] !== "string" || (key !== "reward" && !input[key]!.trim())) throw new QuestError("INVALID_INPUT", key + " must be text")

@@ -1,7 +1,7 @@
 import {readUserGiver,saveUserGiver,releaseUserGiver} from './giver-registry.mjs'
 import {acquireLock} from './locking'
 import {readAllQuests} from './index'
-import {physicalDirectory,projectIdentity,verifySourceBinding} from './project'
+import {physicalDirectory,physicalDirectoryIfPresent,projectIdentity,verifySourceBinding} from './project'
 import {QuestError,type QuestContext} from './api'
 import {QuestStore} from './store'
 import {questRoot} from './root'
@@ -120,7 +120,15 @@ export function giverContext(store:QuestStore,session:any,requestID:string,quest
  const q=questID?store.read(questID):undefined,selected=registered.selection?.targets??[]
  if(!q&&creating&&registered.selection?.pending)throw new QuestError('PROJECT_SELECTION_REQUIRED','No Quest was created. '+registered.selection.pending+' Select one explicit project with project_select before creating work.')
  if(!q&&creating&&selected.length>1)throw new QuestError('PROJECT_SELECTION_REQUIRED','Select one project for this Quest; all Quests stay with the same giver')
- const directory=q?physicalDirectory((q.extensions.giverSourceDirectory as string)??q.project!.root):selected[0]?.directory??origin
+ const recorded=q?((q.extensions.giverSourceDirectory as string)??q.project!.root):selected[0]?.directory??origin
+ const directory=physicalDirectoryIfPresent(recorded)
+ // The recorded folder is gone. The record is still the truth about this Quest, and the board already
+ // says these can be read and moved but not started -- so reading one answers, and anything that needs
+ // a checkout fails later with what to do about it, not with a realpath error.
+ if(!directory){
+  if(!q?.project)throw new QuestError('PROJECT_UNAVAILABLE','The selected project folder is gone: '+recorded+'. Select a project that exists, or move the Quest with update projectRoot.')
+  return {sessionID:session.id,requestID,turnID,project:q.project,directory:recorded,missingDirectory:recorded,giverDirectory:origin}
+ }
  const project=projectIdentity(directory);if(q?.project&&project.id!==q.project.id)throw new QuestError('PROJECT_MISMATCH','The recorded Quest source no longer belongs to its project')
  return {sessionID:session.id,requestID,turnID,project,directory,giverDirectory:origin}
 }
