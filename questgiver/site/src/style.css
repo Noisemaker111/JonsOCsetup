@@ -1,0 +1,31 @@
+:root {
+  color-scheme: dark light;
+  --bg: light-dark(#f6f5f1, #121311); --panel: light-dark(#fff, #1a1c19); --line: light-dark(#dcd9d0, #2a2d28);
+  --text: light-dark(#1b1c19, #e9e7df); --quiet: light-dark(#6c6a62, #8f8d83); --accent: light-dark(#8a5a00, #e0a73a);
+  --good: #4caf6a; --bad: light-dark(#b3261e, #ef7a70);
+  font: 15px/1.5 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box }
+body { margin: 0; background: var(--bg); color: var(--text) }
+h1, h2, h3 { margin: 0; font-weight: 600 } h2 { font-size: 1.25rem } h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--quiet); margin-top: 1.5rem }
+code, pre { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: .9em }
+code { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 0 .3em }
+.wordmark { font-weight: 700; letter-spacing: -.02em; font-size: 1.1rem; color: var(--accent) } h1.wordmark { font-size: 2rem }
+.quiet { color: var(--quiet) } .error { color: var(--bad) } .grow { flex: 1 } .left { text-align: left }
+.center { min-height: 100dvh; display: grid; place-content: center; justify-items: center; gap: .75rem; padding: 1rem; text-align: center }
+.top { display: flex; align-items: center; gap: 1rem; padding: .6rem 1rem; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0 }
+main.narrow { max-width: 40rem; margin: 2rem auto; padding: 0 1rem; display: grid; gap: 1rem }
+main.wide { max-width: 60rem; margin: 1.5rem auto; padding: 0 1rem }
+.row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap }
+.button, input { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: .5rem .9rem }
+.button { cursor: pointer; text-decoration: none; display: inline-block }
+.button.primary { background: var(--accent); border-color: var(--accent); color: light-dark(#fff, #17130a); font-weight: 600 }
+.button.danger { border-color: var(--bad); color: var(--bad) }
+.plain { font: inherit; color: inherit; background: none; border: 0; padding: .25rem; cursor: pointer }
+.plain.quiet { color: var(--quiet) } .plain.quiet:hover { color: var(--text) }
+.field { display: grid; gap: .25rem; color: var(--quiet); font-size: .85rem } .field input { color: var(--text); font-size: 1rem }
+input.code { font: 600 1.6rem ui-monospace, Consolas, monospace; letter-spacing: .15em; text-align: center; padding: .75rem; width: 100% }
+.list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden }
+.list li { display: flex; align-items: center; gap: .5rem; padding: .6rem .8rem; flex-wrap: wrap } .list li + li { border-top: 1px solid var(--line) } .list:empty { display: none }
+.dot { display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; margin-right: .35rem } .dot.on { background: var(--good) } .dot.off { background: var(--quiet); opacity: .5 }
+.events { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: .75rem; max-height: 24rem; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: .75rem }

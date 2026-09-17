@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "questgiver",
+  "main": "relay/worker.ts",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/auth/*", "/connect", "/connect/*", "/m/*"]
+  },
+  "durable_objects": { "bindings": [{ "name": "MACHINE", "class_name": "Machine" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Machine"] }],
+  "d1_databases": [{ "binding": "DB", "database_name": "questgiver", "database_id": "local", "migrations_dir": "relay/migrations" }],
+  "observability": { "enabled": true }
+}
