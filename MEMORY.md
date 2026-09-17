@@ -70,9 +70,11 @@ stale line in place, delete a wrong one. User instructions outrank memory.
 - The running `oc` TUI is its own Windows Terminal window, not a tab of the window Jon reads chat
   in, so `wt -w 0 focus-tab` and `wt -w 0 focus-pane` land in the wrong window and look like focus
   refusing to move. Its title is `OC | <session title>` while a session is open and plain `OpenCode`
-  right after `/new`, so match the prefix. Find it by enumerating top-level
-  `CASCADIA_HOSTING_WINDOW_CLASS` windows for the WindowsTerminal process; never store the HWND, it
-  changes every launch. Drive it natively: `WScript.Shell.AppActivate`, and when Windows still refuses
+  right after `/new`. A title does not identify it: a driven candidate opened in its own window is
+  also titled `OpenCode`, so a title match can send keys to Jon's session. Find candidates by
+  enumerating top-level `CASCADIA_HOSTING_WINDOW_CLASS` windows for the WindowsTerminal process, then
+  address the one you mean by the handle of the window you launched or confirmed; never store the HWND
+  across launches, it changes every launch. Drive it natively: `WScript.Shell.AppActivate`, and when Windows still refuses
   the foreground change from a background process, send a lone Alt (`SendKeys "%"`) and call
   `SetForegroundWindow` again; confirm the foreground handle equals the one you found before sending
   anything, then send keys and capture the window rect. Refusing to send when the
