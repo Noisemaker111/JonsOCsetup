@@ -15,7 +15,8 @@
     "composer/tui-active/composer.tsx",
     "context-graph/tui-active/context-graph.tsx",
     "duration-graph/tui-active/duration-graph.tsx",
-    "generation-indicator/tui-active/generation-indicator.tsx"
+    "generation-indicator/tui-active/generation-indicator.tsx",
+    "interrupt/tui-active/interrupt.tsx"
   ],
   "entrypointOwners": {
     "composer/tui-active/composer.tsx": "composer",
@@ -40,7 +41,9 @@
     "models/server.ts": "models",
     "quest/server.ts": "quests",
     "harnesses/server.ts": "harness",
-    "context-graph/server.ts": "context-graph"
+    "context-graph/server.ts": "context-graph",
+    "interrupt/tui-active/interrupt.tsx": "interrupt",
+    "tui-bootstrap/interrupt/tui.tsx": "interrupt"
   },
   "publicSurfaces": [
     "project-router/executable.mjs",
@@ -102,6 +105,7 @@
     "composer/plugin.json",
     "context-graph/plugin.json",
     "duration-graph/plugin.json",
-    "generation-indicator/plugin.json"
+    "generation-indicator/plugin.json",
+    "interrupt/plugin.json"
   ]
 }
