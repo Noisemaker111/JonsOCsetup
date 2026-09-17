@@ -28,7 +28,7 @@
     },
     {
       "providerID": "opencode-go",
-      "modelPattern": ".+",
+      "modelPattern": "(?!kimi-k3).+",
       "transports": [
         {
           "origin": "https://opencode.ai",
