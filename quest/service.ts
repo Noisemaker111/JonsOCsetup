@@ -5,11 +5,11 @@ import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv
 import { readUserGiver } from './giver-registry.mjs'
 import {cleanupQuests,cleanupStatus,installQuestCleanup} from "./cleanup"
 import {bindUserGiver,userGiverID,giverContext,adoptQuestGiver,verifyGiverBinding,refreshUserGiverLocation} from './user-giver'
-import { reconcileWorkers, inspectWorker } from "./worker-inspection"
+import { reconcileWorkers, inspectWorker, SETTLED_OBSERVATION } from "./worker-inspection"
 import {configureLearning,collectWorkflowOutcomes} from "./outcome-tracking"
 import {workspaceSettings} from "./workspace-settings"
 import { QuestContinuation } from './continuation'
-import { readAllQuests } from './index'
+import { questMemberships } from './shared-guard'
 import { configuredDispatchPolicyFile } from "../models/dispatch-planner"
 import { join } from "node:path"
 import { questsAPI,QuestError,type StartRun } from "./api"
@@ -24,6 +24,7 @@ import {toolSummary,toolDetail,toolSection,toolStatus,toolPlan} from './tool-pro
 import {activeRuns,awaitQuestChange,observedState,runSummary,waitSteering,DEFAULT_WAIT_SECONDS,MAX_WAIT_SECONDS} from './wait'
 import {giverInstruction} from './giver-instruction'
 import {readQuestActivity,withQuestActivity} from './activity'
+import {boundedInspection} from './worker-observation.mjs'
 const validator=new AjvJsonSchemaValidator()
 const validators=new Map(Object.entries(questOperations).map(([name,op])=>[name,validator.getValidator(op.input)]))
 const unwrap=(value:any)=>value?.data??value
@@ -57,7 +58,10 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
  // Each operation retains its own exclusion so a slow call is never duplicated by the next timer.
  const polls=[
   poll('start admission',()=>consumeQuestStarts(store,host,continuation)),
-  poll('inspection',async()=>{await reconcileWorkers(store,host);collectWorkflowOutcomes(store)}),
+  // Token and route attribution is measured when a run ends, not on a timer. Collecting it every
+  // tick opened the telemetry ledger once per historical registration for 1,273 ms of the host's
+  // own JS thread, five seconds apart, for runs that finished days earlier.
+  poll('inspection',async()=>{const observations=await reconcileWorkers(store,host);if(Object.values(observations).some((o:any)=>SETTLED_OBSERVATION.has(o?.state)))collectWorkflowOutcomes(store)}),
   poll('continuation',()=>continuation.tick()),
   poll('return delivery',()=>returns.tick()),
  ]
@@ -90,8 +94,8 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
   if(input.action==='run'||waitRequest||input.inspect?.section==='runs')await reconcileWorkers(store,host,input.id)
   const requestID=context?.id??context?.callID
   if(!context?.sessionID||!requestID)throw new QuestError("HOST_CONTEXT_REQUIRED","Host must supply a session and tool call identity")
-  const session=await host.get({sessionID:context.sessionID}),directory=(session?.data??session)?.location?.directory
-   const memberships=readAllQuests(store.projectRoot,{includeArchived:true}).flatMap(row=>row.quest?row.quest.sessions.filter(s=>s.openCodeSessionId===context.sessionID||s.sessionID===context.sessionID).map(s=>({questID:row.quest!.id,stepIDs:['planned','executing','waiting'].includes(s.state)?s.deliverables.filter(id=>row.quest!.sessions.findLast(other=>other.deliverables.includes(id))===s):[]})):[])
+  const session=await boundedInspection(signal=>host.get({sessionID:context.sessionID},{signal})),directory=(session?.data??session)?.location?.directory
+   const memberships=questMemberships(store,context.sessionID).map(({quest,run:s})=>({questID:quest.id,stepIDs:['planned','executing','waiting'].includes(s.state)?s.deliverables.filter(id=>quest.sessions.findLast(other=>other.deliverables.includes(id))===s):[]}))
    const isWorker=memberships.length>0
    if(isWorker&&(input.action==='run'||input.action==='start'||input.action==='create'||input.update?.cancelContinuation===true))throw new QuestError('WORKER_DELEGATION_DENIED','Workers update assigned work; only givers create Quests or dispatch workers')
    if(isWorker&&input.action==='update'){
@@ -164,7 +168,6 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
     if(q)result=withQuestActivity(q,result,await readQuestActivity(host,[q]))
    }
    if(waited)result={...result,waited}
-   collectWorkflowOutcomes(store)
    if(input.action==='update'&&!isWorker&&context.external===true)requestQuestReview(store,input.id,devQueueGeneration(),input.update?.steps?.findLast((step:any)=>step.state==='done')?.id)
    return JSON.parse(JSON.stringify(result))
  }}
