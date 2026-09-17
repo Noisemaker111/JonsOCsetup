@@ -1,25 +1,18 @@
-// Headless single-turn call to a model through the same CLIs proven in bench/union-alpha/route.md.
-// Every route is driven the same way: a scratch working directory with no project opencode.jsonc,
-// isolated OPENCODE_CONFIG_DIR/XDG_CONFIG_HOME, one prompt in, stdout captured. This keeps every
-// model's trial identical (same harness invocation shape) regardless of provider.
+// Headless single-turn call to a model through the OpenCode Go v2 CLI, the same CLI proven in
+// bench/union-alpha/route.md. Each call gets a fresh scratch working directory with no project
+// opencode.jsonc, isolated OPENCODE_CONFIG_DIR, one prompt in, stdout captured. This keeps every
+// model's trial identical (same harness invocation shape) regardless of which model is scored.
+//
+// Only OpenCode Go (v2) is in scope: Jon decided only the v2 host matters, so the v1 Zen path this
+// harness used to also score was removed here (it worked, proven in route.md's history, but scoring
+// against it is out of scope now).
 
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Route } from "./route";
 
 const GO_EXE = "C:\\Users\\Jk101\\AppData\\Roaming\\npm\\node_modules\\@opencode\\cli\\bin\\opencode2.exe";
-// The v1 CLI's npm shim on Windows is a .cmd batch file, which Bun.spawn (like any CreateProcess
-// caller) must run through cmd.exe — and cmd.exe collapses a multi-line argv element to its first
-// line (verified directly: a real multi-line LiveCodeBench prompt through opencode.cmd arrived at
-// the model as nothing after the first line, producing "Please provide the problem specification
-// and I'll write the solution."). Invoking the real binary the shim wraps skips cmd.exe entirely,
-// so Bun's array argv reaches the process with embedded newlines intact (CreateProcessW, not a
-// batch re-parse). A bare "opencode" on PATH is also ambiguous on this machine (an unrelated
-// WinGet install shadows the npm one), so this is pinned by absolute path either way.
-const ZEN_V1_CMD = "C:\\Users\\Jk101\\AppData\\Roaming\\npm\\node_modules\\opencode-ai\\bin\\opencode.exe";
 const GO_CONFIG_DIR = process.env.BENCH_OC_GO_CFG ?? path.join(process.env.TEMP ?? ".", "oc-headless", "cfg");
-const ZEN_CONFIG_DIR = process.env.BENCH_OC_ZEN_CFG ?? path.join(process.env.TEMP ?? ".", "oc-headless", "cfg");
-const ZEN_XDG_HOME = process.env.BENCH_OC_ZEN_XDG ?? path.join(process.env.TEMP ?? ".", "oc-headless", "xdgcfg");
 
 export interface CallResult {
   route: Route;
@@ -41,62 +34,40 @@ async function makeScratchDir(label: string): Promise<string> {
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.BENCH_CALL_TIMEOUT_MS ?? 480_000);
 
-// The v1 CLI (Zen route) reads PWD (set by Git Bash, the shell this whole toolchain runs under)
-// as a hint for "the invoking shell's directory" and prefers it over the actual OS working
-// directory Bun.spawn sets via `cwd` — root-caused directly with --print-logs --log-level DEBUG:
-// the v1 binary logged "creating instance" for the correct scratch dir, then logged it again for
-// this repo's worktree (PWD's value, since every call here happens to run from inside a
-// worktree), re-bootstrapped against the worktree's own opencode.jsonc, and then failed "Session
-// not found". Overriding PWD/OLDPWD in the child's env below fixed it end to end. Kept on one
-// stable directory (matching bench/union-alpha/route.md Path 1, proven working) rather than a
-// fresh directory per call, since nothing requires per-call isolation once PWD is pinned.
-const ZEN_STABLE_CWD = process.env.BENCH_OC_ZEN_CWD ?? path.join(process.env.TEMP ?? ".", "oc-headless", "work");
-
 export async function callModel(
   route: Route,
   prompt: string,
   label: string,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
 ): Promise<CallResult> {
-  const scratchDir = route.kind === "zen-v1" ? ZEN_STABLE_CWD : await makeScratchDir(label);
-  await mkdir(scratchDir, { recursive: true });
+  const scratchDir = await makeScratchDir(label);
   const startedAt = new Date().toISOString();
   const t0 = performance.now();
 
-  let cmd: string[];
-  let env: Record<string, string>;
-
-  if (route.kind === "go-v2") {
-    const modelArg = route.reasoningEffort ? `${route.model}#${route.reasoningEffort}` : route.model;
-    cmd = [
-      GO_EXE,
-      "run",
-      "--standalone",
-      "--auto",
-      "--agent",
-      "build",
-      "-m",
-      modelArg,
-      "--title",
-      label,
-      prompt,
-    ];
-    env = {
-      ...process.env,
-      OPENCODE_CONFIG_DIR: GO_CONFIG_DIR,
-      PWD: scratchDir,
-      OLDPWD: scratchDir,
-    } as Record<string, string>;
-  } else {
-    cmd = [ZEN_V1_CMD, "run", "-m", route.model, prompt];
-    env = {
-      ...process.env,
-      OPENCODE_CONFIG_DIR: ZEN_CONFIG_DIR,
-      XDG_CONFIG_HOME: ZEN_XDG_HOME,
-      PWD: scratchDir,
-      OLDPWD: scratchDir,
-    } as Record<string, string>;
-  }
+  const modelArg = route.reasoningEffort ? `${route.model}#${route.reasoningEffort}` : route.model;
+  const cmd = [
+    GO_EXE,
+    "run",
+    "--standalone",
+    "--auto",
+    "--agent",
+    "build",
+    "-m",
+    modelArg,
+    "--title",
+    label,
+    prompt,
+  ];
+  const env = {
+    ...process.env,
+    OPENCODE_CONFIG_DIR: GO_CONFIG_DIR,
+    // Git Bash (the shell this whole toolchain runs under) sets PWD, and at least one OpenCode
+    // CLI binary was observed preferring PWD over the OS-level cwd a spawner sets (root-caused on
+    // the v1 binary this harness used to also drive; pinned here too since it costs nothing and
+    // guards against the same class of bug if it ever applies to opencode2.exe).
+    PWD: scratchDir,
+    OLDPWD: scratchDir,
+  } as Record<string, string>;
 
   const proc = Bun.spawn(cmd, {
     cwd: scratchDir,
@@ -140,9 +111,7 @@ export async function callModel(
     durationMs,
     scratchDir,
   };
-  // Use a label-qualified filename: for zen-v1 the scratchDir is shared/reused across calls (see
-  // above), so a fixed "call-result.json" name would overwrite between calls.
-  await writeFile(path.join(scratchDir, `call-result-${label}.json`), JSON.stringify(result, null, 2));
+  await writeFile(path.join(scratchDir, "call-result.json"), JSON.stringify(result, null, 2));
   return result;
 }
 

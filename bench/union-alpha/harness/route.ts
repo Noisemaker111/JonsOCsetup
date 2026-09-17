@@ -2,8 +2,10 @@
 // This is a bench-only lookup, not production routing. No production file imports this.
 // A user adds a new route here (or on the command line, see run.ts --route) the same way any
 // other model becomes selectable for this tool: nothing in quest/, usage/, or scripts/ reads it.
+//
+// Only OpenCode Go (v2) routes: Jon decided only the v2 host matters for this benchmark.
 
-export type RouteKind = "go-v2" | "zen-v1";
+export type RouteKind = "go-v2";
 
 export interface Route {
   id: string; // stable short name used in result files
@@ -15,7 +17,6 @@ export interface Route {
 
 export const ROUTES: Route[] = [
   { id: "union-alpha-go", kind: "go-v2", model: "opencode-go/union-alpha", label: "Union Alpha (opencode-go)" },
-  { id: "union-alpha-zen", kind: "zen-v1", model: "opencode/union-alpha", label: "Union Alpha (Zen v1)" },
   {
     id: "deepseek-v4.1-flash-high",
     kind: "go-v2",
