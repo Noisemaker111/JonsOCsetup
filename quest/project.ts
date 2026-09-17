@@ -20,6 +20,22 @@ export const physicalDirectory = (directory:string) => {
   if(!statSync(path).isDirectory())throw new Error("Source directory is unavailable")
   return path
 }
+/**
+ * The same resolution, for a path that is allowed to be gone.
+ *
+ * A Quest records the project root it was created against, and 82 of this installation's records name
+ * a folder that was retired. Reading one does not need that folder: the record is the truth and the
+ * board says so. Resolving it anyway turned every giver read of those records into
+ * `ENOENT: no such file or directory, realpath '...'` -- a filesystem error where a sentence about the
+ * Quest belonged, and the opposite of what the same listing said about them in the same breath.
+ */
+export const physicalDirectoryIfPresent = (directory:string) => {
+  try{return physicalDirectory(directory)}catch(error){
+    if((error as NodeJS.ErrnoException)?.code==="ENOENT")return undefined
+    if(error instanceof Error&&error.message==="Source directory is unavailable")return undefined
+    throw error
+  }
+}
 /** Keep canonical ledger identity separate from the physical selected checkout. */
 export function sourceCheckout(directory:string, expected?:ProjectIdentity) {
   const physical=physicalDirectory(directory),project=projectIdentity(physical)

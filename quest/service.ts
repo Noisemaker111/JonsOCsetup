@@ -107,6 +107,10 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
   const turnID=!isWorker&&input.action==='create'&&(context.native===true||typeof context.messageID==='string')?await originatingUserTurn(store,host,context.sessionID,context.messageID):undefined
   const trusted=isWorker?{project:workerLedgerProject(store,context.sessionID,directory)??projectIdentity(directory),directory:physicalDirectory(directory),sessionID:context.sessionID,requestID}:giverContext(store,{...(session?.data??session),id:context.sessionID},requestID,input.id,input.action==='create',turnID)
   if(!isWorker&&trusted.giverDirectory&&input.id)adoptQuestGiver(store,input.id)
+  // A Quest recorded against a folder that is gone can be read and moved; it cannot be worked in.
+  // Saying that is the whole point -- the listing already says it, and the alternative was a realpath
+  // error from deep inside dispatch.
+  if(trusted.missingDirectory&&['run','start'].includes(input.action))throw new QuestError('PROJECT_FOLDER_GONE','This Quest is recorded against '+trusted.missingDirectory+', which is no longer on disk, so no worker can be started in it. Move it to a folder that exists with update projectRoot, then start it.')
   if(input.action==='start'){questsAPI(store,trusted,start).get(input.id);return requestQuestStart(store,input.id,devQueueGeneration())}
   if(input.action==='run'){
    if((input.run?.maxConcurrent!==undefined||input.run?.stepModels!==undefined)&&input.run?.continue!==true)throw new QuestError('INVALID_INPUT','Parallel options require run.continue')
