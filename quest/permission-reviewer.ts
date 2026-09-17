@@ -10,7 +10,9 @@ import {hostPermissionDomain,hostModelIdentities} from './host-observation'
 import {reviewerSettings,reviewerSettingsKey,reservePermissionReview} from './reviewer-settings'
 import type {QuestStore} from './store'
 
-export type PermissionReview={state:'reviewing'|'retrying'|'decided'|'escalated'|'unknown';authorizationKey:string;reason:string;model?:string;reply?:'once'|'reject';notification?:'sending'|'accepted'|'unknown';attempt?:number;retryAt?:number}
+export type PermissionReview={state:'reviewing'|'retrying'|'decided'|'escalated'|'unknown';authorizationKey:string;reason:string;model?:string;reply?:'once'|'reject';notification?:'sending'|'accepted'|'unknown';attempt?:number;retryAt?:number;
+ /** How many consecutive reviews were discarded because the authority behind them moved mid-flight. */
+ churn?:number}
 /** Only an explicit provider capacity rejection is safe to retry automatically. */
 export function permissionCapacityFailure(error:unknown){return /server_is_overloaded|servers are currently overloaded/i.test(String(error))}
 export function permissionReviewDue(previous:PermissionReview|undefined,authorizationKey:string,now=Date.now()){
@@ -47,7 +49,7 @@ export class PermissionReviewer {
    if(!request)return
    if(!permissionReviewDue(input.previous,before.key))return
    const attempt=input.previous?.authorizationKey===before.key?(input.previous.attempt??0)+1:1
-   let record:PermissionReview={state:'reviewing',authorizationKey:before.key,attempt,reason:'Reviewing the exact pending action'}
+   let record:PermissionReview={state:'reviewing',authorizationKey:before.key,attempt,churn:input.previous?.churn,reason:'Reviewing the exact pending action'}
    const save=(change:Partial<PermissionReview>)=>{record={...record,...change};input.save(record);return record}
    save({})
    let reserved:Awaited<ReturnType<typeof reservePermissionReview>>|undefined
@@ -98,7 +100,17 @@ export class PermissionReviewer {
     reserved.ledger.settle(reviewID,{state:'settled',completedAt:new Date().toISOString()});reserved=undefined
     const decision=parsePermissionReview(response.text,input.requestKey)
     const after=await snapshot()
-    if(after.key!==before.key){save({state:'escalated',reason:'User instructions, reviewer settings or assignment changed during review; retry with fresh authority'});return}
+    // The authority digest covers the user instructions, the reviewer setting, the assignment and
+    // the host's model list, and it moves on its own: Quest 20ebb1c6 escalated on it at 01:38 and
+    // again at 02:37 on 2026-09-17, producing two identical notices the giver could not act on and
+    // spending four of its turns. A digest that moved while the review ran is a reason to review
+    // again against the new authority, not a decision for the user to make. Three consecutive
+    // discards means it is not settling, and only then is there something to tell anyone.
+    if(after.key!==before.key){
+     const churn=(input.previous?.churn??0)+1
+     if(churn<3)return save({state:'retrying',churn,retryAt:Date.now()+5_000*churn,reason:'The authority behind this request changed while it was being reviewed. The review was discarded and runs again against the new instructions; no permission was granted.'})
+     return save({state:'escalated',churn,reason:'The user instructions, reviewer setting or assignment changed during three consecutive reviews of this request, so it cannot be settled automatically.'})
+    }
     if(!after.view.requests.some((r:any)=>r.requestKey===input.requestKey))return save({state:'decided',reason:'Request was answered elsewhere during review; no duplicate reply sent'})
     if(decision.decision==='escalate'||decision.decision==='once'&&!request.canApprove)return save({state:'escalated',reason:decision.decision==='once'?'The reviewer approved, but part of this action was redacted as sensitive, so it cannot be granted unseen':decision.reason})
     replyAttempted=true

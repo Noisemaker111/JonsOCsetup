@@ -1,35 +1,23 @@
 import { boundedInspection } from './worker-observation.mjs'
-import { latestSessionAttempts, TERMINAL_RUN } from './session-lineage'
+import { ownedRuns, nativeRunID, observedRun } from './session-lineage'
 import { hostExecution } from './host-observation'
+import { questTruth, type ObservationOf } from './reachability'
 import type { Quest, QuestSession } from './types'
 
-export const ownedRuns = (q: Quest) => latestSessionAttempts(q.sessions).filter(run => ['planned', 'executing', 'waiting', 'blocked'].includes(run.state))
+export { ownedRuns, observedRun }
 
-/**
- * What every surface shows for one run.
- *
- * useWorkerObservations polls the host only for ownedRuns, so a settled run has no
- * observation entry and every reader that asked it directly sat on "Checking owning
- * host…" for a worker that finished. The settled run reports the outcome we recorded;
- * only a live run is worth inspecting. The worker picker already did this, and the
- * board detail's agent log did not.
- */
-export const observedRun = (run: QuestSession, observation: (run: QuestSession) => any) =>
- run.state && TERMINAL_RUN.has(run.state) ? { state: run.state, reason: run.result ?? 'Recorded outcome' } : observation(run)
-type ActivitySnapshot = { active?: Record<string, unknown>; checkedAt: string; reason?: string }
-const nativeID = (run: QuestSession) => {
- const id = run.openCodeSessionId ?? run.openCodeSessionID ?? run.sessionID
- return id?.startsWith('ses_') && !run.harness && run.runtime !== 'claude-code' ? id : undefined
-}
+export type ActivitySnapshot = { active?: Record<string, unknown>; checkedAt: string; reason?: string }
+/** The one sentence every surface uses for a run the owning host will not confirm. */
+export const UNCONFIRMED = 'Recorded as executing, but the owning host does not confirm an execution for it'
 
 /** One bounded host read per public operation; saved assignments never prove activity. */
 export async function readQuestActivity(host: any, quests: Quest[]): Promise<ActivitySnapshot> {
  const checkedAt = new Date().toISOString()
- if (!quests.some(q => ownedRuns(q).some(nativeID))) return { checkedAt }
+ if (!quests.some(q => ownedRuns(q).some(nativeRunID))) return { checkedAt }
  if (typeof host.active !== 'function') {
   const active: Record<string, unknown> = {}
   for (const q of quests) for (const run of ownedRuns(q)) {
-   const id = nativeID(run)
+   const id = nativeRunID(run)
    if (id && hostExecution(host, id) === true) active[id] = true
   }
   return { active, checkedAt, reason: 'Connected host events do not confirm execution for these assignments; ownership retained' }
@@ -44,18 +32,36 @@ export async function readQuestActivity(host: any, quests: Quest[]): Promise<Act
  }
 }
 
-export function questActivity(q: Quest, snapshot: ActivitySnapshot) {
- const owners = ownedRuns(q)
- const running = owners.filter(run => { const id = nativeID(run); return id && snapshot.active && Object.hasOwn(snapshot.active, id) }).length
- return { running, unconfirmed: owners.length - running, assigned: owners.length, checkedAt: snapshot.checkedAt,
-  ...(owners.length > running ? { reason: snapshot.reason ?? 'These assignments have no confirmed active execution; inspect before retrying' } : {}) }
+/**
+ * The tool and CLI answer to the same question the TUI asks its polling hook: "is this run live?".
+ *
+ * Before this the two paths reached different conclusions from the same host. `withQuestActivity`
+ * rewrote a Quest's state from an activity map on some read paths, the TUI drew `observeWorker`
+ * results, and the board mapped the saved ledger state straight to RUNNING, so one Quest read
+ * Working in `quests.get`, RUNNING on the board and UNKNOWN in the footer in the same second. An
+ * activity snapshot now becomes an ordinary observation, and every surface derives its state from
+ * it through the one function in `reachability.ts`.
+ */
+export function observationFromActivity(snapshot: ActivitySnapshot): ObservationOf {
+ return (run: QuestSession) => {
+  const id = nativeRunID(run)
+  if (id && snapshot.active && Object.hasOwn(snapshot.active, id)) return { state: 'running', checkedAt: snapshot.checkedAt }
+  return { state: 'unknown', reason: snapshot.reason ?? UNCONFIRMED, checkedAt: snapshot.checkedAt }
+ }
 }
 
+/** Counts of the owned runs behind one Quest, with the host's answer for each. */
+export function questActivity(q: Quest, snapshot: ActivitySnapshot) {
+ const truth = questTruth(q, observationFromActivity(snapshot))
+ const assigned = truth.runs.length, running = truth.runs.filter(run => run.confirmed).length
+ return { running, unconfirmed: assigned - running, assigned, checkedAt: snapshot.checkedAt,
+  ...(assigned > running ? { reason: snapshot.reason ?? UNCONFIRMED } : {}) }
+}
+
+/** The projection every tool read returns: the one derived state, plus what the ledger recorded. */
 export function withQuestActivity(q: Quest, result: any, snapshot: ActivitySnapshot) {
- const activity = questActivity(q, snapshot)
- const state = q.state === 'Working' && !activity.running
-  ? q.stages.some(step => step.status === 'blocked') ? 'Needs attention' : 'Waiting'
-  : q.state
- return { ...result, state, lane: state === 'Needs attention' ? 'attention' : result.lane,
-  recordedState: q.state, recordedExecuting: q.executingCount, running: activity.running, activity }
+ const truth = questTruth(q, observationFromActivity(snapshot))
+ return { ...result, state: truth.state, lane: truth.lane, reason: truth.reason, group: truth.group,
+  recordedState: truth.recordedState, recordedExecuting: truth.recordedExecuting,
+  running: truth.runs.filter(run => run.confirmed).length, activity: questActivity(q, snapshot) }
 }

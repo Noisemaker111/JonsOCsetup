@@ -8,11 +8,12 @@ import { nudgeGiver } from "../tui-workflow"
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { activeSessionID } from "../../scripts/runtime-contract.mjs"
-import { boardProject,projectQuests,resolveBoardProject } from "../board-project"
+import { allProjectsByDefault, boardProject,projectQuests,resolveBoardProject,scopeLabel } from "../board-project"
 import { readAllQuests } from "../index"
 import type { Quest, QuestSession, QuestStage } from "../types"
-import { filterQuests,QUEST_FILTERS,type QuestFilter } from "../tui-model"
-import { questLifecycle, questReachability, type ReachabilityTone } from "../reachability"
+import { filterTruths,questTruths,QUEST_FILTERS,type QuestFilter } from "../tui-model"
+import { questTruth, type QuestTruth, type ReachabilityTone } from "../reachability"
+import { workerLabel, workerTask } from "../quest-report"
 import { questChanges } from "../change-view"
 import { redact } from "../privacy"
 import { createGiver, rememberBoardView } from "../tui-workflow"
@@ -67,15 +68,6 @@ function shortDate(value?: string): string {
   return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
 }
 
-function status(q: Quest): { label: string; color: string } {
-  if (q.state === "Working") return { label: "RUNNING", color: C.green }
-  if (q.state === "Needs attention") return { label: "STOPPED", color: C.red }
-  if (q.state === "Verifying") return { label: "VERIFYING", color: C.orange }
-  if (q.state === "Ready to complete" || q.state === "Complete") return { label: "READY", color: C.green }
-  if (q.state === "Archived") return { label: "ARCHIVED", color: C.muted }
-  return { label: "WAITING", color: C.muted }
-}
-
 function stageRows(q: Quest): QuestStage[] {
   if (q.stages.length) return q.stages
   return q.deliverables.map((item) => ({
@@ -84,29 +76,13 @@ function stageRows(q: Quest): QuestStage[] {
   }))
 }
 
-function badge(q: Quest): string {
-  if (q.state === "Working") return "ACCEPTED"
-  if (q.state === "Needs attention") return "NEEDS ATTENTION"
-  if (q.state === "Ready to complete" || q.state === "Complete") return "TURN IN"
-  return q.state.toUpperCase()
-}
-
 /**
  * The provider/model that actually answered, else an honest placeholder. Jk's
  * rule: the model is named everywhere a worker is shown, a fast variant says
  * "fast" (never a plain/default variant), and the reasoning level sits next
  * to it — never silently dropped.
  */
-export function workerTask(quest: Quest, session: QuestSession): string {
-  return session.deliverables.map(id=>quest.stages.find(step=>step.id===id)?.title??id).join(' · ') || session.task || session.taskDescription || 'delegated work'
-}
-
-export function workerLabel(session: QuestSession): string {
-  const base = session.providerID && session.modelID ? `${session.providerID}/${session.modelID}` : session.model
-  if (!base) return session.agentRole && session.agentRole !== "worker" ? session.agentRole : "worker"
-  const tags = [session.fast ? "fast" : undefined, session.reasoningEffort ? `${session.reasoningEffort} reasoning` : undefined].filter(Boolean)
-  return tags.length ? `${base} (${tags.join(" · ")})` : base
-}
+export { workerTask, workerLabel }
 
 /**
  * The exact, bare chip Jk asked for beside a subagent session: quest title,
@@ -197,9 +173,9 @@ function Rule() {
   return <box height={1} width="100%" border={["bottom"]} borderColor={C.line} flexShrink={0} />
 }
 
-/** The saved lifecycle only: use reachLabel where a live run may exist. */
-export function questStatus(q: Quest): { label: string; short: string; color: string; tone: ReachabilityTone; rank: number } {
-  const life = questLifecycle(q)
+/** The lane a Quest sorts into, from its derived state -- never from the saved row alone. */
+export function questStatus(truth: QuestTruth): { label: string; short: string; color: string; tone: ReachabilityTone; rank: number } {
+  const life = truth.reach.lifecycle
   return { label: life.label, short: life.short, color: toneColor(life.tone), tone: life.tone, rank: life.rank }
 }
 
@@ -209,7 +185,7 @@ export function questStatus(q: Quest): { label: string; short: string; color: st
  * same Quest cannot read RUNNING on one surface and UNKNOWN on another.
  */
 export function reachLabel(quest: Quest, observation: (run: QuestSession) => any): { label: string; color: string; tone: ReachabilityTone } {
-  const r = questReachability(quest, observation)
+  const r = questTruth(quest, observation).reach
   return { label: r.run ? r.label : r.lifecycle.short, color: toneColor(r.tone), tone: r.tone }
 }
 
@@ -283,8 +259,8 @@ function ProgressRing(props: { quest: Quest }) {
   </box>
 }
 
-function AgentLog(props: { context: any; quest: Quest }) {
-  const st = () => status(props.quest)
+function AgentLog(props: { context: any; quest: Quest; observation: (run: QuestSession) => any }) {
+  const st = () => reachLabel(props.quest, props.observation)
   return <box flexDirection="column" flexShrink={0}>
     <box flexDirection="row" gap={1} alignItems="center" flexShrink={0}>
       <ProgressRing quest={props.quest} />
@@ -307,14 +283,14 @@ function AgentLog(props: { context: any; quest: Quest }) {
   </box>
 }
 
-function LegacyDetail(props: { context: any; store: QuestStore; quest: () => Quest; refresh: () => void }) {
+function LegacyDetail(props: { context: any; store: QuestStore; quest: () => Quest; refresh: () => void; observation: (run: QuestSession) => any }) {
   const q = props.quest
   const p = () => questProgress(q())
   const rows = () => stageRows(q())
   return <box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={0} paddingLeft={1} paddingRight={1} paddingTop={1} gap={1} backgroundColor={C.bg}>
     <box flexDirection="column" gap={0} flexShrink={0}>
       <text fg={C.yellow} attributes={TextAttributes.BOLD} wrapMode="word">{q().title}</text>
-      <text fg={status(q()).color} flexShrink={0}>{badge(q())}</text>
+      <text fg={reachLabel(q(), props.observation).color} flexShrink={0}>{reachLabel(q(), props.observation).label}</text>
     </box>
     <text fg={C.cyan} wrapMode="word">{progressGlyph(p())} {p().done}/{p().total} steps <span fg={C.muted}>· {repo(q())} · {branch(q())} · {q().sessions.length} sessions · {q().evidence.tests.length} checks</span></text>
     <WorkflowActions context={props.context} store={props.store} quest={q} refresh={props.refresh} />
@@ -330,7 +306,7 @@ function LegacyDetail(props: { context: any; store: QuestStore; quest: () => Que
           <For each={q().setbacks}>{(item) => <text fg={C.muted} wrapMode="word">Attempt {item.attempt} · {item.stageID} · {item.reason}</text>}</For>
         </Show>
         <Rule />
-        <AgentLog context={props.context} quest={q()} />
+        <AgentLog context={props.context} quest={q()} observation={props.observation} />
         <Rule />
         <text fg={C.cyan} attributes={TextAttributes.BOLD}>ARTIFACTS <span fg={C.muted}>· {q().evidence.artifacts.length}</span></text>
         <Show when={q().evidence.artifacts.length > 0} fallback={<text fg={C.dim}>No captures yet — record a before shot before the first edit, then revision N / after shots.</text>}>
@@ -467,7 +443,7 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
   const [records,setRecords] = createSignal<Quest[]>([])
   const [loaded,setLoaded] = createSignal(false)
   const [failure,setFailure] = createSignal<string>()
-  const [allProjects,setAllProjects] = createSignal(props.initialAllProjects??Boolean(userGiverID()))
+  const [allProjects,setAllProjects] = createSignal(props.initialAllProjects??allProjectsByDefault(userGiverID()))
   const [project,setProject] = createSignal(boardProject(props.initialProjectDirectory??props.context?.location?.directory??props.context?.state?.path?.directory))
   const [filter,setFilter] = createSignal<QuestFilter>(props.initialFilter??"all")
   const [query,setQuery] = createSignal("")
@@ -484,8 +460,14 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
   // already dropped answered 404 every time. A settled run's recorded outcome is what we saved; it
   // does not need re-confirming.
   const observation=useWorkerObservations(props.context,()=>scoped().flatMap(q=>ownedRuns(q)))
-  const rows = createMemo(()=>filterQuests(scoped(),filter(),observation).filter(q=>!query() || (q.title+" "+q.description).toLowerCase().includes(query().toLowerCase()))
-    .sort((a,b)=>questStatus(a).rank-questStatus(b).rank || b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)))
+  // Every Quest on this board is derived once per frame, and the rows, the lane order, the filter
+  // counts and the scope line all read that one derivation. Deriving per call is how the filter
+  // dialog could say "3 Active" beside a list showing none.
+  const truths = createMemo(()=>questTruths(scoped(),observation))
+  const countOf = (id:QuestFilter)=>filterTruths(truths(),id).length
+  const rows = createMemo(()=>filterTruths(truths(),filter()).filter(t=>!query() || (t.quest.title+" "+t.quest.description).toLowerCase().includes(query().toLowerCase()))
+    .sort((a,b)=>questStatus(a).rank-questStatus(b).rank || b.quest.updatedAt.localeCompare(a.quest.updatedAt) || a.quest.id.localeCompare(b.quest.id))
+    .map(t=>t.quest))
   const selected = createMemo(()=>rows().find(q=>q.id===selectedID()))
   let initialSelectionShown=false
   createEffect(()=>{const q=selected();if(q&&!initialSelectionShown){initialSelectionShown=true;setCollapsed(value=>({...value,[group(q)]:false}))}})
@@ -503,9 +485,9 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
   const select = (id:string, open=false) => {const q=rows().find(q=>q.id===id);if(q)setCollapsed({...collapsed(),[group(q)]:false});setSelectedID(id);if(open)setDetail(true);reveal()}
   const back = () => {if(narrow()&&detail()){setDetail(false);queueMicrotask(reveal)}else props.context?.ui?.router?.navigate?.(props.returnRoute??{type:"home"})}
   const label = (id:QuestFilter) => id==="ready"?"Ready for review":id==="waiting"?"Planned / idle":QUEST_FILTERS.find(f=>f.id===id)?.label??id
-  const chooseFilter = async()=>{const picked=await props.context.ui.dialog.select({title:"Quest state filter",options:QUEST_FILTERS.map(f=>({value:f.id,title:`${label(f.id)} · ${filterQuests(scoped(),f.id,observation).length}`})),current:filter()});if(picked){setFilter(picked);setDetail(false)}}
+  const chooseFilter = async()=>{const picked=await props.context.ui.dialog.select({title:"Quest state filter",options:QUEST_FILTERS.map(f=>({value:f.id,title:`${label(f.id)} · ${countOf(f.id)}`})),current:filter()});if(picked){setFilter(picked);setDetail(false)}}
   const search = async()=>{const value=await props.context.ui.dialog.prompt({title:"Search Quests",placeholder:"Title or description; blank clears search",value:query()});if(typeof value==="string"){setQuery(value.trim());setDetail(false)}}
-  const chooseQuest = async()=>{const id=await props.context.ui.dialog.select({title:"Select Quest",options:rows().map(q=>({value:q.id,title:q.title,description:questStatus(q).label,details:q.project?.root?[q.project.root]:[],searchText:[q.title,q.project?.root,q.id].filter(Boolean).join(" ")}))});if(id)select(id,true)}
+  const chooseQuest = async()=>{const id=await props.context.ui.dialog.select({title:"Select Quest",options:rows().map(q=>({value:q.id,title:q.title,description:reachLabel(q,observation).label,details:q.project?.root?[q.project.root]:[],searchText:[q.title,q.project?.root,q.id].filter(Boolean).join(" ")}))});if(id)select(id,true)}
   const move = (delta:number)=>{const items=rows();if(!items.length)return;const index=Math.max(0,items.findIndex(q=>q.id===selectedID()));select(items[Math.max(0,Math.min(items.length-1,index+delta))].id)}
   const newQuest = ()=>void createGiver(props.context).catch(error=>props.context.ui.dialog.alert({title:"Start Quest",message:String(error)}))
   const compose = ()=>void (selected()?nudgeGiver(props.context,selected()!):createGiver(props.context)).catch(error=>setFailure(String(error)))
@@ -532,9 +514,9 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
       <text fg={C.cyan} onMouseUp={(e:any)=>activate(e,back)}>{narrow()&&detail()?"Esc · Back to Quests":"Esc · Back to chat"}</text>
     </box>
     <Show when={narrow()}><box flexDirection="row" flexWrap="wrap" columnGap={2} rowGap={0} paddingLeft={1} flexShrink={0}>
-      <text fg={C.cyan} onMouseUp={(e:any)=>activate(e,()=>{setAllProjects(!allProjects());setDetail(false)})}>[a] {allProjects()?"All projects":"Current project"}</text>
+      <text fg={C.cyan} onMouseUp={(e:any)=>activate(e,()=>{setAllProjects(!allProjects());setDetail(false)})}>[a] {scopeLabel(allProjects(),project().root)}</text>
       <text fg={C.cyan} onMouseUp={(e:any)=>activate(e,()=>void chooseFilter())}>[f] {label(filter())}</text>
-      <For each={["attention","ready","archived"] as QuestFilter[]}>{id=><text fg={filter()===id?C.cyan:C.muted} onMouseUp={(e:any)=>activate(e,()=>{setFilter(id);setDetail(false)})}>{filterQuests(scoped(),id,observation).length} {label(id)}</text>}</For>
+      <For each={["attention","ready","archived"] as QuestFilter[]}>{id=><text fg={filter()===id?C.cyan:C.muted} onMouseUp={(e:any)=>activate(e,()=>{setFilter(id);setDetail(false)})}>{countOf(id)} {label(id)}</text>}</For>
     </box></Show>
     <Show when={!allProjects()&&project().error}><text fg={C.orange} wrapMode="word">{project().error}</text></Show>
     <box flexDirection="row" flexGrow={1} flexShrink={1} minHeight={0}>
@@ -548,7 +530,7 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
             <Show when={!rows().length}><text fg={C.muted} padding={1} wrapMode="word">No matching Quests. Clear search or change the filter.</text></Show>
           </scrollbox>
           <text fg={C.cyan} paddingLeft={1}  wrapMode="none" truncate onMouseUp={(e:any)=>activate(e,()=>void search())}>/ {query()?"Search: "+query():"Search quests"} <span fg={C.dim}>· {rows().length} matching</span></text>
-          <text fg={C.dim} paddingLeft={1} wrapMode="none" truncate onMouseUp={(e:any)=>activate(e,()=>void chooseFilter())}>[a] {allProjects()?"All projects":"This project"} · [f] {label(filter())}</text>
+          <text fg={C.dim} paddingLeft={1} wrapMode="none" truncate onMouseUp={(e:any)=>activate(e,()=>void chooseFilter())}>[a] {scopeLabel(allProjects(),project().root)} · [f] {label(filter())} · {countOf("open")} open</text>
           <Show when={query()}><text fg={C.cyan} paddingLeft={1} onMouseUp={(e:any)=>activate(e,()=>setQuery(""))}>[x] Clear search</text></Show>
 
         </box>
@@ -557,7 +539,7 @@ export function QuestBoard(props: { context: any; initialQuestID?: string; initi
       <Show when={!narrow()||detail()}>
         <box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} minHeight={0}>
           <Show when={selectedID()} keyed>{id=><Show when={selected()} fallback={<text fg={C.muted} padding={1}>Choose a Quest to view its details.</text>}>
-            {q=><Show when={q().contractVersion===2} fallback={<LegacyDetail context={props.context} store={store} quest={q} refresh={refresh} />}><ContractDetail context={props.context} store={store} quest={q} refresh={refresh} observation={observation} width={width} /></Show>}
+            {q=><Show when={q().contractVersion===2} fallback={<LegacyDetail context={props.context} store={store} quest={q} refresh={refresh} observation={observation} />}><ContractDetail context={props.context} store={store} quest={q} refresh={refresh} observation={observation} width={width} /></Show>}
           </Show>}</Show>
         </box>
       </Show>

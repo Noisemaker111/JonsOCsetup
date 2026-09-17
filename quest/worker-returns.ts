@@ -8,14 +8,15 @@ import {boundedInspection} from './worker-observation.mjs'
 import {physicalDirectory} from './project'
 import {permissionKey,workerSessionID} from './worker-permissions'
 import {PermissionReviewer,type PermissionReview} from './permission-reviewer'
-import {questCompletionReturn} from './completion-return'
-import {latestSessionAttempts} from './session-lineage'
+import {completionWake,permissionWake} from './giver-wake'
 import {readAllQuests} from './index'
 import type {QuestStore} from './store'
 import type {StartRun,QuestContext} from './api'
 import type {QuestHost} from './runtime'
 
-type Notice={questID:string;runID:string;context:QuestContext;agent?:string;model?:unknown;state:'waiting'|'sending'|'accepted'|'unknown';error?:string;settled?:string;permissions?:Record<string,PermissionReview>}
+type Notice={questID:string;runID:string;context:QuestContext;agent?:string;model?:unknown;state:'waiting'|'sending'|'accepted'|'unknown';error?:string;settled?:string;permissions?:Record<string,PermissionReview>;
+ /** Request id -> when the giver was asked about it. Dedupe is the request, never the review's rotating authority digest. */
+ notified?:Record<string,string>}
 /**
  * Every host read this file makes carries a deadline.
  *
@@ -145,33 +146,32 @@ export class QuestWorkerReturns {
       if(request.sessionID!==sessionID||!request.id)continue
       const key=permissionKey(request);row.permissions??={}
       const review=await new PermissionReviewer(this.store,this.host).review({giverID:row.context.sessionID,questID:q.id,runID:row.runID,requestID:request.id,requestKey:key,previous:row.permissions[key],save:value=>{row.permissions![key]=value;save(row)}})??row.permissions[key]
-      if(review&&['escalated','unknown'].includes(review.state)&&review.notification!=='accepted'){
-       review.notification='sending';save(row)
-       try{
-        await this.host.prompt({sessionID:row.context.sessionID,id:'msg_questpermission'+key+review.authorizationKey,delivery:'queue',text:'Permission review needs a new decision for '+q.title+'. '+review.reason+'\nThe review is unresolved. Prose cannot approve or reject native access; there is no giver permission-reply tool. Do not search for one or claim a decision without an acknowledged permission record. Report the recorded blocker and ask only for genuinely missing user authorization or context. New user instructions or a clarified assignment trigger a fresh review. The user can also use Review permission. Do not redispatch the worker.',metadata:{questWorkerPermission:true,questID:q.id,runID:row.runID}})
-        review.notification='accepted'
-       }catch(error){review.notification='unknown';row.error=String(error)}
-       save(row)
+      if(review&&['escalated','unknown'].includes(review.state)){
+       const ask=permissionWake(q,request,review.reason,row.notified)
+       if(ask.wake){
+        review.notification='sending';save(row)
+        try{
+         await this.host.prompt({sessionID:row.context.sessionID,id:'msg_questpermission'+request.id,delivery:'queue',text:ask.text,metadata:{questWorkerPermission:true,questID:q.id,runID:row.runID,requestID:request.id}})
+         review.notification='accepted';row.notified={...row.notified,[request.id]:new Date().toISOString()}
+        }catch(error){review.notification='unknown';row.error=String(error)}
+        save(row)
+       }
       }
      }
      continue
     }
-    // A turned-in Quest has nowhere for this to go. The worker's own notes are already saved on
-    // the Quest and the return is only a routing summary, so waking the giver to read a result for
-    // work it has already turned in buys nothing and costs a turn. Three of the ten messages queued
-    // on this machine were exactly that.
-    if(q.state==='Archived'){row.state='accepted';row.settled='Quest archived before delivery; the result stays on the Quest';save(row);continue}
-    // Only the newest attempt in a resume lineage is live work -- the Quest's own definition, the
-    // one `questView` already projects. A return for a superseded attempt describes a state the
-    // giver has moved past, because it dispatched the newer attempt itself, and its result is still
-    // on the Quest in that lineage's history. Waking it buys a turn spent re-reading the past.
-    if(!latestSessionAttempts(q.sessions).some(s=>(s.runID??s.callID)===row.runID)){row.state='accepted';row.settled='Superseded by a newer attempt in this run lineage';save(row);continue}
+    // What is worth a giver turn is decided in one place (quest/giver-wake.ts): a turned-in Quest,
+    // a superseded attempt, a route failure the runtime already re-dispatched and an outcome the
+    // ledger already reflects all settle here without costing a turn. Three of the ten messages
+    // queued on this machine were the first kind and most of the rest were the third.
+    const wake=completionWake(q,run)
+    if(!wake.wake){row.state='accepted';row.settled=wake.settled;save(row);continue}
     row.state='sending';save(row)
     try{
      // Each independent terminal outcome retains its queued giver response.
      // Native prompt reconciles this stable ID before admission, including after
      // promotion. Retrying an uncertain acknowledgement cannot duplicate a turn.
-     await this.host.prompt({sessionID:row.context.sessionID,id:'msg_questreturn'+row.runID,delivery:'queue',resume:true,text:questCompletionReturn({quest:q,label:'Automatic Quest worker update',stepIDs:run.deliverables,run}),metadata:{questWorkerReturn:true,questID:q.id,runID:row.runID}})
+     await this.host.prompt({sessionID:row.context.sessionID,id:'msg_questreturn'+row.runID,delivery:'queue',resume:true,text:wake.text,metadata:{questWorkerReturn:true,questID:q.id,runID:row.runID}})
      row.state='accepted'
      delete row.error
     }catch(error){row.state='unknown';row.error=String(error)}

@@ -12,7 +12,11 @@ import {readAllQuests} from '../quest/index'
 import {reconcileWorkers} from '../quest/worker-inspection'
 import {observeGiverInstruction} from '../quest/giver-instruction'
 
-const context=(requestID:string,projectID='project-a'):any=>({project:{id:projectID,root:join('C:','projects',projectID)},sessionID:'ses_giver',requestID})
+// Real directories, because dispatch now refuses a Quest whose recorded project folder is gone: a
+// fabricated root is the very condition that stranded 92 records on 2026-09-17.
+const projects=new Map<string,string>()
+const projectRoot=(projectID:string)=>{let root=projects.get(projectID);if(!root){root=realpathSync.native(mkdtempSync(join(tmpdir(),'quest-admission-'+projectID+'-')));projects.set(projectID,root)}return root}
+const context=(requestID:string,projectID='project-a'):any=>({project:{id:projectID,root:projectRoot(projectID)},sessionID:'ses_giver',requestID})
 const started=async()=>({sessionID:'ses_worker'})
 const request={title:'Missing provider credential must surface a TUI error, not silently drop the prompt',description:'A missing provider credential must show a TUI error instead of dropping the prompt.',steps:[{title:'Drive the TUI without a credential'}]}
 const code=(call:()=>unknown)=>{try{call()}catch(error){return (error as any).code}return 'no error'}
