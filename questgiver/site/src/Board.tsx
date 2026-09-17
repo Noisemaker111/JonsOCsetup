@@ -1,4 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
+import { ArrowLeftIcon } from 'lucide-react'
+import { MessageResponse } from '@/components/ai-elements/message'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { call, machinePath } from './api'
 
 type Bullet = { group: string; name: string; sentence: string; ask: string }
@@ -36,27 +41,31 @@ export function Board({ machine }: { machine: string }) {
 
   if (open) return <QuestView machine={machine} id={open} back={() => { setOpen(undefined); void load() }} />
   return (
-    <div className="board">
-      {failure && <p className="error">{failure}</p>}
-      {report && <p className="quiet small">{report.scope} · {Object.entries(report.counts).map(([name, count]) => `${count} ${name}`).join(' · ')}{report.serving ? ' · served by ' + report.serving : ''}</p>}
+    <div className="mx-auto grid max-w-3xl gap-4 p-4">
+      {failure && <p className="text-destructive text-sm">{failure}</p>}
+      {report && (
+        <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
+          <span>{report.scope}</span>
+          {Object.entries(report.counts).map(([name, count]) => <Badge key={name} variant="secondary">{count} {name}</Badge>)}
+          {report.serving && <span>served by {report.serving}</span>}
+        </div>
+      )}
       {report?.sections.map(section => (
-        <section key={section.group}>
-          <h3>{section.heading}</h3>
-          <ul className="list">
+        <Card key={section.group}>
+          <CardHeader><CardTitle className="text-muted-foreground text-xs uppercase tracking-widest">{section.heading}</CardTitle></CardHeader>
+          <CardContent className="divide-y">
             {section.bullets.map((bullet, index) => {
               const id = items.find(item => item.title === bullet.name)?.id
               return (
-                <li key={id ?? index}>
-                  <button className="plain grow left" disabled={!id} onClick={() => setOpen(id)}>
-                    <strong>{bullet.name}</strong>
-                    <div>{bullet.sentence}</div>
-                    <div className={section.group === 'you' ? 'ask' : 'quiet'}>{bullet.ask}</div>
-                  </button>
-                </li>
+                <button key={id ?? index} disabled={!id} onClick={() => setOpen(id)} className="grid w-full gap-1 py-3 text-left first:pt-0 last:pb-0 hover:opacity-80">
+                  <span className="font-medium">{bullet.name}</span>
+                  <span className="text-sm">{bullet.sentence}</span>
+                  <span className={'text-sm ' + (section.group === 'you' ? 'text-primary' : 'text-muted-foreground')}>{bullet.ask}</span>
+                </button>
               )
             })}
-          </ul>
-        </section>
+          </CardContent>
+        </Card>
       ))}
     </div>
   )
@@ -70,27 +79,37 @@ function QuestView({ machine, id, back }: { machine: string; id: string; back: (
   const act = (operation: string) => quest(machine, operation, { id }).then(load, error => setFailure(error.message))
 
   return (
-    <div className="board">
-      <button className="plain quiet left" onClick={back}>← Board</button>
-      {failure && <p className="error">{failure}</p>}
+    <div className="mx-auto grid max-w-3xl gap-4 p-4">
+      <Button variant="ghost" size="sm" className="justify-self-start" onClick={back}><ArrowLeftIcon />Board</Button>
+      {failure && <p className="text-destructive text-sm">{failure}</p>}
       {row && <>
-        <h2>{row.title}</h2>
-        <p className="quiet small">{row.state} · {row.reason} · {row.project?.root}</p>
-        <p className="prose">{row.description}</p>
-        <div className="row">
-          <button className="button primary" onClick={() => act('start')}>Start</button>
-          <button className="button" onClick={() => act('archive')}>Archive</button>
-        </div>
-        <h3>Steps</h3>
-        <ul className="list">
-          {row.steps.map(step => (
-            <li key={step.id}>
-              <span className={'state ' + step.state}>{step.state}</span>
-              <div className="grow"><div>{step.title}</div>{step.detail && <div className="quiet small">{step.detail}</div>}{step.runs.map((run, index) => <div key={index} className="quiet small">{run.model} {run.state}</div>)}</div>
-            </li>
-          ))}
-        </ul>
-        {!!row.artifacts.length && <><h3>Delivered</h3><ul className="list">{row.artifacts.map((artifact, index) => <li key={index}>{artifact.url ? <a href={artifact.url} target="_blank" rel="noreferrer">{artifact.title ?? artifact.url}</a> : artifact.title ?? artifact.path}</li>)}</ul></>}
+        <Card>
+          <CardHeader>
+            <CardTitle>{row.title}</CardTitle>
+            <CardDescription className="flex flex-wrap items-center gap-2"><Badge variant="secondary">{row.state}</Badge>{row.reason}<span className="truncate">{row.project?.root}</span></CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <MessageResponse>{row.description}</MessageResponse>
+            <div className="flex gap-2"><Button onClick={() => act('start')}>Start</Button><Button variant="outline" onClick={() => act('archive')}>Archive</Button></div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-muted-foreground text-xs uppercase tracking-widest">Steps</CardTitle></CardHeader>
+          <CardContent className="divide-y">
+            {row.steps.map(step => (
+              <div key={step.id} className="flex gap-3 py-3 first:pt-0 last:pb-0">
+                <Badge className="h-fit shrink-0" variant={step.state === 'done' || step.state === 'completed' ? 'default' : step.state === 'failed' || step.state === 'blocked' ? 'destructive' : 'outline'}>{step.state}</Badge>
+                <div className="grid gap-1"><span>{step.title}</span>{step.detail && <span className="text-muted-foreground text-sm">{step.detail}</span>}{step.runs.map((run, index) => <span key={index} className="text-muted-foreground text-xs">{run.model} {run.state}</span>)}</div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        {!!row.artifacts.length && (
+          <Card>
+            <CardHeader><CardTitle className="text-muted-foreground text-xs uppercase tracking-widest">Delivered</CardTitle></CardHeader>
+            <CardContent className="grid gap-1">{row.artifacts.map((artifact, index) => artifact.url ? <a key={index} className="underline" href={artifact.url} target="_blank" rel="noreferrer">{artifact.title ?? artifact.url}</a> : <span key={index}>{artifact.title ?? artifact.path}</span>)}</CardContent>
+          </Card>
+        )}
       </>}
     </div>
   )

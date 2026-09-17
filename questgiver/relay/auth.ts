@@ -44,16 +44,21 @@ export async function startGoogle(_request: Request, env: Env, url: URL) {
     client_id: env.GOOGLE_CLIENT_ID, redirect_uri: url.origin + '/auth/google/callback', response_type: 'code', scope: 'openid email profile',
     state, nonce, code_challenge: await sha256(verifier), code_challenge_method: 'S256', prompt: 'select_account',
   }).toString()
-  const pending = base64url(new TextEncoder().encode(JSON.stringify({ state, nonce, verifier, returnTo: returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/' })))
-  return new Response(null, { status: 302, headers: { location: target.toString(), 'set-cookie': setCookie(PENDING, pending, 600, url.protocol === 'https:') } })
+  const pending = base64url(new TextEncoder().encode(JSON.stringify({ state, nonce, verifier, retried: url.searchParams.has('retried'), returnTo: returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/' })))
+  return new Response(null, { status: 302, headers: { location: target.toString(), 'set-cookie': setCookie(PENDING, pending, 3600, url.protocol === 'https:') } })
 }
 
 export async function finishGoogle(request: Request, env: Env, url: URL) {
   const raw = cookie(request, PENDING)
-  if (!raw || !env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) return refuse(400, 'SIGNIN_EXPIRED', 'Start signing in again.')
-  const pending = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(raw.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)))) as { state: string; nonce: string; verifier: string; returnTo: string }
+  // Someone who left Google's page open past the attempt's life should land signed in, not on an
+  // error: start over once. A second failure means cookies are not surviving, and looping would hide that.
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) return refuse(503, 'GOOGLE_NOT_CONFIGURED', 'Google sign-in has no client configured on this deployment.')
+  if (!raw) return new Response(null, { status: 302, headers: { location: '/auth/google/start?retried' } })
+  const pending = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(raw.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)))) as { state: string; nonce: string; verifier: string; returnTo: string; retried?: boolean }
   const code = url.searchParams.get('code')
-  if (!code || url.searchParams.get('state') !== pending.state) return refuse(400, 'SIGNIN_MISMATCH', 'Start signing in again.')
+  if (!code || url.searchParams.get('state') !== pending.state) return pending.retried
+    ? refuse(400, 'SIGNIN_MISMATCH', 'Sign-in could not be completed. Check that this browser allows cookies for this site, then try again.')
+    : new Response(null, { status: 302, headers: { location: '/auth/google/start?retried' } })
   const exchange = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ code, client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, redirect_uri: url.origin + '/auth/google/callback', grant_type: 'authorization_code', code_verifier: pending.verifier }),

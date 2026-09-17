@@ -9,6 +9,8 @@
   },
   "durable_objects": { "bindings": [{ "name": "MACHINE", "class_name": "Machine" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Machine"] }],
-  "d1_databases": [{ "binding": "DB", "database_name": "questgiver", "database_id": "local", "migrations_dir": "relay/migrations" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "questgiver", "database_id": "6a17ca63-2e9d-425e-baac-fe90fe638158", "migrations_dir": "relay/migrations" }],
+  // The secret half is `wrangler secret put GOOGLE_CLIENT_SECRET`; the id is public by design.
+  "vars": { "GOOGLE_CLIENT_ID": "556073125958-k0av2rmrhdrjprnnj3oon723t2dl37i8.apps.googleusercontent.com" },
   "observability": { "enabled": true }
 }

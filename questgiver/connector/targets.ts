@@ -5,6 +5,7 @@ import type { Target } from '../protocol/frames'
 // @ts-ignore -- the Quest client is plain JavaScript with no declarations.
 import { discoverQuestAPI } from '../../quest/client.mjs'
 import { getAccountUsage } from '../../usage/account-api'
+import { configuredAccess } from '../../models/access-policy'
 
 export type Local = { url: string; authorization: string }
 
@@ -13,7 +14,7 @@ const allowed: Record<Target, RegExp> = {
   // Everything the host serves except its terminals, which need a WebSocket this link does not carry.
   host: /^\/api\/(?!pty\b|experimental\/persistent-pty\b)/,
   quest: /^\/(health|contract|events|api\/[a-z]+)$/,
-  usage: /^\/accounts$/,
+  usage: /^\/(accounts|policy)$/,
 }
 export const permits = (target: Target, path: string) => allowed[target].test(path.split('?')[0])
 
@@ -37,6 +38,8 @@ export async function resolveLocal(target: 'host' | 'quest', fresh = false): Pro
 }
 
 export async function usage(path: string) {
+  // Which routes the machine's owner allows, so a picker never offers one the guard would refuse.
+  if (path.split('?')[0] === '/policy') return Response.json({ routes: configuredAccess().routes.map(route => ({ providerID: route.providerID, modelPattern: route.modelPattern })) })
   const refresh = new URLSearchParams(path.split('?')[1] ?? '').has('refresh')
   return Response.json(await getAccountUsage({ refresh }))
 }

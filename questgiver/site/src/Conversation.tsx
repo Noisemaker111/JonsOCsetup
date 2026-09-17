@@ -1,17 +1,28 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { CheckIcon, ShieldQuestionIcon } from 'lucide-react'
+import { Conversation as Thread, ConversationContent, ConversationEmptyState, ConversationScrollButton } from '@/components/ai-elements/conversation'
+import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message'
+import { ModelSelector, ModelSelectorContent, ModelSelectorEmpty, ModelSelectorGroup, ModelSelectorInput, ModelSelectorItem, ModelSelectorList, ModelSelectorLogo, ModelSelectorName, ModelSelectorTrigger } from '@/components/ai-elements/model-selector'
+import { PromptInput, PromptInputBody, PromptInputButton, PromptInputFooter, PromptInputSubmit, PromptInputTextarea, PromptInputTools, type PromptInputMessage } from '@/components/ai-elements/prompt-input'
+import { Queue, QueueItem, QueueItemContent, QueueItemIndicator, QueueList, QueueSection, QueueSectionContent, QueueSectionLabel, QueueSectionTrigger } from '@/components/ai-elements/queue'
+import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/components/ai-elements/reasoning'
+import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { call, machinePath } from './api'
 
-type Part =
-  | { type: 'text'; text: string }
-  | { type: 'reasoning'; text: string }
-  | { type: 'tool'; id: string; name: string; state: { status: 'streaming' | 'running' | 'completed' | 'error'; input?: unknown; content?: { type: string; text?: string }[]; error?: { message?: string } | string } }
-type Message = { id: string; type: string; text?: string; description?: string; content?: Part[]; agent?: string; model?: { id: string; providerID: string }; time: { created: number; completed?: number }; retry?: { attempt: number; error?: { message?: string } } }
+type ToolState = { status: 'streaming' | 'running' | 'completed' | 'error'; input?: unknown; content?: { type: string; text?: string }[]; error?: { message?: string } | string }
+type Part = { type: 'text'; text: string } | { type: 'reasoning'; text: string; time?: { completed?: number } } | { type: 'tool'; id: string; name: string; state: ToolState }
+type ChatMessage = { id: string; type: string; text?: string; description?: string; content?: Part[]; agent?: string; model?: { id: string; providerID: string }; time: { created: number; completed?: number }; retry?: { attempt: number; error?: { message?: string } } }
+type Permission = { id: string; action: string; resources: string[]; message?: string }
 type Queued = { id: string; payload?: { text?: string } }
 type Model = { id: string; providerID: string; name?: string; enabled?: boolean }
-type Permission = { id: string; sessionID: string; action: string; resources: string[]; message?: string }
+type Account = { provider: string; connections?: { routeProviders?: string[] }[]; windows: { label: string; usedPercent: number | null; resetAt?: string | null }[] }
 export type Session = { id: string; title?: string; agent?: string; time?: { updated?: number }; location?: { directory?: string } }
 
 const host = (machine: string, path: string) => machinePath(machine, 'host', path)
+const toolState = { streaming: 'input-streaming', running: 'input-available', completed: 'output-available', error: 'output-error' } as const
 
 /**
  * One session, live.
@@ -21,33 +32,29 @@ const host = (machine: string, path: string) => machinePath(machine, 'host', pat
  * page instead. The page is the host's own truth, which keeps this correct across host updates.
  */
 export function Conversation({ machine, session }: { machine: string; session: Session }) {
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
-  const [active, setActive] = useState(false)
   const [queued, setQueued] = useState<Queued[]>([])
-  const [models, setModels] = useState<Model[]>([])
+  const [active, setActive] = useState(false)
   const [model, setModel] = useState('')
-  const [text, setText] = useState('')
   const [failure, setFailure] = useState<string>()
-  const scroller = useRef<HTMLDivElement>(null), pinned = useRef(true)
 
   const refresh = useCallback(async () => {
     const [page, waiting, running, inbox, info] = await Promise.all([
-      call<{ data: Message[] }>(host(machine, `/api/session/${session.id}/message?limit=60&order=desc`)),
+      call<{ data: ChatMessage[] }>(host(machine, `/api/session/${session.id}/message?limit=60&order=desc`)),
       call<{ data: Permission[] }>(host(machine, `/api/session/${session.id}/permission`)),
       call<{ data: Record<string, unknown> }>(host(machine, '/api/session/active')),
       call<{ data: Queued[] }>(host(machine, `/api/session/${session.id}/inbox`)),
       call<{ data: { model?: { id: string; providerID: string } } }>(host(machine, `/api/session/${session.id}`)),
     ])
-    setQueued(inbox.data ?? [])
-    setModel(info.data.model ? info.data.model.providerID + '/' + info.data.model.id : '')
     setMessages(page.data.slice().reverse())
     setPermissions(waiting.data ?? [])
     setActive(session.id in (running.data ?? {}))
+    setQueued(inbox.data ?? [])
+    setModel(info.data.model ? info.data.model.providerID + '/' + info.data.model.id : '')
   }, [machine, session.id])
 
   useEffect(() => {
-    setMessages([]); pinned.current = true
     refresh().catch(error => setFailure(error.message))
     let timer: ReturnType<typeof setTimeout> | undefined
     const source = new EventSource(host(machine, '/api/event'))
@@ -62,74 +69,83 @@ export function Conversation({ machine, session }: { machine: string; session: S
     return () => { source.close(); clearTimeout(timer) }
   }, [machine, session.id, refresh])
 
-  useEffect(() => { call<{ data: Model[] }>(host(machine, '/api/model')).then(answer => setModels(answer.data.filter(row => row.enabled !== false)), () => {}) }, [machine])
-  const choose = (value: string) => {
-    setModel(value)
-    const found = models.find(row => row.providerID + '/' + row.id === value)
-    if (found) void call(host(machine, `/api/session/${session.id}/model`), { method: 'POST', json: { model: { id: found.id, providerID: found.providerID } } }).then(refresh, error => setFailure(error.message))
+  const send = (message: PromptInputMessage) => {
+    const text = message.text?.trim()
+    if (!text) return
+    setFailure(undefined)
+    void call(host(machine, `/api/session/${session.id}/prompt`), { method: 'POST', json: { text } }).then(refresh, error => setFailure(error.message))
   }
-
-  useLayoutEffect(() => { const box = scroller.current; if (box && pinned.current) box.scrollTop = box.scrollHeight }, [messages, permissions, queued])
-
-  const send = async () => {
-    const body = text.trim()
-    if (!body) return
-    setText(''); setFailure(undefined); pinned.current = true
-    await call(host(machine, `/api/session/${session.id}/prompt`), { method: 'POST', json: { text: body } }).then(refresh, error => { setText(body); setFailure(error.message) })
-  }
+  const stop = () => void call(host(machine, `/api/session/${session.id}/interrupt`), { method: 'POST' }).then(refresh, error => setFailure(error.message))
+  const reply = (request: Permission, answer: 'once' | 'always' | 'reject') =>
+    void call(host(machine, `/api/session/${session.id}/permission/${request.id}/reply`), { method: 'POST', json: { reply: answer } }).then(refresh, error => setFailure(error.message))
 
   return (
-    <section className="conversation">
-      <div className="messages" ref={scroller} onScroll={event => { const box = event.currentTarget; pinned.current = box.scrollHeight - box.scrollTop - box.clientHeight < 40 }}>
-        {messages.map(message => <MessageView key={message.id} message={message} />)}
-        {queued.map(item => <div key={item.id} className="bubble user queued">{item.payload?.text}<div className="quiet small">queued</div></div>)}
-        {permissions.map(request => (
-          <div key={request.id} className="permission">
-            <strong>Allow {request.action}?</strong>
-            <pre>{request.message ?? request.resources.join('\n')}</pre>
-            <div className="row">
-              {(['once', 'always', 'reject'] as const).map(reply => (
-                <button key={reply} className={'button' + (reply === 'once' ? ' primary' : reply === 'reject' ? ' danger' : '')}
-                  onClick={() => call(host(machine, `/api/session/${session.id}/permission/${request.id}/reply`), { method: 'POST', json: { reply } }).then(refresh, error => setFailure(error.message))}>
-                  {reply === 'once' ? 'Allow once' : reply === 'always' ? 'Always allow' : 'Reject'}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
+    <div className="flex h-full min-h-0 flex-col">
+      <Thread className="min-h-0 flex-1">
+        <ConversationContent className="mx-auto w-full max-w-3xl">
+          {!messages.length && <ConversationEmptyState title={session.title || 'New session'} description={'Message the ' + (session.agent ?? 'agent') + ' to begin.'} />}
+          {messages.map(message => <MessageView key={message.id} message={message} streaming={active && message === messages.at(-1)} />)}
+          {permissions.map(request => (
+            <Alert key={request.id}>
+              <ShieldQuestionIcon />
+              <AlertTitle>Allow {request.action}?</AlertTitle>
+              <AlertDescription>
+                <pre className="max-h-60 w-full overflow-auto whitespace-pre-wrap break-all font-mono text-xs">{request.message ?? request.resources.join('\n')}</pre>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button size="sm" onClick={() => reply(request, 'once')}>Allow once</Button>
+                  <Button size="sm" variant="outline" onClick={() => reply(request, 'always')}>Always allow</Button>
+                  <Button size="sm" variant="destructive" onClick={() => reply(request, 'reject')}>Reject</Button>
+                </div>
+              </AlertDescription>
+            </Alert>
+          ))}
+          {failure && <Alert variant="destructive"><AlertTitle>The turn did not finish</AlertTitle><AlertDescription>{failure}</AlertDescription></Alert>}
+        </ConversationContent>
+        <ConversationScrollButton />
+      </Thread>
+
+      <div className="mx-auto w-full max-w-3xl space-y-2 px-4 pb-4">
+        {!!queued.length && (
+          <Queue>
+            <QueueSection>
+              <QueueSectionTrigger><QueueSectionLabel count={queued.length} label="queued" /></QueueSectionTrigger>
+              <QueueSectionContent><QueueList>{queued.map(item => <QueueItem key={item.id}><div className="flex items-center gap-2"><QueueItemIndicator /><QueueItemContent>{item.payload?.text}</QueueItemContent></div></QueueItem>)}</QueueList></QueueSectionContent>
+            </QueueSection>
+          </Queue>
+        )}
+        <PromptInput onSubmit={send}>
+          <PromptInputBody><PromptInputTextarea placeholder={active ? 'Working… what you send is queued for it' : 'Message the ' + (session.agent ?? 'agent')} /></PromptInputBody>
+          <PromptInputFooter>
+            <PromptInputTools><ModelPicker machine={machine} value={model} onPick={picked => void call(host(machine, `/api/session/${session.id}/model`), { method: 'POST', json: { model: picked } }).then(refresh, error => setFailure(error.message))} /></PromptInputTools>
+            {active ? <PromptInputSubmit status="streaming" type="button" onClick={stop} /> : <PromptInputSubmit status="ready" />}
+          </PromptInputFooter>
+        </PromptInput>
       </div>
-      {failure && <p className="error">{failure}</p>}
-      <div className="modelbar">
-        <input list="models" value={model} placeholder="Model (automatic)" onChange={event => choose(event.target.value)} onFocus={event => event.target.select()} />
-        <datalist id="models">{models.map(row => <option key={row.providerID + '/' + row.id} value={row.providerID + '/' + row.id}>{row.name}</option>)}</datalist>
-      </div>
-      <form className="composer" onSubmit={event => { event.preventDefault(); void send() }}>
-        <textarea value={text} rows={Math.min(8, text.split('\n').length)} placeholder={active ? 'Working… what you send is queued for it' : 'Message the ' + (session.agent ?? 'agent')}
-          onChange={event => setText(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send() } }} />
-        {active && <button type="button" className="button danger" onClick={() => call(host(machine, `/api/session/${session.id}/interrupt`), { method: 'POST' }).then(refresh, error => setFailure(error.message))}>Stop</button>}
-        <button className="button primary">Send</button>
-      </form>
-    </section>
+    </div>
   )
 }
 
-function MessageView({ message }: { message: Message }) {
-  if (message.type === 'user') return <div className="bubble user">{message.text}</div>
-  if (message.type === 'synthetic') return <details className="aside"><summary>{message.description ?? 'Delivered to the agent'}</summary><pre>{message.text}</pre></details>
+function MessageView({ message, streaming }: { message: ChatMessage; streaming: boolean }) {
+  if (message.type === 'user') return <Message from="user"><MessageContent>{message.text}</MessageContent></Message>
+  if (message.type === 'synthetic') return <Reasoning defaultOpen={false}><ReasoningTrigger getThinkingMessage={() => message.description ?? 'Delivered to the agent'} /><ReasoningContent>{message.text ?? ''}</ReasoningContent></Reasoning>
   if (message.type !== 'assistant') return null
   return (
-    <div className="assistant">
-      {message.content?.map((part, index) =>
-        part.type === 'text' ? <div key={index} className="prose">{part.text}</div>
-        : part.type === 'reasoning' ? <details key={index} className="aside"><summary>Thinking</summary><div className="prose">{part.text}</div></details>
-        : <details key={index} className={'tool ' + part.state.status}>
-            <summary><span className="name">{part.name}</span> <span className="quiet">{summarize(part.state.input)}</span> {part.state.status !== 'completed' && <em>{part.state.status}</em>}</summary>
-            <pre>{JSON.stringify(part.state.input, null, 2)}</pre>
-            <pre>{part.state.status === 'error' ? (typeof part.state.error === 'string' ? part.state.error : part.state.error?.message) : part.state.content?.map(row => row.text).join('\n')}</pre>
-          </details>)}
-      {message.retry && !message.time.completed && <p className="error">Retrying (attempt {message.retry.attempt}): {message.retry.error?.message}</p>}
-      {message.time.completed && <div className="byline quiet">{message.agent} · {message.model?.providerID}/{message.model?.id}</div>}
-    </div>
+    <Message from="assistant">
+      <MessageContent>
+        {message.content?.map((part, index) =>
+          part.type === 'text' ? <MessageResponse key={index}>{part.text}</MessageResponse>
+          : part.type === 'reasoning' ? <Reasoning key={index} isStreaming={streaming && !part.time?.completed} defaultOpen={false}><ReasoningTrigger /><ReasoningContent>{part.text}</ReasoningContent></Reasoning>
+          : <Tool key={part.id ?? index}>
+              <ToolHeader type={`tool-${part.name}`} title={[part.name, summarize(part.state.input)].filter(Boolean).join(' · ')} state={toolState[part.state.status]} />
+              <ToolContent>
+                <ToolInput input={part.state.input} />
+                <ToolOutput output={part.state.content?.map(row => row.text).join('\n')} errorText={part.state.status === 'error' ? (typeof part.state.error === 'string' ? part.state.error : part.state.error?.message) : undefined} />
+              </ToolContent>
+            </Tool>)}
+        {message.retry && !message.time.completed && <Alert variant="destructive"><AlertTitle>Retrying, attempt {message.retry.attempt}</AlertTitle><AlertDescription>{message.retry.error?.message}</AlertDescription></Alert>}
+      </MessageContent>
+      {message.time.completed && <div className="text-muted-foreground text-xs">{message.agent} · {message.model?.providerID}/{message.model?.id}</div>}
+    </Message>
   )
 }
 
@@ -138,5 +154,64 @@ function summarize(input: unknown) {
   if (!input || typeof input !== 'object') return ''
   const row = input as Record<string, unknown>
   const value = row.command ?? row.path ?? row.filePath ?? row.pattern ?? row.query ?? row.url ?? row.description ?? Object.values(row)[0]
-  return typeof value === 'string' ? value : ''
+  return typeof value === 'string' ? value.slice(0, 80) : ''
+}
+
+/**
+ * Only routes the machine's access policy allows are offered, and a provider whose account has a
+ * spent window says so on the row, so nobody learns it from a failed turn.
+ */
+function ModelPicker({ machine, value, onPick }: { machine: string; value: string; onPick: (model: { id: string; providerID: string }) => void }) {
+  const [open, setOpen] = useState(false)
+  const [models, setModels] = useState<Model[]>([])
+  const [routes, setRoutes] = useState<{ providerID: string; modelPattern: string }[]>()
+  const [accounts, setAccounts] = useState<Account[]>([])
+
+  useEffect(() => {
+    if (!open) return
+    call<{ data: Model[] }>(host(machine, '/api/model')).then(answer => setModels(answer.data.filter(row => row.enabled !== false)), () => {})
+    call<{ routes: { providerID: string; modelPattern: string }[] }>(machinePath(machine, 'usage', '/policy')).then(answer => setRoutes(answer.routes), () => setRoutes(undefined))
+    call<{ accounts: Account[] }>(machinePath(machine, 'usage', '/accounts')).then(answer => setAccounts(answer.accounts), () => {})
+  }, [machine, open])
+
+  const spent = useMemo(() => {
+    const out = new Map<string, string>()
+    for (const account of accounts) {
+      const full = account.windows.find(window => (window.usedPercent ?? 0) >= 100)
+      if (!full) continue
+      for (const provider of [account.provider, ...(account.connections ?? []).flatMap(row => row.routeProviders ?? [])]) out.set(provider, full.label + ' limit spent')
+    }
+    return out
+  }, [accounts])
+
+  const groups = useMemo(() => {
+    const allowed = models.filter(row => !routes || routes.some(route => route.providerID === row.providerID && new RegExp('^(?:' + route.modelPattern + ')$').test(row.id)))
+    const byProvider = new Map<string, Model[]>()
+    for (const row of allowed) byProvider.set(row.providerID, [...(byProvider.get(row.providerID) ?? []), row])
+    return [...byProvider].sort(([a], [b]) => Number(spent.has(a)) - Number(spent.has(b)) || a.localeCompare(b))
+  }, [models, routes, spent])
+
+  return (
+    <ModelSelector open={open} onOpenChange={setOpen}>
+      <ModelSelectorTrigger asChild><PromptInputButton className="w-auto max-w-80"><ModelSelectorName className="flex-none">{value || 'Automatic model'}</ModelSelectorName></PromptInputButton></ModelSelectorTrigger>
+      <ModelSelectorContent>
+        <ModelSelectorInput placeholder="Search allowed models…" />
+        <ModelSelectorList>
+          <ModelSelectorEmpty>No allowed model matches.</ModelSelectorEmpty>
+          {groups.map(([provider, rows]) => (
+            <ModelSelectorGroup key={provider} heading={provider + (spent.has(provider) ? ' — ' + spent.get(provider) : '')}>
+              {rows.map(row => (
+                <ModelSelectorItem key={provider + '/' + row.id} value={provider + '/' + row.id} onSelect={() => { onPick({ id: row.id, providerID: provider }); setOpen(false) }}>
+                  <ModelSelectorLogo provider={provider as never} />
+                  <ModelSelectorName>{row.name ?? row.id}</ModelSelectorName>
+                  {spent.has(provider) && <Badge variant="destructive">spent</Badge>}
+                  {value === provider + '/' + row.id && <CheckIcon className="ml-auto size-4" />}
+                </ModelSelectorItem>
+              ))}
+            </ModelSelectorGroup>
+          ))}
+        </ModelSelectorList>
+      </ModelSelectorContent>
+    </ModelSelector>
+  )
 }

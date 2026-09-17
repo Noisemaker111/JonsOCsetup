@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { call, type Machine } from './api'
 
 const ago = (time: number | null) => {
@@ -9,14 +12,14 @@ const ago = (time: number | null) => {
 
 export function Machines({ machines, open, link, changed }: { machines: Machine[]; open: (id: string) => void; link: () => void; changed: () => void }) {
   return (
-    <main className="narrow">
-      <div className="row"><h2 className="grow">Computers</h2><button className="button" onClick={link}>Link a computer</button></div>
-      {!machines.length && <p className="quiet">Nothing linked yet. Link the computer or server that runs your Quest Giver.</p>}
-      <ul className="list">
-        {machines.map(machine => (
-          <Row key={machine.id} machine={machine} open={open} changed={changed} />
-        ))}
-      </ul>
+    <main className="mx-auto max-w-2xl p-4 pt-10">
+      <Card>
+        <CardHeader className="flex flex-row items-center"><CardTitle className="flex-1">Computers</CardTitle><Button variant="outline" onClick={link}>Link a computer</Button></CardHeader>
+        <CardContent className="divide-y">
+          {!machines.length && <p className="text-muted-foreground">Nothing linked yet. Link the computer or server that runs your Quest Giver.</p>}
+          {machines.map(machine => <Row key={machine.id} machine={machine} open={open} changed={changed} />)}
+        </CardContent>
+      </Card>
     </main>
   )
 }
@@ -25,28 +28,27 @@ function Row({ machine, open, changed }: { machine: Machine; open: (id: string) 
   const [name, setName] = useState<string>()
   const [unlinking, setUnlinking] = useState(false)
   if (name !== undefined) return (
-    <li>
-      <form className="row grow" onSubmit={event => { event.preventDefault(); if (name.trim()) void call(`/api/machines/${machine.id}`, { method: 'PATCH', json: { name } }).then(() => { setName(undefined); changed() }) }}>
-        <input className="grow" autoFocus value={name} onChange={event => setName(event.target.value)} />
-        <button className="button primary">Save</button>
-        <button type="button" className="button" onClick={() => setName(undefined)}>Cancel</button>
-      </form>
-    </li>
+    <form className="flex gap-2 py-3" onSubmit={event => { event.preventDefault(); if (name.trim()) void call(`/api/machines/${machine.id}`, { method: 'PATCH', json: { name } }).then(() => { setName(undefined); changed() }) }}>
+      <Input autoFocus value={name} onChange={event => setName(event.target.value)} />
+      <Button type="submit">Save</Button>
+      <Button type="button" variant="outline" onClick={() => setName(undefined)}>Cancel</Button>
+    </form>
   )
   return (
-    <li>
-      <button className="plain grow left" onClick={() => open(machine.id)}>
-        <span className={'dot ' + (machine.online ? 'on' : 'off')} /> <strong>{machine.name}</strong>
-        <span className="quiet"> {machine.online ? 'online' : 'offline · last seen ' + ago(machine.lastSeen)}</span>
+    <div className="flex flex-wrap items-center gap-2 py-3">
+      <button className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => open(machine.id)}>
+        <span className={'size-2 shrink-0 rounded-full ' + (machine.online ? 'bg-emerald-500' : 'bg-muted-foreground/40')} />
+        <span className="font-medium">{machine.name}</span>
+        <span className="truncate text-muted-foreground text-sm">{machine.online ? 'online' : 'offline · last seen ' + ago(machine.lastSeen)}</span>
       </button>
       {unlinking ? <>
-        <span className="quiet">It disconnects now and must be linked again to come back.</span>
-        <button className="button danger" onClick={() => void call(`/api/machines/${machine.id}`, { method: 'DELETE' }).then(changed)}>Unlink</button>
-        <button className="button" onClick={() => setUnlinking(false)}>Keep</button>
+        <span className="text-muted-foreground text-sm">It disconnects now and must be linked again to come back.</span>
+        <Button size="sm" variant="destructive" onClick={() => void call(`/api/machines/${machine.id}`, { method: 'DELETE' }).then(changed)}>Unlink</Button>
+        <Button size="sm" variant="outline" onClick={() => setUnlinking(false)}>Keep</Button>
       </> : <>
-        <button className="plain quiet" onClick={() => setName(machine.name)}>Rename</button>
-        <button className="plain quiet" onClick={() => setUnlinking(true)}>Unlink</button>
+        <Button size="sm" variant="ghost" onClick={() => setName(machine.name)}>Rename</Button>
+        <Button size="sm" variant="ghost" onClick={() => setUnlinking(true)}>Unlink</Button>
       </>}
-    </li>
+    </div>
   )
 }
