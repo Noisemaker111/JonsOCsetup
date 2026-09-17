@@ -5,6 +5,7 @@ Home: C:/Users/Jk101/Projects/JonsOCsetup. Local projects below live in C:/Users
 | Project | Folder |
 | --- | --- |
 | OpenCode configuration and Quests | JonsOCsetup |
+| QuestGiver website (quest.jonsoc.com): site, Cloudflare relay, machine connector | questgiver |
 | AI lab game | ai-lab-game |
 | Fallout 4 multiplayer | fallout4multiplayer |
 | JG engine | jgengine |
