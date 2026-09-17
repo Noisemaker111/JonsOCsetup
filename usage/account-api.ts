@@ -13,6 +13,13 @@ export const ACCOUNT_USAGE_FILE = process.env.OPENCODE_ACCOUNT_USAGE_FILE ??
   join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local/state"), "opencode", "account-usage.json")
 export const ACCOUNT_USAGE_TTL_MS = 30_000
 const PLAN_TTL_MS = 6 * 3600_000
+/**
+ * A throttled account is answered by asking less often. The first step is the ordinary refresh
+ * interval and each further rejection doubles it, stopping at the five minutes the adapter already
+ * uses as its ceiling for a provider's own Retry-After. Nothing here changes what exhausted means:
+ * this only spaces out the asking, and the account keeps the observation it last obtained.
+ */
+export const throttleBackoffMs = (throttles: number) => throttles <= 0 ? 0 : Math.min(300_000, ACCOUNT_USAGE_TTL_MS * 2 ** Math.min(throttles - 1, 4))
 const stateKey = Symbol.for("opencode.account-usage.service")
 type State = { flights: Map<string, Promise<AccountSnapshot>>; timer?: ReturnType<typeof setInterval> }
 function state(): State {
@@ -64,6 +71,8 @@ export type AccountServiceOptions = {
   probe?: (connection: Connection, options: { now: () => number; fetch: typeof fetch; refreshPlan: boolean }) => Promise<Observation | ProbeFailure>
   fetch?: typeof fetch
   lockWaitMs?: number
+  /** Set by the process holding the machine's refresh lease; every other caller is a reader. */
+  leaseOwner?: string
 }
 function writeAtomic(file: string, snapshot: AccountSnapshot) {
   const temporary = file + "." + randomUUID() + ".tmp"
@@ -75,6 +84,15 @@ const pause = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, m
 /** Cross-process single flight, including TUI, collector CLI and immutable plugin generations. */
 async function refreshUnderLock(opts: AccountServiceOptions): Promise<AccountSnapshot> {
   const file = opts.file ?? ACCOUNT_USAGE_FILE, now = opts.now ?? Date.now
+  // While one process is keeping the shared cache current, everyone else reads it. An explicit
+  // refresh still reaches the provider; a poll no longer does.
+  if (!opts.refresh) {
+    const holder = refreshLeaseHolder(file, now())
+    if (holder && holder.owner !== opts.leaseOwner) {
+      const cached = readAccountUsage(file, now())
+      if (cached.accounts.length) return cached
+    }
+  }
   mkdirSync(dirname(file), { recursive: true })
   const lockFile = file + ".lock", owner = randomUUID(), deadline = Date.now() + (opts.lockWaitMs ?? 18_000)
   let acquired = false
@@ -136,18 +154,29 @@ async function refreshUnderLock(opts: AccountServiceOptions): Promise<AccountSna
           const exhausted = shared.some(w => w.state === "exhausted")
           const available = shared.length > 0 && shared.every(w => w.state === "available" && !windowNeedsRefresh(w, observed))
           const upcoming = observation.windows.flatMap(w => w.resetAt && Date.parse(w.resetAt) > observed ? [Date.parse(w.resetAt) + 100] : [])
+          // The streak clears when an answer arrives after the backoff was actually waited out. A
+          // success within one refresh interval of a rejection is another caller's luck, not
+          // recovery, so it keeps the streak instead of returning us to asking every few seconds.
+          const throttledAt = Date.parse(current.throttledAt ?? "")
+          const throttles = Number.isFinite(throttledAt) && observed - throttledAt < ACCOUNT_USAGE_TTL_MS ? current.throttles ?? 0 : 0
           accounts[i] = {
             ...base, activeConnectionID, windows: observation.windows, plan: observation.plan ?? current.plan,
             extraUsage: observation.extraUsage ?? current.extraUsage,
             state: exhausted ? "exhausted" : available ? "available" : "unknown",
             observedAt: new Date(observed).toISOString(),
-            nextAttemptAt: new Date(Math.min(observed + ACCOUNT_USAGE_TTL_MS, ...upcoming)).toISOString(),
-            failures: 0, error: null,
+            nextAttemptAt: new Date(Math.min(observed + Math.max(ACCOUNT_USAGE_TTL_MS, throttleBackoffMs(throttles)), ...upcoming)).toISOString(),
+            failures: 0, error: null, throttles, throttledAt: throttles ? current.throttledAt : null,
           }
         } else {
           const failures = current.failures + 1
-          const retryMs = Math.max(5000, (failure.retryAfterSeconds ?? Math.min(300, 15 * 2 ** Math.min(failures - 1, 5))) * 1000)
+          const throttled = /\b429\b/.test(failure.error ?? "")
+          const throttles = throttled ? (current.throttles ?? 0) + 1 : 0
+          // Retry-After is a floor, never a ceiling: a provider that keeps rejecting is answered by
+          // asking less often, not by asking again the moment it said we could.
+          const advised = (failure.retryAfterSeconds ?? Math.min(300, 15 * 2 ** Math.min(failures - 1, 5))) * 1000
+          const retryMs = Math.max(5000, advised, throttled ? throttleBackoffMs(throttles) : 0)
           accounts[i] = { ...base, state: failure.state, failures, error: failure.error,
+            throttles, throttledAt: throttled ? new Date(now()).toISOString() : current.throttledAt ?? null,
             nextAttemptAt: new Date(now() + retryMs).toISOString() }
         }
       }
@@ -172,11 +201,49 @@ export function getAccountUsage(options: AccountServiceOptions = {}): Promise<Ac
   flights.set(key, pending)
   return pending
 }
+/**
+ * One refresher per machine, not one per process.
+ *
+ * Three host processes and every launch preparation used to run this timer, and each also refreshed
+ * whenever anything asked for usage, so the Claude usage endpoint saw a request every few seconds
+ * and answered 429 on about two of every three attempts over the seven days to 2026-09-17 — the
+ * account then read stale and unknown because of our own polling. The owner is whichever process
+ * takes the lease; everyone else reads the shared cache the owner writes, and takes over only once
+ * the lease stops being renewed.
+ */
+export const REFRESH_LEASE_MS = 90_000
+const leaseFile = (file: string) => file + ".refresh-owner"
+export function refreshLeaseHolder(file = ACCOUNT_USAGE_FILE, now = Date.now()): { owner: string; pid: number; at: number } | null {
+  try {
+    const held = JSON.parse(readFileSync(leaseFile(file), "utf8"))
+    if (typeof held?.owner !== "string" || !Number.isFinite(held?.at) || now - held.at >= REFRESH_LEASE_MS) return null
+    return held
+  } catch { return null }
+}
+/** Takes the lease when nobody holds a live one; returns false for a reader. */
+export function claimRefreshLease(owner: string, file = ACCOUNT_USAGE_FILE, now = Date.now()): boolean {
+  const path = leaseFile(file)
+  const held = refreshLeaseHolder(file, now)
+  if (held && held.owner !== owner) return false
+  try {
+    mkdirSync(dirname(path), { recursive: true })
+    const temporary = path + "." + randomUUID() + ".tmp"
+    writeFileSync(temporary, JSON.stringify({ owner, pid: process.pid, at: now }), { flag: "wx", mode: 0o600 })
+    try { renameSync(temporary, path) } finally { if (existsSync(temporary)) unlinkSync(temporary) }
+    // Last writer wins only when the previous holder had already stopped renewing.
+    return refreshLeaseHolder(file, now)?.owner === owner
+  } catch { return false }
+}
 /** Refresh while the usage server is running; timers do not keep the host alive. */
-export function startAccountUsageRefresh() {
+export function startAccountUsageRefresh(file = ACCOUNT_USAGE_FILE) {
   const st = state()
   if (st.timer) return
-  const refresh = () => void getAccountUsage().catch(() => {})
+  const owner = randomUUID()
+  const beat = () => {
+    if (!claimRefreshLease(owner, file)) return false
+    return true
+  }
+  const refresh = () => { if (beat()) void getAccountUsage({ file: file === ACCOUNT_USAGE_FILE ? undefined : file, leaseOwner: owner }).catch(() => {}) }
   refresh()
   st.timer = setInterval(refresh, ACCOUNT_USAGE_TTL_MS)
   st.timer.unref?.()

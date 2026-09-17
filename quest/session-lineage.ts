@@ -17,6 +17,9 @@ export function isSessionQuotaExhausted(session: QuestSession): boolean {
   return QUOTA_FAILOVER_PATTERN.test(`${session.evidence?.join(" ") ?? ""} ${session.result ?? ""}`)
 }
 
+/** The saved run states that mean this Quest still owns the work: nothing here is proof of execution. */
+export const OWNED_RUN: ReadonlySet<string> = new Set(["planned", "executing", "waiting", "blocked"])
+
 /** A settled run reports the outcome we recorded; the owning host is not asked to confirm it again. */
 export const TERMINAL_RUN: ReadonlySet<string> = new Set(["completed", "failed", "cancelled", "missing", "stale"])
 export const isTerminalSession = (state: string) => TERMINAL_RUN.has(state)
@@ -56,4 +59,28 @@ export function terminalStepUpdates(q: import('./types').Quest) {
     return [{ stageID: step.id, status: 'pending' as const,
       evidence: `${ended} ${latest.result ?? latest.evidence.at(-1) ?? 'Inspect the retained run result before retrying.'}` }]
   })
+}
+
+
+/** Runs this Quest still owns: the newest attempt of each lineage, in a state that is not over. */
+export const ownedRuns = (q: import('./types').Quest) => latestSessionAttempts(q.sessions).filter(run => OWNED_RUN.has(run.state))
+
+/**
+ * What every surface shows for one run.
+ *
+ * useWorkerObservations polls the host only for ownedRuns, so a settled run has no
+ * observation entry and every reader that asked it directly sat on "Checking owning
+ * host..." for a worker that finished. The settled run reports the outcome we recorded;
+ * only a live run is worth inspecting.
+ */
+export const observedRun = (run: QuestSession, observation: (run: QuestSession) => any) =>
+  run.state && TERMINAL_RUN.has(run.state) ? { state: run.state, reason: run.result ?? 'Recorded outcome' } : observation(run)
+
+/**
+ * The host session id an execution can actually be confirmed against. A harness run executes in
+ * another vendor's process, so the absence of a native id is not absence of work.
+ */
+export const nativeRunID = (run: QuestSession) => {
+  const id = run.openCodeSessionId ?? run.openCodeSessionID ?? run.sessionID
+  return id?.startsWith('ses_') && !run.harness && run.runtime !== 'claude-code' ? id : undefined
 }

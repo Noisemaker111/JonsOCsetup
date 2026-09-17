@@ -26,7 +26,12 @@ outcome that cannot be established stays visible for
 inspection instead of launching duplicate work.
 
 `quest --help` lists the generated commands, and `quest <operation> --help` describes
-their arguments. Results are JSON. `quest mcp` exposes the same operations over
+their arguments. Results are JSON. `quest list` carries `counts` by group and a
+`scope` line for every record the query matched, not just the page, and
+`quest list --view report` returns the finished four-group answer (YOU, WORKING,
+QUEUED, DONE) the Quest Giver relays rather than composing. A Quest whose recorded
+project folder was deleted still reads, lists with a diagnostic and can be moved
+with `quest update <id> --project-root <path>`; only starting it is refused. `quest mcp` exposes the same operations over
 standard MCP stdio for other clients. Both interfaces call the running service;
 they never open the ledger or import runtime implementation files.
 `QUEST_API_REGISTRY` selects an intentional alternate service registry. The default

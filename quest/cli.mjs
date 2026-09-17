@@ -2,7 +2,7 @@
 import { pathToFileURL } from 'node:url'
 import { realpathSync } from 'node:fs'
 import { questOperations } from './operations.mjs'
-import { createQuestClient } from './client.mjs'
+import { createQuestClient, discoverQuestAPI, defaultQuestRegistry } from './client.mjs'
 
 const flag = key => '--' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase())
 const kind = schema => schema.enum ? schema.enum.map(value => JSON.stringify(value)).join(' | ') : schema.anyOf ? schema.anyOf.map(kind).join(' | ') : schema.type ?? 'JSON'
@@ -14,7 +14,7 @@ function shape(schema, prefix = '') {
   })
 }
 export function questHelp(method) {
-  if (!method) return ['quest <operation> [arguments]', '', ...Object.entries(questOperations).map(([name, op]) => `  ${name} ${op.positional.map(key => '<' + key + '>').join(' ')}\n    ${op.description}`), '', '  mcp\n    Serve the same operations over MCP stdio.', '', 'Use quest <operation> --help for arguments. Results are JSON.'].join('\n')
+  if (!method) return ['quest <operation> [arguments]', '', ...Object.entries(questOperations).map(([name, op]) => `  ${name} ${op.positional.map(key => '<' + key + '>').join(' ')}\n    ${op.description}`), '', '  health\n    Name the Quest API that is serving, and the generation and commit it is running.', '', '  mcp\n    Serve the same operations over MCP stdio.', '', 'Use quest <operation> --help for arguments. Results are JSON.'].join('\n')
   const op = questOperations[method]
   if (!op) throw Error('Unknown Quest operation: ' + method)
   return [`quest ${method} ${op.positional.map(key => '<' + key + '>').join(' ')}`, op.description, '', ...Object.entries(op.input.properties).flatMap(([key, schema]) => [`  ${op.positional.includes(key) ? key : flag(key)} <${kind(schema)}>${op.input.required.includes(key) ? ' (required)' : ''}${schema.description ? '\n    ' + schema.description : ''}`, ...shape(schema, key)]), '', '  --input-json  Read argument JSON from stdin; flags may add other fields.', '  --help --json  Print the complete shared operation contract.'].join('\n')
@@ -41,7 +41,35 @@ export function parseQuestArguments(args, initial = {}) {
   return { method, input }
 }
 
-export async function runQuestCLI(args, client = createQuestClient()) {
+/**
+ * Which Quest API answered, and what it is running.
+ *
+ * The host serving Jon's board was nine commits behind the branch, running a report form that had
+ * already been replaced, and no screen anywhere said which build was answering. This is the command
+ * that says it, and it is also the quickest read on whether discovery is healthy: it names the port,
+ * the process, how long `/health` took and which registry it came from.
+ */
+export async function questHealth(discover = discoverQuestAPI, registry = defaultQuestRegistry()) {
+  const service = await discover({ registry })
+  return {
+    registry, url: service.url, pid: service.pid,
+    generation: service.health?.generation ?? 'unknown', commit: service.health?.commit ?? 'unknown',
+    startedAt: service.health?.startedAt ?? null, ready: service.health?.ready === true,
+    healthMilliseconds: service.healthMilliseconds ?? null,
+  }
+}
+
+export async function runQuestCLI(args, client = createQuestClient(), discover = discoverQuestAPI) {
+  if (args[0] === 'health' && (args.includes('--help') || args.includes('-h'))) return 'quest health\nName the Quest API that is serving this registry, and the generation and commit it is running.'
+  if (args[0] === 'health') {
+    const health = await questHealth(discover)
+    if (args.includes('--json')) return JSON.stringify(health)
+    return ['Quest API ' + health.url + ' (process ' + health.pid + ')',
+      'Serving generation ' + health.generation + ' at commit ' + health.commit,
+      'Started ' + (health.startedAt ?? 'unknown') + '; a Quest Giver is ' + (health.ready ? 'bound' : 'not bound yet'),
+      'Health answered in ' + health.healthMilliseconds + ' ms',
+      'Registry ' + health.registry].join('\n')
+  }
   if (args[0] === 'mcp' && (args.includes('--help') || args.includes('-h'))) return 'quest mcp\nServe the generated Quest operations over MCP stdio.'
   if (args[0] === 'mcp') {
     const { serveQuestStdio } = await import('./mcp-client.mjs')

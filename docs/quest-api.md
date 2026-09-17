@@ -2,7 +2,7 @@
 
 Open `oc` in the maintained JonsOCsetup source. The persistent giver hosts the Quest API; workers use the same typed contract with their own session identity. The runtime prepares repositories and workspaces, selects an allowed account/model from the saved preferences and current evidence, and returns worker outcomes to the giver.
 
-Install the command as a durable local package from the reviewed `agents` checkout: run `npm install --global --install-links --omit=dev .`. This copies the generated client into the global installation, so retiring an implementation worktree cannot break `quest`. Repeat after updating the reviewed source. `quest --help` lists generated operations; `quest create --help` describes nested fields and `quest create --help --json` prints the contract. Pipe a JSON object to `quest create --input-json` for multiline descriptions and steps.
+Install the command as a durable local package from the reviewed `agents` checkout: run `npm install --global --install-links --omit=dev .`. This copies the generated client into the global installation, so retiring an implementation worktree cannot break `quest`. Repeat after updating the reviewed source. `quest --help` lists generated operations and `quest health`; `quest create --help` describes nested fields and `quest create --help --json` prints the contract. Pipe a JSON object to `quest create --input-json` for multiline descriptions and steps.
 
 Use `quest list --text "words" --view plan` for backlog review, `quest status <id>` for immediate progress, `quest plan <id>` for saved dependencies, and `quest get <id>` for results. Follow `nextOffset` for another page. `quest inspect <id> runs` reads historical evidence; the optional limit is a character target and never splits a record. Save workflow task, optional model, concurrency, readOnly and delivery using update. Omit model for automatic selection. `quest start <id>` starts that saved workflow and repeated start returns its existing admission.
 
@@ -10,7 +10,11 @@ Workers report only assigned steps using `report` with id, stepID, state and not
 
 `quest mcp` exposes the same operations over stdio. OpenCode discovers them through its configured `quests` MCP connection. Agents use these commands or discovered operations, not internal runtime scripts or reservation tools.
 
-The listener is shared by locations in one runtime process. Discovery validates process liveness and the endpoint identity, retaining stale receipts as evidence. Old hosts do not serve the current discovery format; reopen `oc` on current agents code after upgrading. Browser-origin requests are refused and local clients require the registry credential. A worker connection requires host-supplied session metadata and cannot acquire giver authority by changing arguments.
+The listener is shared by locations in one runtime process, and each host writes exactly one receipt into the registry, at a name derived from its own process and ledger, so restarting replaces a receipt instead of adding one. Whoever reads or writes the registry removes the receipts that cannot be connected to again: one written before this boot, one naming a process that is gone, one in an older format. Discovery probes the remaining candidates together, each with its own deadline, prefers the newest, and treats a Windows `EPERM` from a liveness check as "alive, cannot signal" rather than as a failure. When none answers, the error says how many receipts were tried and what each of them said.
+
+`GET /health` is answered from memory, without reading the ledger or calling the service, and carries `ready`, `instance`, `pid`, `startedAt`, `generation` and `commit`. `quest health` prints that for the registry a client is pointed at, which is how you find out which build is serving your board — the running host was nine commits behind `agents` on 2026-09-17 and no screen said so.
+
+Browser-origin requests are refused and local clients require the registry credential. A worker connection requires host-supplied session metadata and cannot acquire giver authority by changing arguments.
 
 The Codex Quest plugin exposes the same contract through its `quest` MCP namespace.
 For example, `quest plan <id>` in a shell and `quest.plan({id})` in MCP read the

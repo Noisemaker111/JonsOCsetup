@@ -5,11 +5,11 @@ import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv
 import { readUserGiver } from './giver-registry.mjs'
 import {cleanupQuests,cleanupStatus,installQuestCleanup} from "./cleanup"
 import {bindUserGiver,userGiverID,giverContext,adoptQuestGiver,verifyGiverBinding,refreshUserGiverLocation} from './user-giver'
-import { reconcileWorkers, inspectWorker } from "./worker-inspection"
+import { reconcileWorkers, inspectWorker, SETTLED_OBSERVATION } from "./worker-inspection"
 import {configureLearning,collectWorkflowOutcomes} from "./outcome-tracking"
 import {workspaceSettings} from "./workspace-settings"
 import { QuestContinuation } from './continuation'
-import { readAllQuests } from './index'
+import { questMemberships } from './shared-guard'
 import { configuredDispatchPolicyFile } from "../models/dispatch-planner"
 import { join } from "node:path"
 import { questsAPI,QuestError,type StartRun } from "./api"
@@ -20,10 +20,11 @@ import { questDispatch } from "./dispatch"
 import { QuestWorkspaces } from "./workspaces"
 import { questChanges } from "./change-view"
 import type { QuestHost } from "./runtime"
-import {toolSummary,toolDetail,toolSection,toolStatus,toolPlan} from './tool-projection'
+import {toolSummary,toolDetail,toolSection,toolStatus,toolPlan,questListResult} from './tool-projection'
 import {activeRuns,awaitQuestChange,observedState,runSummary,waitSteering,DEFAULT_WAIT_SECONDS,MAX_WAIT_SECONDS} from './wait'
 import {giverInstruction} from './giver-instruction'
 import {readQuestActivity,withQuestActivity} from './activity'
+import {boundedInspection} from './worker-observation.mjs'
 const validator=new AjvJsonSchemaValidator()
 const validators=new Map(Object.entries(questOperations).map(([name,op])=>[name,validator.getValidator(op.input)]))
 const unwrap=(value:any)=>value?.data??value
@@ -44,7 +45,7 @@ async function originatingUserTurn(store:QuestStore,host:QuestHost,sessionID:str
 }
 export function createQuestService(store:QuestStore,host:QuestHost,options:{policyFile?:string;settingsFile?:string;startRun?:StartRun;directory?:string;onDispose?:(dispose:()=>void)=>void}={}) {
  const {start,returns}=questDispatch(store,host,options)
- const continuation=new QuestContinuation(store,start,{verifyContext:async(context)=>{const result=await host.get({sessionID:context.sessionID});verifyGiverBinding(store,context,result?.data??result)}})
+ const continuation=new QuestContinuation(store,start,{verifyContext:async(context)=>{const result:any=await boundedInspection((signal:AbortSignal)=>host.get({sessionID:context.sessionID},{signal}));verifyGiverBinding(store,context,result?.data??result)}})
  const poll=(name:string,run:()=>Promise<unknown>)=>{
   let running=false
   return async()=>{
@@ -57,7 +58,10 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
  // Each operation retains its own exclusion so a slow call is never duplicated by the next timer.
  const polls=[
   poll('start admission',()=>consumeQuestStarts(store,host,continuation)),
-  poll('inspection',async()=>{await reconcileWorkers(store,host);collectWorkflowOutcomes(store)}),
+  // Token and route attribution is measured when a run ends, not on a timer. Collecting it every
+  // tick opened the telemetry ledger once per historical registration for 1,273 ms of the host's
+  // own JS thread, five seconds apart, for runs that finished days earlier.
+  poll('inspection',async()=>{const observations=await reconcileWorkers(store,host);if(Object.values(observations).some((o:any)=>SETTLED_OBSERVATION.has(o?.state)))collectWorkflowOutcomes(store)}),
   poll('continuation',()=>continuation.tick()),
   poll('return delivery',()=>returns.tick()),
  ]
@@ -90,8 +94,8 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
   if(input.action==='run'||waitRequest||input.inspect?.section==='runs')await reconcileWorkers(store,host,input.id)
   const requestID=context?.id??context?.callID
   if(!context?.sessionID||!requestID)throw new QuestError("HOST_CONTEXT_REQUIRED","Host must supply a session and tool call identity")
-  const session=await host.get({sessionID:context.sessionID}),directory=(session?.data??session)?.location?.directory
-   const memberships=readAllQuests(store.projectRoot,{includeArchived:true}).flatMap(row=>row.quest?row.quest.sessions.filter(s=>s.openCodeSessionId===context.sessionID||s.sessionID===context.sessionID).map(s=>({questID:row.quest!.id,stepIDs:['planned','executing','waiting'].includes(s.state)?s.deliverables.filter(id=>row.quest!.sessions.findLast(other=>other.deliverables.includes(id))===s):[]})):[])
+  const session=await boundedInspection(signal=>host.get({sessionID:context.sessionID},{signal})),directory=(session?.data??session)?.location?.directory
+   const memberships=questMemberships(store,context.sessionID).map(({quest,run:s})=>({questID:quest.id,stepIDs:['planned','executing','waiting'].includes(s.state)?s.deliverables.filter(id=>quest.sessions.findLast(other=>other.deliverables.includes(id))===s):[]}))
    const isWorker=memberships.length>0
    if(isWorker&&(input.action==='run'||input.action==='start'||input.action==='create'||input.update?.cancelContinuation===true))throw new QuestError('WORKER_DELEGATION_DENIED','Workers update assigned work; only givers create Quests or dispatch workers')
    if(isWorker&&input.action==='update'){
@@ -140,9 +144,14 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
       ...(blocking?outcome.changed?{}:{steering:waitSteering(after,runID,outcome.milliseconds)}:{settled:true,steering:'No active run to wait for; this is the settled saved state.'})}
     }
    }
-   if(input.action==='list')result={diagnostics:result.diagnostics.slice(0,10),items:result.items.map((item:any)=>listView==='plan'?toolPlan(store.read(item.id)!,continuation.status(item.id)):toolSummary(store.read(item.id)!)),total:result.total,nextOffset:result.nextOffset}
+   // One authoritative read per Quest in this answer. `store.read` replays a Quest's whole journal on
+   // top of its record, and a listing did it twice for every row -- once to project the summary and
+   // once to attach activity -- so `quest list` over this installation's 22 open Quests paid 44
+   // journal replays, 922 ms of them.
+   const listed=new Map<string,any>()
+   const record=(id:string)=>{if(!listed.has(id))listed.set(id,store.read(id));return listed.get(id)}
    if(['get','update'].includes(input.action)){
-    const q=store.read(input.id)!
+    const q=record(input.id)!
     if(input.inspect){
      const section=input.inspect.section
      const values:Record<string,()=>unknown>={cleanup:()=>cleanupStatus(store,q),description:()=>q.description,reward:()=>q.reward,steps:()=>q.stages,runs:()=>q.sessions,artifacts:()=>q.evidence,changes:()=>questChanges(q,workspaces),continuation:()=>continuation.status(q.id)}
@@ -156,15 +165,15 @@ export function createQuestService(store:QuestStore,host:QuestHost,options:{poli
     else result=toolDetail(q,continuation.status(q.id))
    }
    if(input.action==='list'){
-    const records=result.items.map((item:any)=>store.read(item.id)!)
-    const activity=await readQuestActivity(host,records)
-    result={...result,items:result.items.map((item:any,index:number)=>withQuestActivity(records[index],item,activity))}
+    // One host activity read for the whole matched set, then one assembled answer: items, counts by
+    // group and, for view=report, Jon's four groups. The projection lives in tool-projection.ts, and
+    // `record` keeps it to one journal replay per Quest.
+    result=questListResult(result,await readQuestActivity(host,result.records),(item:any)=>listView==='plan'?toolPlan(record(item.id)!,continuation.status(item.id)):toolSummary(record(item.id)!),listView)
    }else if(!input.inspect&&result?.id&&result.state){
-    const q=store.read(result.id)
+    const q=record(result.id)
     if(q)result=withQuestActivity(q,result,await readQuestActivity(host,[q]))
    }
    if(waited)result={...result,waited}
-   collectWorkflowOutcomes(store)
    if(input.action==='update'&&!isWorker&&context.external===true)requestQuestReview(store,input.id,devQueueGeneration(),input.update?.steps?.findLast((step:any)=>step.state==='done')?.id)
    return JSON.parse(JSON.stringify(result))
  }}

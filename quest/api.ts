@@ -12,6 +12,7 @@ import { namingProblems } from "./naming"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { projectIdentity, type ProjectIdentity } from "./project"
+import { scopeLabel } from "./board-project"
 import type { Quest, QuestStageStatus } from "./types"
 import { TASK_CLASSES } from "../models/task-demand"
 
@@ -47,9 +48,23 @@ function validateGraph(stages:Quest["stages"]) {
 /** The five operations share persistence and trusted context; transports add no protocol. */
 export function questsAPI(store: QuestStore, context: QuestContext, startRun: StartRun) {
   if (!context.project?.id || !context.project.root || !context.sessionID || !context.requestID) throw new QuestError("PROJECT_CONTEXT_REQUIRED", "A trusted project, session and request identity are required")
-  const getOwned = (id: string) => {
+  /**
+   * Reading a saved record never depends on its project still existing.
+   *
+   * 92 of 110 records on this machine name a project root that is gone (a retired hub folder, the
+   * installed configuration directory), and every read of them failed: `get`, `status` and `plan`
+   * refused with a project mismatch while `list` happily returned them, so the CLI, the board, the
+   * footer and the giver each reported a different backlog. The ledger is one shared store; the
+   * project says where a worker would execute, which is a dispatch question, not a read one.
+   */
+  const readRecord = (id: string) => {
     const q = store.read(text(id, "Quest id"))
     if (!q) throw new QuestError("NOT_FOUND", "Quest not found")
+    return q
+  }
+  /** Only dispatch needs the recorded project to be this session's, and to still exist on disk. */
+  const getOwned = (id: string) => {
+    const q = readRecord(id)
     if (q.project?.id !== context.project.id) throw new QuestError("PROJECT_MISMATCH", "Quest does not belong to this session project; select its owning project")
     return q
   }
@@ -61,15 +76,27 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
       const entries = readAllQuests(store.projectRoot, { includeArchived: true })
       const terms = (query.text === undefined ? '' : text(query.text, 'Search text')).toLocaleLowerCase().split(/\s+/).filter(Boolean)
       const diagnostics = entries.filter(x=>!x.quest).map(x=>"Unreadable Quest record: "+x.errors.join("; "))
-      const rows = entries.flatMap(x => x.quest ? [x.quest] : [])
+      const all = entries.flatMap(x => x.quest ? [x.quest] : [])
+      // A record whose recorded project folder was deleted stays readable and stays listed; it is
+      // only undispatchable. Saying so once, with the roots, is what turns "my Quests disappeared"
+      // into "these Quests need a new home".
+      const stranded = [...new Set(all.filter(q => q.project?.root && !existsSync(q.project.root)).map(q => q.project!.root))]
+      if (stranded.length) diagnostics.push(stranded.length + " recorded project folder" + (stranded.length === 1 ? " is" : "s are") + " gone, so Quests saved against " + stranded.join(", ") + " can be read and moved but not started. Move one with update projectRoot.")
+      const rows = all
         .filter(q => (query.allProjects === true || q.project?.id === context.project.id)
           && (!query.projectID || q.project?.id === query.projectID)
           && (query.state ? q.state === query.state : query.archived === true ? q.state === "Archived" : q.state !== "Archived")
           && terms.every(term => [q.title, q.description ?? q.objective, ...q.stages.map(step => step.title)].join('\n').toLocaleLowerCase().includes(term)))
         .sort((a,b) => b.updatedAt.localeCompare(a.updatedAt) || b.id.localeCompare(a.id))
-      return { diagnostics, items: rows.slice(offset, offset + limit).map(questView), total: rows.length, nextOffset: offset + limit < rows.length ? offset + limit : null }
+      const page = rows.slice(offset, offset + limit)
+      // `records` are the live objects the caller needs to derive one state per Quest and count the
+      // whole matched set; the transport strips them after the projection. `scope` names which set
+      // was counted, so the CLI, the board and the giver cannot silently count different backlogs.
+      return { diagnostics, items: page.map(questView), records: rows, page,
+        scope: scopeLabel(query.allProjects === true, context.project.root),
+        total: rows.length, nextOffset: offset + limit < rows.length ? offset + limit : null }
     },
-    get(id: string) { return questView(getOwned(id)) },
+    get(id: string) { return questView(readRecord(id)) },
     create(input: CreateQuest) {
       keys(input, ["title", "description", "steps", "reward", "workflow"])
       text(input.title, "Title"); text(input.description, "Description")
@@ -111,7 +138,7 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
     },
     update(id: string, input: UpdateQuest) {
       keys(input, ["title", "description", "reward", "steps", "artifacts", "archive", "workflow", "projectRoot"])
-      const q = getOwned(id)
+      const q = readRecord(id)
       // Admission alone left the record renameable: driven against the create-only guard, the giver
       // took the refusal, created a readable Quest, then patched it back to the refused wording.
       // Only the text this call writes is judged, so an older badly-named Quest stays editable.
@@ -211,6 +238,9 @@ export function questsAPI(store: QuestStore, context: QuestContext, startRun: St
       let q: Quest, stepIDs: string[]
       try {
         q = getOwned(id)
+        // Dispatch is the one operation a deleted project folder can refuse: a worker would have
+        // nothing to bind. Reads, moves and archiving of the same record keep working.
+        if (q.project?.root && !existsSync(q.project.root)) throw new QuestError("PROJECT_ROOT_MISSING", "The recorded project folder " + q.project.root + " no longer exists, so no worker can be bound there. Move the Quest with update projectRoot to the maintained source project, then start it again.")
         const workflow = questWorkflow(q)
         input = { ...input, model: input.model ?? workflow.model, task: input.task ?? workflow.task, readOnly: input.readOnly ?? workflow.readOnly }
         if (q.state === "Archived") throw new QuestError("ARCHIVED", "Reopen the Quest before starting work")
