@@ -29,3 +29,31 @@ input.code { font: 600 1.6rem ui-monospace, Consolas, monospace; letter-spacing:
 .list li { display: flex; align-items: center; gap: .5rem; padding: .6rem .8rem; flex-wrap: wrap } .list li + li { border-top: 1px solid var(--line) } .list:empty { display: none }
 .dot { display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; margin-right: .35rem } .dot.on { background: var(--good) } .dot.off { background: var(--quiet); opacity: .5 }
 .events { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: .75rem; max-height: 24rem; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: .75rem }
+select, textarea { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: .5rem .6rem }
+.small { font-size: .8rem } .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.workspace { display: grid; grid-template-columns: 20rem 1fr; height: calc(100dvh - 3rem) }
+.sessions { border-right: 1px solid var(--line); padding: .75rem; display: flex; flex-direction: column; gap: .6rem; overflow: auto; min-width: 0 }
+.sessions .list li { padding: .35rem .5rem } .sessions .list li.selected { background: color-mix(in srgb, var(--accent) 14%, transparent) } .sessions .list button { min-width: 0 }
+.pane { min-width: 0; display: flex; flex-direction: column; height: 100% } .pane.empty { place-content: center; align-items: center }
+.back { display: none; text-align: left; padding: .5rem 1rem }
+.conversation { flex: 1; min-height: 0; display: flex; flex-direction: column }
+.messages { flex: 1; overflow: auto; padding: 1rem; display: flex; flex-direction: column; gap: .75rem }
+.messages > * { max-width: 52rem; width: 100%; margin: 0 auto }
+.bubble.user { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); border: 1px solid var(--line); border-radius: 12px; padding: .6rem .8rem; white-space: pre-wrap }
+.assistant { display: grid; gap: .4rem } .prose { white-space: pre-wrap; overflow-wrap: anywhere } .byline { font-size: .75rem }
+details.aside, details.tool { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-size: .85rem }
+details summary { cursor: pointer; padding: .35rem .6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } details.aside summary { color: var(--quiet) }
+details pre, .permission pre { margin: 0; padding: .6rem; border-top: 1px solid var(--line); max-height: 20rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere }
+details > .prose { padding: .6rem; border-top: 1px solid var(--line); color: var(--quiet) }
+.tool .name { font-family: ui-monospace, Consolas, monospace; color: var(--accent) } .tool.error { border-color: var(--bad) } .tool em { color: var(--quiet) }
+.permission { border: 1px solid var(--accent); border-radius: 10px; padding: .75rem; display: grid; gap: .5rem; background: var(--panel) }
+.composer { display: flex; gap: .5rem; align-items: flex-end; padding: .75rem 1rem calc(.75rem + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); max-width: 54rem; width: 100%; margin: 0 auto }
+.composer textarea { flex: 1; resize: none }
+.button:disabled { opacity: .5; cursor: default }
+@media (max-width: 760px) {
+  .workspace { grid-template-columns: 1fr } .workspace.reading .sessions { display: none } .workspace:not(.reading) .pane { display: none }
+  .sessions { border-right: 0 } .back { display: block } .top .quiet { display: none }
+}
+.bubble.queued { opacity: .6; border-style: dashed }
+.modelbar { max-width: 54rem; width: 100%; margin: 0 auto; padding: .4rem 1rem 0 } .modelbar input { width: 100%; font-size: .8rem; padding: .3rem .6rem; color: var(--quiet) }
+.conversation > .error { max-width: 52rem; width: 100%; margin: 0 auto; padding: 0 1rem }
