@@ -13,6 +13,7 @@ import { readAllQuests } from "../index"
 import type { Quest, QuestSession, QuestStage } from "../types"
 import { filterTruths,questTruths,QUEST_FILTERS,type QuestFilter } from "../tui-model"
 import { questTruth, type QuestTruth, type ReachabilityTone } from "../reachability"
+import { workerLabel, workerTask } from "../quest-report"
 import { questChanges } from "../change-view"
 import { redact } from "../privacy"
 import { createGiver, rememberBoardView } from "../tui-workflow"
@@ -81,7 +82,7 @@ function stageRows(q: Quest): QuestStage[] {
  * "fast" (never a plain/default variant), and the reasoning level sits next
  * to it — never silently dropped.
  */
-export { workerTask, workerLabel } from "../quest-report"
+export { workerTask, workerLabel }
 
 /**
  * The exact, bare chip Jk asked for beside a subagent session: quest title,
