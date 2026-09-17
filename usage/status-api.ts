@@ -1,56 +1,213 @@
-import {portfolioPacing} from "./portfolio-pacing"
-import {sessionBurn} from "./session-burn"
-import {updateBurnControls} from "./burn-control"
-import { readLedger, summarizeLedger } from "./passive-ledger"
+import { pacingView, readPacingObservations } from "./portfolio-pacing"
+import { sessionBurn } from "./session-burn"
+import { ledgerCoverage, ledgerLatestContext, ledgerLatestRequest, ledgerRequestPage, ledgerScopeTotals, ledgerSessionPage, readLedger, type LedgerFilter, type LedgerRow } from "./passive-ledger"
 import { measuredIntervals, empiricalModels } from "./empirical-usage"
-import { renewUsageTargets } from "./usage-target"
 import { harvestCodexUsage } from "./codex-harvest"
 import { modelUsage } from "./model-usage"
 import { readContextEvents } from "./context-events"
-import { usageTimeline } from "./timeline"
-import { getAccountUsage, formatAccountUsage, ACCOUNT_USAGE_FILE } from "./account-api"
-import { aggregateTelemetry, type TelemetryFilter } from "./telemetry"
-import { telemetryLines } from "./telemetry-view"
-import { readQuotaObservations, readCalibrations, calibratedUsage } from "./calibration-store"
+import { getAccountUsage, readAccountUsage, formatAccountUsage, ACCOUNT_USAGE_FILE } from "./account-api"
+import { requestTiming } from "./telemetry"
+import { readQuotaObservations, readCalibrations } from "./calibration-store"
 import { readRequests } from "./telemetry-store"
 import { resetPlan } from "./reset-planner"
 import { compareWorkloads } from "./workload-planner"
 import { CREDIT_RATE_CARD, validateWorkloads, type UsageWorkload } from "./credit-rates"
-export type UsageStatusQuery = TelemetryFilter & { refresh?: boolean; offset?: number; limit?: number; reservePoints?: number; harvest?: boolean; allSessions?:boolean; deadlineAt?:number; workloads?: UsageWorkload[] }
+
+/**
+ * The default answer is a digest: accounts, their pools, pacing, the caller's own session totals and
+ * collector freshness. Nothing in it grows with the ledger.
+ *
+ * It used to be everything at once — a per-session list over every row the machine had ever
+ * recorded, the full request history, the timeline and the calibration matrices — so the reply to
+ * `usage_status({})` reached 9,308,294 characters and took 4.5 seconds against the live files on
+ * 2026-09-17, and the model that asked what its quota was got the machine's entire history instead.
+ * Every one of those is still available, each behind an explicit view and a page the caller sizes.
+ */
+export const USAGE_DETAIL_VIEWS = ["requests","sessions","timeline","pools","models","workloads","harvest"] as const
+export type UsageDetailView = (typeof USAGE_DETAIL_VIEWS)[number]
+export type UsageStatusQuery = LedgerFilter & { refresh?: boolean; reservePoints?: number; deadlineAt?: number; allSessions?: boolean }
+export type UsageDetailQuery = UsageStatusQuery & { view: UsageDetailView; offset?: number; limit?: number; workloads?: UsageWorkload[] }
+
+const DEFAULT_LIMIT = 25, MAX_LIMIT = 100
+function page(query: { offset?: number; limit?: number }) {
+  const offset = query.offset ?? 0, limit = query.limit ?? DEFAULT_LIMIT
+  if (!Number.isInteger(offset) || offset < 0 || !Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) throw new Error("Invalid usage pagination")
+  return { offset, limit }
+}
+function checkRange(query: UsageStatusQuery) {
+  if (query.from !== undefined && !Number.isFinite(query.from) || query.to !== undefined && !Number.isFinite(query.to) || query.from !== undefined && query.to !== undefined && query.from > query.to) throw new Error("Invalid usage time range")
+}
+const scopeOf = (query: UsageStatusQuery) => ({ sessionID: query.sessionID ?? null, questID: query.questID ?? null, accountID: query.accountID ?? null, includeWorkers: query.includeWorkers === true, from: query.from ?? null, to: query.to ?? null })
+const rowTiming = (r: LedgerRow) => requestTiming({ ...r, startedAt: r.startedAt, completedAt: r.completedAt, firstVisibleAt: r.firstVisibleAt, lastOutputAt: r.lastOutputAt } as any)
+
 /** One calculation service shared by the global tool, terminal and route forecasts. */
 export async function getUsageStatus(query: UsageStatusQuery = {}) {
-  const offset = query.offset ?? 0, limit = query.limit ?? 25
-  if (!Number.isInteger(offset) || offset < 0 || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("Invalid telemetry pagination")
-  if (query.from !== undefined && !Number.isFinite(query.from) || query.to !== undefined && !Number.isFinite(query.to) || query.from !== undefined && query.to !== undefined && query.from > query.to) throw new Error("Invalid telemetry time range")
-  validateWorkloads(query.workloads ?? [])
-  resetPlan([], [], Date.now(), query.reservePoints, query.deadlineAt)
-  const accounts = await getAccountUsage({ refresh: query.refresh === true })
-  const stored = readRequests(), aggregate = aggregateTelemetry(stored.records, query)
-  const contextEvents=readContextEvents(),observations=readQuotaObservations(ACCOUNT_USAGE_FILE + ".observations"),timeline=usageTimeline(stored.records,contextEvents.events,query,observations.observations)
-  const history = aggregate.requestHistory.slice(offset, offset + limit)
-  const pageStart=history[0]?.startedAt??query.from??-Infinity,pageEnd=aggregate.requestHistory[offset+limit]?.startedAt??query.to??Infinity
-  const pageTimeline={...timeline,points:timeline.points.slice(offset,offset+limit),compactions:timeline.compactions.filter(c=>(c.endedAt??c.startedAt)>=pageStart&&(c.endedAt??c.startedAt)<pageEnd).slice(-limit),quotaPoints:timeline.quotaPoints.filter(o=>o.at>=pageStart&&o.at<pageEnd).slice(-limit)}
-  const calibration = readCalibrations(), ids = new Set(aggregate.requestHistory.map(r=>r.id))
-  const allowance = calibratedUsage(stored.records.filter(r=>ids.has(r.id)), calibration.calibrations, { now: Date.now() })
-  const selectedAccounts = query.accountID ? accounts.accounts.filter(a => a.id === query.accountID) : accounts.accounts
-  const targets=renewUsageTargets(accounts.accounts,Date.now())
-  const allControls=updateBurnControls(accounts.accounts,observations.observations,undefined,targets)
-  const now=Date.now()
-  const portfolio=portfolioPacing(accounts.accounts,observations.observations,targets,allControls,now)
-  const burnControl=allControls.filter(c=>!query.accountID||c.accountID===query.accountID)
-  const planning = selectedAccounts.flatMap(account=>{const target=targets.find(t=>t.accountID===account.id&&t.deadlineAt>now);return resetPlan([account],observations.observations,now,query.reservePoints??target?.reservePoints,query.deadlineAt??target?.deadlineAt)})
-  const ledger=readLedger({from:query.from??now-7*86400000,to:query.to??now})
-  const sessionLedger=readLedger(query)
-  const intervals=measuredIntervals(accounts.accounts,ledger.observations,ledger.rows,{from:ledger.coverageFrom,gaps:ledger.gaps,diagnostics:ledger.receipt?.calibrationDiagnostics??ledger.receipt?.diagnostics})
-  const burn=sessionBurn(accounts.accounts,ledger.observations,ledger.rows,now,{from:ledger.coverageFrom,gaps:ledger.gaps,diagnostics:ledger.receipt?.calibrationDiagnostics??ledger.receipt?.diagnostics,observedAt:ledger.receipt?.at})
-  const accounting={sessionBurn:{...burn,pools:burn.pools.filter(p=>!query.accountID||p.scope.accountID===query.accountID)},...summarizeLedger(sessionLedger.rows),observedAt:ledger.receipt?.at??null,stale:!ledger.receipt||now<ledger.receipt.at||now-ledger.receipt.at>90000,coverageFrom:ledger.coverageFrom,collector:ledger.receipt,gaps:ledger.gaps,resolvedGaps:ledger.resolvedGaps,diagnostics:ledger.diagnostics,intervals,empiricalModels:empiricalModels(intervals),targets:targets.map(t=>({...t,state:t.deadlineAt>now?"active":"expired"}))}
-  const models = modelUsage(stored.records.filter(r => !query.accountID || r.accountID === query.accountID), query.to ?? now, query.from ?? now-28*86400000)
-  const workloads = compareWorkloads(selectedAccounts, planning, calibration.calibrations, query.workloads ?? [], now, accounting.stale ? [] : accounting.empiricalModels)
-  const harvest = query.harvest ? await harvestCodexUsage({from:query.from,to:query.to,now}) : undefined
-  const creditRates = { ...CREDIT_RATE_CARD, state: now < Date.parse(CREDIT_RATE_CARD.validUntil) ? "current" : "expired", note: "Published credit equivalent; not included-allowance percentage or actual charges." }
-  return { ...accounts, portfolio, burnControl, planning, workloads, models, creditRates, harvest, accounting, accounts: query.accountID ? accounts.accounts.filter(a => a.id === query.accountID) : accounts.accounts,
-    telemetry: { ...aggregate, portfolio, burnControl, planning, workloads, models, creditRates, harvest, accounting, allowance, timeline:pageTimeline, requestHistory: history, nextOffset: offset + limit < aggregate.requestHistory.length ? offset + limit : null, diagnostics: [...stored.diagnostics, ...contextEvents.diagnostics, ...observations.diagnostics, ...calibration.diagnostics], lastRecordedAt: stored.records.length ? Math.max(...stored.records.map(r => r.completedAt ?? r.startedAt)) : null } }
+  checkRange(query)
+  const now = Date.now()
+  // A read of the shared cache is the normal path; only an explicit refresh asks a provider, so a
+  // three-second poll can no longer turn into a three-second provider poll.
+  const accounts = query.refresh ? await getAccountUsage({ refresh: true }) : readAccountUsage(undefined, now)
+  const selected = query.accountID ? accounts.accounts.filter(a => a.id === query.accountID) : accounts.accounts
+  const observations = readPacingObservations(now)
+  const pacing = pacingView(accounts.accounts, observations, now, { accountID: query.accountID })
+  const planning = resetPlan(selected, observations, now, query.reservePoints, query.deadlineAt)
+  const filter: LedgerFilter = { sessionID: query.allSessions ? undefined : query.sessionID, questID: query.questID, accountID: query.accountID, includeWorkers: query.includeWorkers, from: query.from, to: query.to, source: "opencode" }
+  const totals = ledgerScopeTotals(filter)
+  const latest = ledgerLatestRequest(filter), context = ledgerLatestContext(filter)
+  const coverage = ledgerCoverage()
+  const receipt = coverage.receipt
+  return {
+    schema: 2, at: now, scope: scopeOf(query),
+    accounts: selected.map(account => ({
+      id: account.id, provider: account.provider, identity: account.identity, plan: account.plan, state: account.state,
+      error: account.error, extraUsage: account.extraUsage, observedAt: account.observedAt, freshness: account.freshness,
+      windows: account.windows.map(w => ({ id: w.id, label: w.label, scope: w.scope, model: w.model, state: w.state,
+        usedPercent: w.usedPercent, remainingPercent: w.remainingPercent, resetAt: w.resetAt, observedAt: w.observedAt,
+        minutesToReset: w.resetAt && Number.isFinite(Date.parse(w.resetAt)) ? Math.max(0, (Date.parse(w.resetAt) - now) / 60000) : null })),
+    })),
+    diagnostics: accounts.diagnostics,
+    // Per-pool numbers live in `planning`; the pacing rows keep the controller state per account.
+    pacing: { ...pacing, accounts: pacing.accounts.map(({ pools, ...row }) => row) }, planning,
+    session: {
+      ...scopeOf(query), basis: "recorded HTTP request counters for this scope; host and Codex counters corroborate and are never added here",
+      requests: totals?.requests ?? 0, runningRequests: totals?.runningRequests ?? 0, sessions: totals?.sessions ?? 0,
+      firstAt: totals?.firstAt ?? null, lastAt: totals?.lastAt ?? null,
+      tokens: totals?.totals ?? null, missingComponents: totals?.missing ?? null,
+      outputIncludingReasoning: totals?.outputIncludingReasoning ?? 0, missingOutputRequests: totals?.missingOutputRequests ?? 0,
+      models: totals?.models ?? [], context,
+      latestRequest: latest ? { id: latest.id, sessionID: latest.sessionID, route: latest.route, kind: latest.kind, state: latest.state, startedAt: latest.startedAt, timing: rowTiming(latest) } : null,
+    },
+    collector: {
+      observedAt: receipt?.at ?? null, stale: !receipt || now < receipt.at || now - receipt.at > 90000,
+      coverageFrom: coverage.coverageFrom, records: coverage.records, observations: coverage.observations,
+      openGaps: coverage.openGaps, resolvedGaps: coverage.resolvedGaps,
+      newRequests: receipt?.newRequests ?? null, changedRollouts: receipt?.readFiles ?? null, unchangedRollouts: receipt?.unchangedFiles ?? null,
+      diagnostics: receipt?.diagnostics?.slice(0, 10) ?? [],
+    },
+    creditRates: { validUntil: CREDIT_RATE_CARD.validUntil, state: now < Date.parse(CREDIT_RATE_CARD.validUntil) ? "current" : "expired", note: "Published credit equivalent; not included-allowance percentage or actual charges. Rates are in the workloads view." },
+    views: {
+      requests: "usage_status({view:'requests', sessionID?, from?, to?, offset?, limit?}) — one page of recorded requests, newest first.",
+      sessions: "usage_status({view:'sessions', from?, to?, offset?, limit?}) — one page of per-session counters.",
+      timeline: "usage_status({view:'timeline', sessionID?, from?, to?, offset?, limit?}) — one page of context/token points with compactions and quota samples.",
+      pools: "usage_status({view:'pools', accountID, from?, to?, offset?, limit?}) — allowance calibration and chronological accuracy for one account's pools.",
+      models: "usage_status({view:'models', from?, to?, offset?, limit?}) — measured per-route request rates and costs.",
+      workloads: "usage_status({view:'workloads', workloads:[…]}) — compare explicit workload alternatives against each pool.",
+      harvest: "usage_status({view:'harvest', from?, to?, offset?, limit?}) — locally readable Codex rollout counters, supplemental and never added to OpenCode totals.",
+      pacing: "usage_pacing({}) — the scheduler-facing pacing view on its own.",
+      experience: "usage_experience({accountID, view}) — cached quota evidence with its own provenance.",
+    },
+  }
 }
-export function formatUsageStatus(value: Awaited<ReturnType<typeof getUsageStatus>>) {
-  return [formatAccountUsage(value), "", ...telemetryLines(value.telemetry)].join("\n")
+export type UsageDigest = Awaited<ReturnType<typeof getUsageStatus>>
+
+/** Every detail view is asked for by name and answers exactly one page of what it was asked for. */
+export async function getUsageDetail(query: UsageDetailQuery) {
+  checkRange(query)
+  const { offset, limit } = page(query)
+  const now = Date.now(), view = query.view
+  if (!USAGE_DETAIL_VIEWS.includes(view)) throw new Error("Unknown usage view")
+  const filter: LedgerFilter = { sessionID: query.allSessions ? undefined : query.sessionID, questID: query.questID, accountID: query.accountID, includeWorkers: query.includeWorkers, from: query.from, to: query.to }
+  const head = { schema: 2, at: now, view, scope: scopeOf(query), offset, limit }
+  if (view === "requests") {
+    const result = ledgerRequestPage({ ...filter, offset, limit })
+    return { ...head, total: result.total, nextOffset: result.nextOffset,
+      requests: result.rows.map(r => ({ id: r.id, source: r.source, sessionID: r.sessionID, questID: r.questID ?? null, accountID: r.accountID ?? null, route: r.route, kind: r.kind, state: r.state, startedAt: r.startedAt, completedAt: r.completedAt ?? null, tokens: r.tokens, outputTotal: r.outputTotal ?? null, context: r.context ?? null, timing: rowTiming(r) })) }
+  }
+  if (view === "sessions") {
+    const result = ledgerSessionPage({ ...filter, offset, limit })
+    return { ...head, total: result.total, nextOffset: result.nextOffset, sessions: result.sessions,
+      crossSourceOverlap: "Native host, HTTP and Codex captures may overlap; source counters are not verified unique billable tokens." }
+  }
+  if (view === "timeline") {
+    const result = ledgerRequestPage({ ...filter, offset, limit })
+    const rows = [...result.rows].sort((a, b) => a.at - b.at)
+    const from = rows[0]?.at ?? query.from ?? now, to = rows.at(-1)?.at ?? query.to ?? now
+    const events = readContextEvents()
+    const sessions = new Set(rows.map(r => r.sessionID)); if (query.sessionID) sessions.add(query.sessionID)
+    const observations = readQuotaObservations(ACCOUNT_USAGE_FILE + ".observations", { from }).observations.filter(o => o.at <= to && (!query.accountID || o.accountID === query.accountID))
+    let cumulative = 0
+    return { ...head, total: result.total, nextOffset: result.nextOffset, from, to,
+      points: rows.map(r => { const known = Object.values(r.tokens).reduce((n: number, v) => n + (v ?? 0), 0) + (r.tokens.output === null && r.tokens.reasoning === null ? r.outputTotal ?? 0 : 0); cumulative += known
+        return { at: r.startedAt, requestID: r.id, sessionID: r.sessionID, contextTokens: r.context?.tokens ?? null, requestKnownTokens: known, pageCumulativeKnownTokens: cumulative, partial: Object.values(r.tokens).some(v => v === null), model: r.route.providerID + "/" + r.route.modelID, kind: r.kind } }),
+      // A page's companions are paged too: the compactions and quota samples inside the page's own
+      // span, and never more of them than the page the caller asked for.
+      compactions: events.events.filter(e => sessions.has(e.sessionID) && e.at >= from && e.at <= to).slice(-limit).map(e => ({ id: e.id, sessionID: e.sessionID, at: e.at, type: e.type, reason: e.reason ?? null, error: e.error ?? null })),
+      quotaSamples: observations.slice(-limit).map(o => ({ at: o.at, accountID: o.accountID, windowID: o.windowID, usedPoints: o.usedPoints, resetAt: o.resetAt, provenance: "observed-all-account-activity" })),
+      cumulativeBasis: "Cumulative tokens accumulate within this page only; ask for the next page to continue the series." }
+  }
+  if (view === "pools") {
+    if (!query.accountID) throw new Error("A pools view needs an exact accountID from a previous digest")
+    const accounts = readAccountUsage(undefined, now)
+    const account = accounts.accounts.filter(a => a.id === query.accountID)
+    if (!account.length) throw new Error("Account not found in current connections")
+    const from = query.from ?? now - 7 * 86400000, to = query.to ?? now
+    const ledger = readLedger({ from, to, accountID: query.accountID })
+    const coverage = { from: ledger.coverageFrom, gaps: ledger.gaps, diagnostics: ledger.receipt?.calibrationDiagnostics ?? ledger.receipt?.diagnostics, observedAt: ledger.receipt?.at }
+    const burn = sessionBurn(account, ledger.observations, ledger.rows, now, coverage)
+    const intervals = measuredIntervals(account, ledger.observations, ledger.rows, coverage)
+    return { ...head, from, to, planning: resetPlan(account, readPacingObservations(now), now, query.reservePoints, query.deadlineAt),
+      empiricalModels: empiricalModels(intervals),
+      pools: burn.pools.map(pool => ({ scope: pool.scope, provider: pool.provider, plan: pool.plan, label: pool.label, evidence: pool.evidence, accuracy: pool.accuracy,
+        sessionTotal: pool.sessions.length, sessions: pool.sessions.slice(offset, offset + limit).map(s => ({ ...s, recentRequests: s.recentRequests.slice(0, limit) })),
+        seriesTotal: pool.series.length, series: pool.series.slice(-limit) })),
+      unassignedRequests: burn.unassignedRequests, limitations: burn.limitations }
+  }
+  if (view === "models") {
+    const stored = readRequests()
+    const models = modelUsage(stored.records.filter(r => !query.accountID || r.accountID === query.accountID), query.to ?? now, query.from ?? now - 28 * 86400000)
+    return { ...head, total: models.length, nextOffset: offset + limit < models.length ? offset + limit : null, models: models.slice(offset, offset + limit), diagnostics: stored.diagnostics.slice(0, 10) }
+  }
+  if (view === "workloads") {
+    const workloads = query.workloads ?? []
+    validateWorkloads(workloads)
+    if (!workloads.length) throw new Error("A workloads view needs at least one explicit workload alternative")
+    const accounts = readAccountUsage(undefined, now)
+    const planning = resetPlan(accounts.accounts, readPacingObservations(now), now, query.reservePoints, query.deadlineAt)
+    return { ...head, creditRates: { ...CREDIT_RATE_CARD, state: now < Date.parse(CREDIT_RATE_CARD.validUntil) ? "current" : "expired" },
+      workloads: compareWorkloads(accounts.accounts, planning, readCalibrations().calibrations, workloads, now) }
+  }
+  const to = query.to ?? now, from = query.from ?? to - 4 * 3600000
+  const harvest = await harvestCodexUsage({ from, to, now })
+  return { ...head, from: harvest.from, to: harvest.to, scannedFiles: harvest.scannedFiles, readFiles: harvest.readFiles,
+    total: harvest.sessions.length, nextOffset: offset + limit < harvest.sessions.length ? offset + limit : null,
+    sessions: harvest.sessions.slice(offset, offset + limit).map(s => ({ id: s.id, parentID: s.parentID, source: s.source, startedAt: s.startedAt, requests: s.requests, totals: s.totals, lastObservedAt: s.lastObservedAt, quotaSamples: s.quota.length, gaps: s.gaps.length })),
+    coverage: harvest.coverage, diagnostics: harvest.diagnostics.slice(0, 10) }
+}
+
+const number = (n: number | null | undefined) => n === null || n === undefined ? "unknown" : n.toLocaleString("en-US")
+export function formatUsageStatus(value: UsageDigest): string {
+  const t = value.session.tokens
+  const lines = [
+    formatAccountUsage({ schema: 1, updatedAt: "", accounts: value.accounts as any, diagnostics: [] }, value.at),
+    "",
+    ...value.pacing.accounts.map(a => a.provider + "/" + a.accountID.slice(-6) + " " + a.plan + ": " + a.state + "; " + a.mode +
+      (a.remainingPoints === null ? "" : "; " + a.remainingPoints.toFixed(1) + "% left in " + a.windowID) +
+      (a.paceMultiplier == null ? "" : "; " + a.paceMultiplier.toFixed(2) + "x current pace required") +
+      (a.pacing ? "; desired " + a.pacing.desiredSlots + "/" + a.pacing.ceiling : "")),
+    (value.scope.sessionID ? "This conversation" : "All recorded sessions") + (value.scope.includeWorkers ? " including workers" : "") + ": " +
+      value.session.requests + " requests" + (value.session.runningRequests ? " (" + value.session.runningRequests + " in flight)" : "") +
+      " across " + value.session.sessions + " session(s)",
+    t ? "Input " + number(t.input) + " · cache read " + number(t.cacheRead) + " · cache write " + number(t.cacheWrite) + " · output incl. reasoning " + number(value.session.outputIncludingReasoning) : "No recorded counters for this scope",
+    "Current context: " + (value.session.context ? number(value.session.context.tokens) + " (" + value.session.context.source + ")" : "unavailable"),
+    "Collector: " + (value.collector.stale ? "stale / collecting" : "current") + "; " + number(value.collector.records) + " counter records; " + value.collector.openGaps + " open gap(s)",
+    ...value.collector.diagnostics,
+    ...value.diagnostics,
+    "Detail: " + Object.keys(value.views).join(", ") + " — each returns one page you size.",
+  ]
+  return lines.filter(line => line !== undefined).join("\n")
+}
+export function formatUsageDetail(value: Awaited<ReturnType<typeof getUsageDetail>>): string {
+  const rows = value as any
+  const head = value.view + " " + (rows.total ?? 0) + " total, showing " + value.offset + "–" + (value.offset + value.limit) +
+    (rows.nextOffset ? " · next offset " + rows.nextOffset : " · end of results")
+  if (value.view === "requests") return [head, ...rows.requests.map((r: any) => new Date(r.startedAt).toISOString().slice(11, 19) + "  " + r.route.providerID + "/" + r.route.modelID + "  " + r.kind + "/" + r.state + "  in " + number(r.tokens.input) + " · cached " + number(r.tokens.cacheRead) + " · out " + number(r.outputTotal))].join("\n")
+  if (value.view === "sessions") return [head, ...rows.sessions.map((s: any) => s.source + "/" + s.sessionID.slice(-8) + "  " + s.requests + " requests  out " + number(s.outputIncludingReasoning) + "  last " + new Date(s.lastAt).toISOString().slice(11, 19))].join("\n")
+  if (value.view === "timeline") return [head, ...rows.points.map((p: any) => new Date(p.at).toISOString().slice(11, 19) + "  ctx " + number(p.contextTokens) + "  req " + number(p.requestKnownTokens) + "  page sum " + number(p.pageCumulativeKnownTokens) + "  " + p.model),
+    ...rows.compactions.map((c: any) => new Date(c.at).toISOString().slice(11, 19) + "  compaction " + c.type + (c.error ? " · " + c.error : "")),
+    ...rows.quotaSamples.map((q: any) => new Date(q.at).toISOString().slice(11, 19) + "  account " + q.accountID.slice(-6) + " " + q.windowID + " " + q.usedPoints + "% used (all activity)")].join("\n")
+  if (value.view === "pools") return [head, ...rows.pools.map((p: any) => p.provider + " " + p.label + ": allowance attribution " + p.accuracy.state + "; " + p.accuracy.chronologicalTestedIntervals + " chronological tests; max error " + (p.accuracy.maximumAbsoluteErrorPoints === null ? "unknown" : p.accuracy.maximumAbsoluteErrorPoints.toFixed(4)) + " points (target 0.01); " + p.sessionTotal + " session(s)")].join("\n")
+  if (value.view === "models") return [head, ...rows.models.map((m: any) => m.route.modelID + " (" + (m.route.reasoning ?? m.route.variant ?? "reasoning unknown") + "): " + m.requests + " requests / " + m.sessions + " sessions; " + number(m.metrics.speed.visibleOutputTokensPerSecond) + " visible tokens/s")].join("\n")
+  if (value.view === "workloads") return [head, ...rows.workloads.map((w: any) => w.label + ": " + (w.creditEquivalent.credits === null ? "credit comparison unavailable" : w.creditEquivalent.credits.toFixed(3) + " published credit equivalent") + "; allowance " + (w.windows.some((p: any) => p.estimate) ? w.windows.map((p: any) => p.windowID + " " + p.fit).join(", ") : "uncalibrated"))].join("\n")
+  return [head, "Codex rollouts: " + rows.readFiles + " read of " + rows.scannedFiles + " scanned; " + rows.coverage.reconciledRequests + " reconciled requests, " + rows.coverage.rejectedCounters + " counter gaps",
+    ...rows.sessions.map((s: any) => s.id.slice(-8) + " " + s.source + ": " + s.requests + " requests; out incl. reasoning " + number(s.totals.output + s.totals.reasoning))].join("\n")
 }

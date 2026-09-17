@@ -48,11 +48,8 @@ import {
 } from "../tui-usage-format"
 import { openTuiDialog } from "../tui-dialog"
 import { usageCache as sharedUsageCache, ensureUsageCache } from "../usage-lib"
-import { getUsageStatus } from "../status-api"
-import { aggregateTelemetry } from "../telemetry"
-import { readRequests } from "../telemetry-store"
-import { timelineLines } from "../timeline"
-import { telemetryLines } from "../telemetry-view"
+import { getUsageStatus, getUsageDetail, formatUsageStatus, formatUsageDetail } from "../status-api"
+import { ledgerLatestContext } from "../passive-ledger"
 
 const DEBUG = join(homedir(), ".local", "state", "opencode", "tui-usage.log")
 function dbg(msg: string): void {
@@ -474,7 +471,10 @@ function UsageTable(props: { context: any; view: UsageView }) {
 
 export function ConversationTelemetry(props: { context: any }) {
   const colors = themeColors(props.context)
+  // The panel shows the digest and asks for a timeline page only when history is open, so an idle
+  // panel repainting every three seconds costs one digest and never the whole recorded history.
   const [summary, setSummary] = createSignal<Awaited<ReturnType<typeof getUsageStatus>>>()
+  const [timeline, setTimeline] = createSignal<Awaited<ReturnType<typeof getUsageDetail>>>()
   const [workers, setWorkers] = createSignal(false)
   const [history,setHistory]=createSignal(false),[offset,setOffset]=createSignal(0),[hours,setHours]=createSignal(0)
   const [scope,setScope]=createSignal<{kind:string;id?:string}>({kind:activeSessionID(props.context)?"session":"all"})
@@ -485,9 +485,15 @@ export function ConversationTelemetry(props: { context: any }) {
   const refresh = async () => {
     const sessionID = activeSessionID(props.context)
     if (!sessionID && scope().kind==="session") { setFailure("Select a conversation to inspect its usage."); return }
-    try { const value = await getUsageStatus({ sessionID:scope().kind==="session"?sessionID:undefined,questID:scope().kind==="quest"?scope().id:undefined,accountID:scope().kind==="account"?scope().id:undefined,includeWorkers: workers(),offset:offset(),limit:10,from:hours()?Date.now()-hours()*3600000:undefined }); if (!disposed) { setSummary(value); setFailure("") } }
+    const query = { sessionID:scope().kind==="session"?sessionID:undefined, questID:scope().kind==="quest"?scope().id:undefined, accountID:scope().kind==="account"?scope().id:undefined, includeWorkers: workers(), from:hours()?Date.now()-hours()*3600000:undefined }
+    try {
+      const value = await getUsageStatus(query)
+      const page = history() ? await getUsageDetail({ ...query, view:"timeline", offset:offset(), limit:10 }) : undefined
+      if (!disposed) { setSummary(value); setTimeline(page); setFailure("") }
+    }
     catch { if (!disposed) setFailure("Conversation telemetry unavailable; retrying.") }
   }
+  const showHistory=()=>{setHistory(!history());setOffset(0);void refresh()}
   onMount(() => { void refresh(); const timer = setInterval(() => void refresh(), 3000); onCleanup(() => { disposed = true; clearInterval(timer) }) })
   return <box flexDirection="column" flexShrink={0}>
     <text fg={colors.text} attributes={TextAttributes.BOLD} wrapMode="none" truncate>Usage · {scope().kind}</text>
@@ -495,7 +501,7 @@ export function ConversationTelemetry(props: { context: any }) {
     <box flexDirection="row" gap={2}>
       <text fg={colors.primary} onMouseUp={()=>setChoosingScope(!choosingScope())}>Choose scope</text>
       <text fg={colors.primary} onMouseUp={()=>{const values=[0,1,24,168];setHours(values[(values.indexOf(hours())+1)%values.length]);setOffset(0);void refresh()}}>{hours()?"Last "+hours()+"h":"All time"}</text>
-      <text fg={colors.primary} onMouseUp={()=>setHistory(!history())}>{history()?"Hide history":"Show history"}</text>
+      <text fg={colors.primary} onMouseUp={showHistory}>{history()?"Hide history":"Show history"}</text>
     </box>
     <Show when={choosingScope()}>
       <box flexDirection="row" gap={2}>
@@ -509,11 +515,11 @@ export function ConversationTelemetry(props: { context: any }) {
       </box>
     </Show>
     <Show when={failure()}><text fg={colors.warn} wrapMode="none" truncate>{failure()}</text></Show>
-    <Show when={summary()}><For each={telemetryLines(summary()!.telemetry)}>{line => <text fg={colors.muted} wrapMode="none" truncate>{line}</text>}</For></Show>
-    <Show when={history() && summary()}>
-      <text fg={colors.muted}>UTC time · context / request / cumulative known tokens</text>
-      <For each={timelineLines(summary()!.telemetry.timeline)}>{line=><text fg={colors.muted} wrapMode="word">{line}</text>}</For>
-      <box flexDirection="row" gap={2}><text fg={colors.primary} onMouseUp={()=>{setOffset(Math.max(0,offset()-10));void refresh()}}>Previous</text><text fg={colors.primary} onMouseUp={()=>{const next=summary()?.telemetry.nextOffset;if(next!==null&&next!==undefined){setOffset(next);void refresh()}}}>Next</text></box>
+    <Show when={summary()}><For each={formatUsageStatus(summary()!).split("\n")}>{line => <text fg={colors.muted} wrapMode="none" truncate>{line}</text>}</For></Show>
+    <Show when={history() && timeline()}>
+      <text fg={colors.muted}>UTC time · context / request / page cumulative known tokens</text>
+      <For each={formatUsageDetail(timeline()!).split("\n")}>{line=><text fg={colors.muted} wrapMode="word">{line}</text>}</For>
+      <box flexDirection="row" gap={2}><text fg={colors.primary} onMouseUp={()=>{setOffset(Math.max(0,offset()-10));void refresh()}}>Previous</text><text fg={colors.primary} onMouseUp={()=>{const next=(timeline() as any)?.nextOffset;if(next!==null&&next!==undefined){setOffset(next);void refresh()}}}>Next</text></box>
     </Show>
   </box>
 }
@@ -598,8 +604,8 @@ function useContextGauge(context: any, sessionTotals = false) {
     const sessionID = activeSessionID(context)
     if (!sessionID) { setText("unavailable"); return }
     try {
-      const stored = readRequests(), current = aggregateTelemetry(stored.records, { sessionID }).context.current
-      setText(sessionTotals ? sessionTokenLine(stored.records,sessionID) : current ? current.tokens.toLocaleString("en-US") + " at last request · " + Math.max(0, Math.floor((Date.now()-current.at)/1000)) + "s ago" : "unavailable")
+      const current = ledgerLatestContext({ sessionID, source: "opencode" })
+      setText(sessionTotals ? sessionTokenLine(sessionID) : current ? current.tokens.toLocaleString("en-US") + " at last request · " + Math.max(0, Math.floor((Date.now()-current.at)/1000)) + "s ago" : "unavailable")
     } catch { setText("unavailable · read failed") }
   }
   onMount(() => { refresh(); const timer = setInterval(refresh, 2000); onCleanup(() => clearInterval(timer)) })
