@@ -74,8 +74,8 @@ async function openQuestServer(store: QuestStore, registrations: Set<Registratio
    * says so on disk, so it is watched rather than read. If the watch cannot be installed the request
    * falls back to reading it, because a wrong `ready` is worse than a slow one.
    */
-  let bound: string | undefined
-  const refreshBinding = () => { try { const row = readUserGiver(store.runtime); bound = row?.state === 'bound' ? row.directory : undefined } catch { bound = undefined } }
+  let bound: string | undefined, giverSession: string | undefined
+  const refreshBinding = () => { try { const row = readUserGiver(store.runtime); bound = row?.state === 'bound' ? row.directory : undefined; giverSession = row?.state === 'bound' ? row.sessionID : undefined } catch { bound = undefined; giverSession = undefined } }
   refreshBinding()
   let watched = false
   try {
@@ -88,6 +88,23 @@ async function openQuestServer(store: QuestStore, registrations: Set<Registratio
     if (!sessionID || !service) throw Error('The Quest Giver service is not connected yet.')
     return service.call(method, input, { sessionID, id: requestID, external, native: !external })
   }
+  /**
+   * Every saved change appends to `journals/<questID>.jsonl`, whichever process made it, so the
+   * directory is the one signal that covers the giver, its workers and the `quest` command alike.
+   * Watched only while somebody is listening.
+   */
+  const listeners = new Set<(id: string) => void>()
+  let journals: ReturnType<typeof watch> | undefined
+  const listen = (listener: (id: string) => void) => {
+    listeners.add(listener)
+    if (!journals) {
+      const directory = join(store.runtime, 'journals')
+      mkdirSync(directory, { recursive: true })
+      journals = watch(directory, (_event, file) => { const id = String(file ?? '').match(/^([a-f0-9]+)\.jsonl$/)?.[1]; if (id) for (const each of listeners) each(id) })
+      journals.unref(); journals.on('error', () => { journals = undefined })
+    }
+    return () => { listeners.delete(listener); if (!listeners.size) { journals?.close(); journals = undefined } }
+  }
   const http = createServer(async (request, response) => {
     const json = (status: number, value: unknown) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(value)) }
     const authorization = Buffer.from(request.headers.authorization ?? '')
@@ -96,8 +113,18 @@ async function openQuestServer(store: QuestStore, registrations: Set<Registratio
       json(403, { code: 'FORBIDDEN', message: 'Quest API credentials are required; browser-origin requests are not accepted.' }); return
     }
     try {
-      if (request.url === '/health' && request.method === 'GET') { json(200, { instance, ready: ready(), pid: process.pid, startedAt, ...identity }); return }
+      if (request.url === '/health' && request.method === 'GET') { json(200, { instance, ready: ready(), giverSessionID: ready() ? giverSession : undefined, pid: process.pid, startedAt, ...identity }); return }
       if (request.url === '/contract' && request.method === 'GET') { json(200, questOperations); return }
+      if (request.url === '/events' && request.method === 'GET') {
+        response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
+        response.write('data: ' + JSON.stringify({ type: 'connected', instance }) + '\n\n')
+        // One write to a journal raises several watch events; a reader wants one line per saved change.
+        const pending = new Map<string, ReturnType<typeof setTimeout>>()
+        const stop = listen(id => { if (!pending.has(id)) pending.set(id, setTimeout(() => { pending.delete(id); response.write('data: ' + JSON.stringify({ type: 'quest.changed', id }) + '\n\n') }, 50)) })
+        const beat = setInterval(() => response.write(': heartbeat\n\n'), 25_000)
+        response.on('close', () => { stop(); clearInterval(beat); for (const timer of pending.values()) clearTimeout(timer) })
+        return
+      }
       const sessionRoute = request.url?.match(/^\/mcp\/session\/([a-f0-9-]+)$/)?.[1]
       if (request.url === '/mcp' || sessionRoute) {
         const registration = sessionRoute && [...registrations].find(row => row.id === sessionRoute)
@@ -140,7 +167,12 @@ async function openQuestServer(store: QuestStore, registrations: Set<Registratio
   mkdirSync(registry, { recursive: true })
   // Writing is also a read of this directory, so the receipts of hosts that are gone go with it.
   readRegistry(registry)
-  writeFileSync(record, JSON.stringify({ version: 2, instance, url, token, pid: process.pid, startedAt: Date.parse(startedAt), generation: identity.generation, commit: identity.commit }), { mode: 0o600 })
+  // `oc` runs the host as a private server whose address exists nowhere on disk: a random port, and a
+  // password handed to it in its environment. A local client that must reach the conversation this
+  // giver lives in (the QuestGiver connector) finds the port from `pid` and authenticates with this.
+  // The receipt already carries this API's own credential and is written owner-only.
+  const hostPassword = process.env.OPENCODE_PASSWORD || undefined
+  writeFileSync(record, JSON.stringify({ version: 2, instance, url, token, pid: process.pid, startedAt: Date.parse(startedAt), generation: identity.generation, commit: identity.commit, hostPassword }), { mode: 0o600 })
   return {
     url, token,
     dispose() { http.close(); try { unlinkSync(record) } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error } },
