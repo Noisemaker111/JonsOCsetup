@@ -44,6 +44,12 @@ function stddev(xs: number[]): number {
   return Math.sqrt(variance);
 }
 
+// A trial whose duration lands within 10s of call-model.ts's default 480s timeout is treated as
+// "no response" rather than "wrong answer" — under a saturated host, pass@1 alone conflates a
+// model being unavailable tonight with a model answering incorrectly, and those need different
+// verdicts. See call-model.ts DEFAULT_TIMEOUT_MS.
+const TIMEOUT_FLOOR_MS = Number(process.env.BENCH_TIMEOUT_FLOOR_MS ?? 470_000);
+
 async function main() {
   const dir = process.argv[2];
   if (!dir) {
@@ -65,7 +71,16 @@ async function main() {
   const trialIndices = [...new Set(trials.map((t) => t.trial))].sort((a, b) => a - b);
   const baselineId = process.argv[3] ?? [...byRoute.keys()][0];
 
-  type Row = { routeId: string; label: string; passRate: number; sd: number; n: number; avgMs: number };
+  type Row = {
+    routeId: string;
+    label: string;
+    passRate: number;
+    sd: number;
+    n: number;
+    avgMs: number;
+    respondedPct: number;
+    passRateAmongResponses: number;
+  };
   const rows: Row[] = [];
   for (const [routeId, recs] of byRoute) {
     const perTrialRate = trialIndices.map((idx) => {
@@ -73,6 +88,7 @@ async function main() {
       if (forTrial.length === 0) return NaN;
       return forTrial.filter((r) => r.passed).length / forTrial.length;
     }).filter((x) => !Number.isNaN(x));
+    const responded = recs.filter((r) => r.durationMs < TIMEOUT_FLOOR_MS);
     rows.push({
       routeId,
       label: recs[0]?.routeLabel ?? routeId,
@@ -80,6 +96,8 @@ async function main() {
       sd: stddev(perTrialRate) * 100,
       n: recs.length,
       avgMs: mean(recs.map((r) => r.durationMs)),
+      respondedPct: (responded.length / recs.length) * 100,
+      passRateAmongResponses: responded.length > 0 ? (responded.filter((r) => r.passed).length / responded.length) * 100 : NaN,
     });
   }
 
@@ -87,15 +105,19 @@ async function main() {
   const baseline = rows.find((r) => r.routeId === baselineId) ?? rows[0];
 
   const nameW = Math.max(...rows.map((r) => r.label.length), "model".length);
-  const header = `${"model".padEnd(nameW)}  pass@1   ±sd    n   avg_s   delta vs ${baseline.label}`;
+  const header = `${"model".padEnd(nameW)}  pass@1   ±sd    n   avg_s  resp%  pass|resp   delta vs ${baseline.label}`;
   console.log(header);
   console.log("-".repeat(header.length));
   for (const r of rows) {
     const delta = r.routeId === baselineId ? "(baseline)" : `${r.passRate - baseline.passRate >= 0 ? "+" : ""}${(r.passRate - baseline.passRate).toFixed(1)}pp`;
+    const passAmongResp = Number.isNaN(r.passRateAmongResponses) ? "  n/a" : `${r.passRateAmongResponses.toFixed(1).padStart(5)}%`;
     console.log(
-      `${r.label.padEnd(nameW)}  ${r.passRate.toFixed(1).padStart(5)}%  ${r.sd.toFixed(1).padStart(4)}  ${String(r.n).padStart(3)}  ${(r.avgMs / 1000).toFixed(1).padStart(5)}s   ${delta}`,
+      `${r.label.padEnd(nameW)}  ${r.passRate.toFixed(1).padStart(5)}%  ${r.sd.toFixed(1).padStart(4)}  ${String(r.n).padStart(3)}  ${(r.avgMs / 1000).toFixed(1).padStart(5)}s  ${r.respondedPct.toFixed(0).padStart(4)}%  ${passAmongResp}    ${delta}`,
     );
   }
+  console.log(
+    "\nresp% = trials that returned before the timeout floor; pass|resp = pass rate among only those responses (isolates answer quality from tonight's host availability).",
+  );
 }
 
 main();
