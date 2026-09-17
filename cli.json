@@ -14,6 +14,8 @@
     "./tui-bootstrap/quests",
     "./tui-bootstrap/composer",
     "./tui-bootstrap/context-graph",
-    "./tui-bootstrap/duration-graph"
+    "./tui-bootstrap/duration-graph",
+    "./tui-bootstrap/generation-indicator",
+    "./tui-bootstrap/interrupt"
   ]
 }
