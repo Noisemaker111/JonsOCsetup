@@ -23,6 +23,32 @@ The decision itself is `composer-keys.ts`, guarded by `test/composer-word-delete
 because inside a mounted Solid component it can only be reached by driving a host
 and a driven host is where it cannot be observed.
 
+## The layer must follow the focused prompt
+
+The keymap layer's `target` is resolved once, when `useBindings`' effect first runs, and then
+pinned to whatever `Renderable` it resolved to for the rest of that layer's life
+(`@opentui/keymap/src/solid/index.js`). `ctx.renderer.currentFocusedEditor` is a plain property, not
+a Solid signal, so building `target` straight from it gives the effect nothing to re-run on: the
+layer locks onto whichever prompt was focused when the plugin mounted and never reconsiders.
+
+The home screen and a session are different prompt instances (`textarea-1` vs `textarea-2`, each a
+fresh `EditBufferRenderable`). A plugin that mounts once, on the home prompt, keeps a layer targeting
+`textarea-1` forever; Ctrl+Backspace works at home and silently falls back to native one-character
+delete in every session, because the layer's target never matches the session's prompt. Ctrl+W still
+word-deletes there since that reaches a native binding directly, which is why the defect looked like
+a delegation bug rather than a target bug.
+
+The fix mirrors `ctx.renderer.currentFocusedEditor` into a Solid signal, seeded on mount and updated
+from the renderer's `CliRenderEvents.FOCUSED_EDITOR` event, and builds `target` from that signal.
+`useBindings`' effect then re-runs and re-registers the layer whenever focus moves, the same way the
+host's own prompt layers track focus through the `inputTarget` signal
+(`packages/tui/src/component/prompt/index.tsx`).
+
+**A check that only exercises the home composer cannot see this defect.** The home screen is where
+every earlier verification of this feature ran, including the byte-level drive below, which is
+exactly why it passed while Ctrl+Backspace still delivered one character per press inside every
+session Jon actually uses.
+
 ## Verifying this, and the way that does not work
 
 `scripts/drive-opencode.ts` renders the host into an embedded terminal that answers
