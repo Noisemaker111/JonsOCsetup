@@ -4,6 +4,7 @@ import {retireWorkspace} from './workspace-retirement'
 import {QuestWorkspaces} from './workspaces'
 import {readAllQuests} from './index'
 import {inspectWorker,confirmWorkerIdle} from './worker-inspection'
+import {boundedInspection} from './worker-observation.mjs'
 import {readContinuations} from './runtime-queues'
 import {pathKey,git} from './cleanup-git.mjs'
 import type {QuestStore} from './store'
@@ -35,7 +36,7 @@ export function cleanupQuests(store:QuestStore,host?:any,only?:string):Promise<a
      if(!sessionID||!await confirmWorkerIdle(host,sessionID)){reason='Owning host has not confirmed this worker is idle';break}
      const observed=await inspectWorker(host,s)
      if(!['completed','failed','interrupted'].includes(observed.state)){reason='Worker retained: '+observed.reason;break}
-     const row=await host.get({sessionID:s.openCodeSessionId??s.sessionID});const actual=row?.data??row
+     const row:any=await boundedInspection((signal:AbortSignal)=>host.get({sessionID:s.openCodeSessionId??s.sessionID},{signal}));const actual=row?.data??row
      if(!actual?.location?.directory||pathKey(actual.location.directory)!==pathKey(w.path)){reason='Worker location does not match the owned checkout';break}
     }
     if(!reason)try{
