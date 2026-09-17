@@ -121,7 +121,7 @@
       "priceOutput": 15,
       "context": 1048576,
       "output": 131072,
-      "best": "design, creativity, novel architecture, long-horizon, huge context, multimodal, hard agentic",
+      "best": "Nothing. Jon banned it on 2026-09-17: the cost is high and the work does not justify it. The access policy refuses it.",
       "avoid": "grunt, ops, utility runs, verifications - slow and quota-burning",
       "notes": "$3/$15 per 1M and slow - spend only on design/creative/architecture work."
     },

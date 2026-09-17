@@ -35,6 +35,8 @@ test("a live candidate needs the access policy, one connected account, known bil
   const table = readBenchmarkTable()
   const catalog = [
     { providerID: "opencode-go", modelID: "deepseek-v4.1-flash", efforts: ["low", "high", "max"] },
+    { providerID: "opencode-go", modelID: "glm-5.3-flash", efforts: ["max"] },
+    // Published score, live model, real account -- and banned by name in access-policy.json.
     { providerID: "opencode-go", modelID: "kimi-k3", efforts: ["max"] },
     { providerID: "opencode-go", modelID: "hy4-preview", efforts: ["max"] },
     // Permitted identity, live model, real account -- but nobody has published a score for it.
@@ -42,16 +44,16 @@ test("a live candidate needs the access policy, one connected account, known bil
   ]
   const derived = deriveBenchmarkRoutes({ catalog, table, snapshot, policy: { routes: [], billing: { go: "subscription" } } })
   const identities = derived.routes.map(r => r.providerID + "/" + r.modelID + "#" + r.reasoning)
-  // openrouter is outside access-policy.json; hy4-preview has no benchmark row; both are vetoed.
-  expect(identities.sort()).toEqual(["opencode-go/deepseek-v4.1-flash#max", "opencode-go/kimi-k3#max"])
+  // openrouter and kimi-k3 are outside access-policy.json; hy4-preview has no benchmark row; all are vetoed.
+  expect(identities.sort()).toEqual(["opencode-go/deepseek-v4.1-flash#max", "opencode-go/glm-5.3-flash#max"])
   // A vendor headline with no stated effort is attributed to the highest effort, never a cheap one.
   const deepseek = derived.routes.find(r => r.modelID === "deepseek-v4.1-flash")!
   expect(deepseek.benchmark!.provenance).toBe("vendor")
   expect(deepseek.benchmark!.attribution).toContain("highest effort")
   // An identity the policy already curates keeps its curated route instead of gaining a twin.
-  const curated = { accountID: "go", providerID: "opencode-go", modelID: "kimi-k3", reasoning: "max" } as Route
+  const curated = { accountID: "go", providerID: "opencode-go", modelID: "glm-5.3-flash", reasoning: "max" } as Route
   expect(deriveBenchmarkRoutes({ catalog, table, snapshot, policy: { routes: [curated], billing: { go: "subscription" } } })
-    .routes.some(r => r.modelID === "kimi-k3")).toBe(false)
+    .routes.some(r => r.modelID === "glm-5.3-flash")).toBe(false)
 })
 
 test("published priors rank only what has nothing measured, and never override a named route", () => {
