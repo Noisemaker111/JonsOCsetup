@@ -116,20 +116,11 @@ Run `bun install --frozen-lockfile` once in the owned package directory, then
 `bun run check:core` and `node --check scripts/runtime-channel.mjs`. The GitHub
 workflow runs the core checks on PRs to agents and main. Before activation,
 prepare the committed candidate with `bun run runtime:channel -- prepare dev
---ref <revision> --model <exact-route>`, drive the installed app twice, and use
-`activate dev --candidate <root> --evidence <report>` with the real captures and
-return evidence. Build commands do not activate or publish.
-
-`runtime:drive` reads `commands.jsonl` as a queue and runs every line appended to
-it, in order, so append a whole scenario at once -- paste, return, settle,
-capture, stop -- and keep a separate append only for the point where the next
-command genuinely depends on what the previous capture showed. Put
-`{"action":"settle"}` between the input and the capture that should show its
-result rather than polling the drive from outside: settle waits for the host to
-stop printing and records `settled` true or false in `actions.jsonl`, while a
-caller polling once a second pays a model turn, and a whole transcript re-read by
-the approvals reviewer, for every second it waits. A drive that polls costs more
-than the work it is checking.
+--ref <revision> --model <exact-route>`. Exercise `https://quest.jonsoc.com` twice
+through the linked OpenCode2 server, reload the public page after each saved operation,
+and record the observed persisted state. Activate with `activate dev --candidate
+<root> --evidence <report>`. The report remains bound to the candidate root and
+source revision. Localhost, terminal UI and build output are not activation evidence.
 
 Check for an existing repair PR on the same symptom before opening a second one,
 and reuse it.

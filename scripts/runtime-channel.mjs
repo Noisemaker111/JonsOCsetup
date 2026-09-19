@@ -1,6 +1,7 @@
 import {retireReleases} from './release-retirement.mjs'
 import {prepareDevRelease, resolveRef, envFor as channelEnv, atomic, run, git as gitIn} from './channel-prepare.mjs'
 import {retryFinishedWorktrees} from './worktree-cleanup.mjs'
+import {assertActivationEvidence} from './activation-evidence.mjs'
 /** Explicit, isolated OpenCode2 release channels. No host updates, mirror publishing, or stable activation. */
 import { existsSync, readFileSync, writeFileSync, realpathSync, rmSync } from 'node:fs'
 import { join, resolve, dirname } from 'node:path'
@@ -21,7 +22,7 @@ if(action==='prepare'){
   const target=resolveRef(source,ref)
   const {root,release}=await prepareDevRelease({repository,registry,model,...target})
   const commit=release.commit
-  console.log(JSON.stringify({prepared:true,active:false,root,commit,ref,resolved:release.resolved,modelCatalog:release.modelCatalog,next:'Exercise this candidate twice, then activate dev with the real evidence report.'},null,2))
+  console.log(JSON.stringify({prepared:true,active:false,root,commit,ref,resolved:release.resolved,modelCatalog:release.modelCatalog,next:'Exercise the hosted Quest Web twice through linked OpenCode2, then activate dev with the saved-reload evidence report.'},null,2))
 }else if(action==='activate'){
   if(channel!=='dev')throw Error('Stable activation is never an implicit dev action')
   const root=realpathSync(option('--candidate')??''),reportPath=resolve(option('--evidence')??'')
@@ -31,7 +32,7 @@ if(action==='prepare'){
   git(['fetch','origin','agents'])
   git(['merge-base','--is-ancestor',release.commit,'origin/agents'])
   if(git(['rev-parse',release.commit+'^{tree}'])!==git(['rev-parse','origin/agents^{tree}']))throw Error('Prepare the current merged agents tree before activation')
-  if(!report.ok||report.root!==root||report.sourceCommit!==release.commit||report.runs?.length!==2||report.runs.some(r=>!r.ok||!r.automaticReturn||!r.screenshots?.length))throw Error('Two real automatic-return runs with captures are required for this release')
+  assertActivationEvidence(report,{root,sourceCommit:release.commit})
   if(pointer.evidence?.ok!==true||pointer.evidence.sourceCommit!==release.commit)throw Error('Candidate validation does not match source')
   const path=join(registry,'dev.json'),previous=existsSync(path)?read(path):undefined
   // Activation used to install a workflow skill into ~/.agents. Jon did not know it existed, and a
