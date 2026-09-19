@@ -2,5 +2,6 @@
   "schema": 1,
   "name": "opencode-interrupt",
   "description": "One Esc stops the running turn",
-  "tui": "interrupt/tui-active/interrupt.tsx"
+  "tui": "interrupt/tui-active/interrupt.tsx",
+  "assets": []
 }

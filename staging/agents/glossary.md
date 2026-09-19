@@ -15,7 +15,7 @@ correct the user's spelling back at them, and never ask which one was meant when
 | immedietly broguth | immediately brought |
 | inturpupt | interrupt |
 | aces (to my vps) | access |
-| slash quest / slash usage / slash restart | `/quest`, `/usage`, `/restart` |
+| slash quest / slash restart | `/quest`, `/restart` |
 | step evidence slash proof | step evidence / proof |
 | everytime, alot, alittle, atleast, eachother | every time, a lot, a little, at least, each other |
 | rather then, more then, better then | rather than, more than, better than (comparisons) |

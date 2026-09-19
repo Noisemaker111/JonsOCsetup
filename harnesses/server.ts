@@ -120,7 +120,7 @@ export default define({
       }
     })
 
-    // /usage is a TUI palette slash (usage/tui-active/usage.tsx). usage_status
+    // usage_status is the typed runtime boundary consumed by agents and Quest Web.
     // lives in usage/server.ts. Do not register either here — command.transform
     // steals the slash into a synthetic chat turn.
 

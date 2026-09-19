@@ -1,6 +1,3 @@
-model = "gpt-6-astra"
-model_reasoning_effort = "low"
-
 # Context replayed per call is ~90% of this machine's token spend: the 2026-09-12 OpenCode session
 # sawtoothed from 28k to 244k eleven times across 1,310 calls, averaging 143k. Compacting at 140k
 # keeps the same shape with a ~40% smaller average, roughly 78M fewer input tokens on a session that
@@ -37,46 +34,22 @@ source_type = "local"
 source = '\\?\C:\Users\Jk101\.cache\codex-runtimes\codex-primary-runtime\plugins\openai-primary-runtime'
 
 [plugins."chrome@openai-bundled"]
-enabled = true
-
-[plugins."visualize@openai-bundled"]
-enabled = true
-
-[plugins."documents@openai-primary-runtime"]
-enabled = true
-
-[plugins."pdf@openai-primary-runtime"]
-enabled = true
-
-[plugins."spreadsheets@openai-primary-runtime"]
-enabled = true
-
-[plugins."presentations@openai-primary-runtime"]
-enabled = true
-
-[plugins."template-creator@openai-primary-runtime"]
-enabled = true
+enabled = false
 
 [plugins."google-calendar@openai-curated"]
-enabled = true
+enabled = false
 
 [plugins."slack@openai-curated"]
-enabled = true
+enabled = false
 
-[plugins."sites@openai-bundled"]
-enabled = true
+[plugins."openai-templates@openai-curated-remote"]
+enabled = false
 
-[plugins."browser@openai-bundled"]
-enabled = true
+[plugins."sites@openai-curated-remote"]
+enabled = false
 
-[plugins."codex-app-tools@openai-bundled"]
-enabled = true
-
-[plugins."unified-computer-use@openai-bundled"]
-enabled = true
-
-[plugins."computer-use@openai-bundled"]
-enabled = true
+[plugins."plugin-management@openai-curated-remote"]
+enabled = false
 
 [plugins."opencode-quests@personal"]
 enabled = true
@@ -249,12 +222,16 @@ hide_rate_limit_model_nudge = true
 
 [hooks.state."opencode-quests@personal:hooks/hooks.json:pre_tool_use:0:0"]
 trusted_hash = "sha256:94303ddf8ccdc01ba24d0f1676e645ffff19298a16ef4bb60b6fb6e89fd445ab"
+enabled = true
 
 [hooks.state."opencode-quests@personal:hooks/hooks.json:post_tool_use:0:0"]
 trusted_hash = "sha256:1aaac00c58e0218adfed217250929d417a217bec5ecc3275f9fed805d0341238"
+enabled = true
 
 [hooks.state."opencode-quests@personal:hooks/hooks.json:session_start:0:0"]
 trusted_hash = "sha256:bcadad432a33cab28cdb97aab35f57bcfd59adbcea90a7e527f75b63efab8c59"
+enabled = true
 
 [hooks.state."opencode-quests@personal:hooks/hooks.json:session_end:0:0"]
 trusted_hash = "sha256:3626a808a3bfbccd2e94d81a98ecce5610bf9bda2ec9a899a101ea4196438d5c"
+enabled = true

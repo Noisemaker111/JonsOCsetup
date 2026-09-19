@@ -28,19 +28,16 @@ host screenshot: your shared Quest ledger, your accounts, your telemetry):
 bun run ui:lab --real
 ```
 
-Real mode reads only. The usage cache is copied and stamped fresh so the dialog does
-not spawn the network collector. Surfaces that need a specific fixture Quest or the
-empty ledger are skipped in real mode.
+Real mode reads only. Surfaces that need a specific fixture Quest or the empty ledger
+are skipped in real mode.
 
 ## What makes a capture 1:1
 
-- **Size**: the board renders at 200×50 cells, the sidebar at 40 columns, the `/usage`
-  dialog at 60 columns, all measured from host screenshots. Change `HOST_COLS`,
-  `HOST_ROWS`, `SIDEBAR_COLS`, `DIALOG_COLS` in `render.tsx` if your terminal differs.
+- **Size**: the board renders at 200×50 cells and the sidebar at 40 columns, measured
+  from host screenshots. Change `HOST_COLS`, `HOST_ROWS`, and `SIDEBAR_COLS` in
+  `render.tsx` if your terminal differs.
 - **Theme**: cells a component never paints show the host's own ground. The board
-  paints its own palette; the sidebar and dialog sit on the host's near-black
-  and gray. The lab passes the plugins no `theme`, because the live host passes none
-  either, which is why `/usage` is grayscale in the host.
+  paints its own palette and the sidebar sits on the host's near-black background.
 - **Chrome**: the sidebar column around `sidebar.content` is a static mock. Component previews do not prove host layout or interaction; use the installed app for acceptance.
 - **Data**: `--real` for your ledger and accounts; the fixture otherwise.
 
@@ -53,7 +50,6 @@ empty ledger are skipped in real mode.
 | `board-attention` | Same board, blocked step + failed worker | `quest/tui-active/quest-board.tsx` — `status()`, `badge()`, `sessionColor()` |
 | `board-empty` | First-run, no Quests | `quest/tui-active/quest-board.tsx` — `QuestBoard` fallback |
 | `sidebar` | The quest list beside the chat (`sidebar.content` slot) | `quest/tui-active/quests.tsx` — `Sidebar`, `toneColor` |
-| `usage` | The `/usage` dialog | `usage/tui-active/usage.tsx` — `UsageDialog`, `ConversationTelemetry`, `UsageTable`; column widths and bars in `usage/tui-usage-format.ts` |
 
 Text that comes from data rather than layout lives one level down: the filter and
 count wording is `QUEST_FILTERS` in `quest/tui-model.ts`, the "Step 3/11: …"
@@ -134,7 +130,7 @@ They can also be pasted anywhere that accepts HTML.
 2. Push to Paper, redesign on the canvas (or sketch in the gallery HTML).
 3. Edit the component named in the table above.
 4. `bun run ui:lab <surface>` — compare against the before shot in `index.html`.
-5. `bun test test/tui-quests.test.ts test/tui-usage.test.ts test/quest-board.test.ts` — the click targets and wording the tests pin.
+5. `bun test test/tui-quests.test.ts test/quest-board.test.ts` — the click targets and wording the tests pin.
 
 `ui-lab/out/` is git-ignored; it is regenerated every run.
 

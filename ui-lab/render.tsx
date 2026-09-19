@@ -1,16 +1,16 @@
 /** @jsxImportSource @opentui/solid */
 /**
- * UI lab renderer: every quest / usage surface, headless, from one fixture.
+ * UI lab renderer: every OpenCode2 Quest surface, headless, from one fixture.
  *
  *   bun --preload @opentui/solid/preload ui-lab/render.tsx            # all surfaces
- *   bun --preload @opentui/solid/preload ui-lab/render.tsx sidebar usage
+ *   bun --preload @opentui/solid/preload ui-lab/render.tsx sidebar status
  *   bun --preload @opentui/solid/preload ui-lab/render.tsx board --width 160 --height 50
  *   bun --preload @opentui/solid/preload ui-lab/render.tsx --real         # your real ledger, accounts, telemetry
  *
  * Output goes to ui-lab/out/: <surface>.png / .svg / .txt / .html plus
  * paper/<surface>.html (fragments for Paper's write_html) and index.html, a
  * gallery you can open in a browser. Everything renders through the real
- * components (QuestBoard, Sidebar, UsageDialog) on the
+ * components (QuestBoard, Sidebar, QuestStatus) on the
  * real OpenTUI test renderer; only the data is fixture. No host, no network,
  * no touch to the real ledger.
  *
@@ -20,11 +20,10 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { TextAttributes } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { Resvg } from "@resvg/resvg-js"
-import { HOST_DIALOG_PALETTE, HOST_PALETTE, QUEST_PALETTE, frameToHtml, frameToPaperHtml, frameToSvg, type Frame, type Palette } from "./frame-html"
-import { IDS, labProject, seedQuestLedger, seedUsageFixture } from "./fixture"
+import { HOST_PALETTE, QUEST_PALETTE, frameToHtml, frameToPaperHtml, frameToSvg, type Frame, type Palette } from "./frame-html"
+import { IDS, labProject, seedQuestLedger } from "./fixture"
 import { surfacesToPen, type PenSurface } from "./pen"
 
 const ROOT = join(import.meta.dir, "..")
@@ -39,10 +38,7 @@ export const SIDEBAR_COLS = 40
 export const STATUS_COLS = 97
 
 /** Host theme as seen in screenshots: near-black ground, gray composer panel, yellow accent. */
-const HOST = { bg: HOST_PALETTE.bg, panel: HOST_DIALOG_PALETTE.bg, text: HOST_PALETTE.fg, muted: "#8a8a8a", accent: "#f2cf45", orange: "#e9a23b" }
-/** The host /usage dialog frame, measured from a screenshot: about 60 columns wide (563 px of content plus frame), 36 rows leaves room for every configured source. */
-export const DIALOG_COLS = 60
-export const DIALOG_ROWS = 36
+const HOST = { bg: HOST_PALETTE.bg }
 
 type Ledger = "seeded" | "empty"
 
@@ -54,7 +50,7 @@ type Surface = {
   note: string
   width: number
   height: number
-  /** Milliseconds to let async data (usage view, project lookup) settle before the capture. */
+  /** Milliseconds to let async project data settle before the capture. */
   settle?: number
   /** "empty" renders against a second, empty ledger instead of the seeded one. */
   ledger?: Ledger
@@ -81,8 +77,6 @@ function labContext(dir: string, size: { width: number; height: number }, route:
       toast: { show: () => {} },
     },
     keymap: { layer: () => {}, register: () => {} },
-    // No `theme` on purpose: the live host hands the usage plugin none either (themeColors falls through to the
-    // default foreground), which is why /usage is grayscale in the host. Adding one here would make the lab lie.
     navigated,
     questDir: dir,
   }
@@ -96,7 +90,6 @@ function HostSidebar(props: { children: any }) {
 async function surfaces(): Promise<Surface[]> {
   const { QuestBoard } = await import("../quest/tui-active/quest-board")
   const { Sidebar, QuestStatus } = await import("../quest/tui-active/quests")
-  const { UsageDialog } = await import("../usage/tui-active/usage")
   const board = (id: string, title: string, source: string, note: string, quest?: string, ledger: Ledger = "seeded"): Surface => ({
     id, title, source, note, width: HOST_COLS, height: HOST_ROWS, settle: 300, ledger, palette: QUEST_PALETTE, fixtureOnly: id !== "board",
     render: (context) => <QuestBoard context={context} initialQuestID={quest} />,
@@ -129,11 +122,6 @@ async function surfaces(): Promise<Surface[]> {
       id: "status-narrow", title: "Composer status rows · narrow window", source: "quest/tui-active/quests.tsx (QuestStatus)",
       note: "The same rows with the window dragged narrow, which is where a long Quest title has to be shortened. The cut belongs on a word boundary; the renderer's own truncation takes it out of the middle of a word.",
       width: 60, height: 4, settle: 400, palette: HOST_PALETTE, fixtureOnly: true, render: (context) => <QuestStatus context={context} />,
-    },
-    {
-      id: "usage", title: "/usage dialog", source: "usage/tui-active/usage.tsx (UsageDialog, ConversationTelemetry, UsageTable) + usage/tui-usage-format.ts",
-      note: "Dialog opened by /usage or by clicking the session counters, at the host dialog's real width and gray frame. Telemetry block on top, one block per subscription source below.",
-      width: DIALOG_COLS, height: DIALOG_ROWS, settle: 1200, palette: HOST_DIALOG_PALETTE, render: (context) => <UsageDialog context={context} />,
     },
   ]
 }
@@ -168,7 +156,7 @@ function galleryHtml(cards: Array<Surface & { png: string; cols: number; rows: n
   .links{font-size:12px;margin:8px 0 0} .links a{color:#20c7e8;margin-right:14px}
 </style>
 <h1>OpenCode2 quest UI lab</h1>
-<p class="sub">Every surface of the quests + usage plugins, rendered headless from one fixture at the host's terminal size (${HOST_COLS}×${HOST_ROWS}). Edit the source file named under each card, re-run <code>bun run ui:lab</code>, refresh. Images are inlined, so this file can be sent or opened anywhere on its own.</p>
+<p class="sub">Every OpenCode2 Quest surface, rendered headless from one fixture at the host's terminal size (${HOST_COLS}×${HOST_ROWS}). Edit the source file named under each card, re-run <code>bun run ui:lab</code>, refresh. Images are inlined, so this file can be sent or opened anywhere on its own.</p>
 ${cards.map((c) => `<section>
   <h2>${esc(c.title)}</h2>
   <p class="meta">${c.cols}×${c.rows} cells · source: <code>${esc(c.source)}</code><br>${esc(c.note)}</p>
@@ -180,33 +168,19 @@ ${cards.map((c) => `<section>
 
 /**
  * `real: true` renders against Jk's actual data instead of the fixture: the
- * shared Quest ledger under the home directory (read-only here), the real
- * accounts and telemetry, and a copy of the real usage cache stamped fresh so
- * the dialog does not spawn the network collector. That is the capture to hold
- * next to a host screenshot.
+ * shared Quest ledger under the home directory (read-only here). That is the
+ * capture to hold next to a host screenshot.
  */
 export async function renderLab(only: string[] = [], size?: { width?: number; height?: number }, real = false) {
   const scratch = mkdtempSync(join(tmpdir(), "opencode-ui-lab-"))
-  const questDir = join(scratch, "ledger"), emptyDir = join(scratch, "empty"), usageDir = join(scratch, "usage")
+  const questDir = join(scratch, "ledger"), emptyDir = join(scratch, "empty")
   mkdirSync(questDir, { recursive: true })
   mkdirSync(join(emptyDir, ".opencode", "quests"), { recursive: true })
   if (real) {
     delete process.env.OPENCODE_QUEST_ROOT
-    const realCache = join(ROOT, "usage", "usage-cache.json")
-    if (existsSync(realCache)) {
-      mkdirSync(usageDir, { recursive: true })
-      const cache = JSON.parse(readFileSync(realCache, "utf8"))
-      // Stamp the copy fresh (cache + per-source observedAt): the dialog marks anything older than 30s "unknown"
-      // and would otherwise spawn the collector. The numbers are still the real last collection.
-      cache.updated = new Date().toISOString()
-      for (const source of cache.sources ?? []) if (source.observedAt) source.observedAt = cache.updated
-      process.env.OPENCODE_USAGE_CACHE_FILE = join(usageDir, "cache.json")
-      writeFileSync(process.env.OPENCODE_USAGE_CACHE_FILE, JSON.stringify(cache))
-    }
   } else {
     const project = labProject(ROOT)
     seedQuestLedger(questDir, project)
-    seedUsageFixture(usageDir)
   }
   mkdirSync(join(OUT, "paper"), { recursive: true })
   const all = (await surfaces()).filter((s) => !real || !s.fixtureOnly)

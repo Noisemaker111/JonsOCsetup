@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url'
 import { realpathSync } from 'node:fs'
 import { questOperations } from './operations.mjs'
 import { createQuestClient, discoverQuestAPI, defaultQuestRegistry } from './client.mjs'
+import { questWebURL } from './web.ts'
 
 const flag = key => '--' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase())
 const kind = schema => schema.enum ? schema.enum.map(value => JSON.stringify(value)).join(' | ') : schema.anyOf ? schema.anyOf.map(kind).join(' | ') : schema.type ?? 'JSON'
@@ -14,7 +15,7 @@ function shape(schema, prefix = '') {
   })
 }
 export function questHelp(method) {
-  if (!method) return ['quest <operation> [arguments]', '', ...Object.entries(questOperations).map(([name, op]) => `  ${name} ${op.positional.map(key => '<' + key + '>').join(' ')}\n    ${op.description}`), '', '  health\n    Name the Quest API that is serving, and the generation and commit it is running.', '', '  mcp\n    Serve the same operations over MCP stdio.', '', 'Use quest <operation> --help for arguments. Results are JSON.'].join('\n')
+  if (!method) return ['quest <operation> [arguments]', '', ...Object.entries(questOperations).map(([name, op]) => `  ${name} ${op.positional.map(key => '<' + key + '>').join(' ')}\n    ${op.description}`), '', '  web\n    Print the authenticated local Quest Web address.', '', '  health\n    Name the Quest API that is serving, and the generation and commit it is running.', '', '  mcp\n    Serve the same operations over MCP stdio.', '', 'Use quest <operation> --help for arguments. Results are JSON.'].join('\n')
   const op = questOperations[method]
   if (!op) throw Error('Unknown Quest operation: ' + method)
   return [`quest ${method} ${op.positional.map(key => '<' + key + '>').join(' ')}`, op.description, '', ...Object.entries(op.input.properties).flatMap(([key, schema]) => [`  ${op.positional.includes(key) ? key : flag(key)} <${kind(schema)}>${op.input.required.includes(key) ? ' (required)' : ''}${schema.description ? '\n    ' + schema.description : ''}`, ...shape(schema, key)]), '', '  --input-json  Read argument JSON from stdin; flags may add other fields.', '  --help --json  Print the complete shared operation contract.'].join('\n')
@@ -60,6 +61,8 @@ export async function questHealth(discover = discoverQuestAPI, registry = defaul
 }
 
 export async function runQuestCLI(args, client = createQuestClient(), discover = discoverQuestAPI) {
+  if (args[0] === 'web' && (args.includes('--help') || args.includes('-h'))) return 'quest web\nPrint the authenticated local Quest Web address.'
+  if (args[0] === 'web') { const service = await discover(); return questWebURL(service.url, service.token) }
   if (args[0] === 'health' && (args.includes('--help') || args.includes('-h'))) return 'quest health\nName the Quest API that is serving this registry, and the generation and commit it is running.'
   if (args[0] === 'health') {
     const health = await questHealth(discover)

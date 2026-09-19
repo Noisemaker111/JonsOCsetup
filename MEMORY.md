@@ -17,9 +17,31 @@ stale line in place, delete a wrong one. User instructions outrank memory.
 - When he points out a missed behaviour, say why it was missed and fix the cause before doing the task.
 - Never make him type a command or a path to operate or diagnose OpenCode2.
 - Measure text in characters, never bytes.
+- Keep installed skills sparse. A skill must add task-specific capability beyond AGENTS.md, and its discovery description must be one precise activation sentence.
+- Deepseek 4.1 routes run at `high`, never `max`, for workers, reviewers and fallbacks.
 - Luna medium is prohibited; Luna max is allowed. `models/access-policy.json` is the user setting and
   `test/model-selection-policy.test.ts` enforces it, so this line exists only so you do not propose the
   banned effort and lose a turn.
+- Kimi K3 is banned on every route: the cost is high and the work is not good enough to justify it.
+  Never pick it, propose it or fall back to it.
+- Read account usage before choosing or proposing any model. An account whose window is spent is not
+  a candidate, and finding that out from a failed turn is the circle he is tired of.
+- His Chrome is signed in to his accounts (Google Cloud, Cloudflare and the rest). Do console and
+  account setup there yourself, including creating clients and keys, and tell him afterwards what to
+  rotate. Never hand him a list of website steps, and never answer such a request with "I can't".
+- A product gets its own folder under `Projects/` and its own repository from the first commit. Never
+  build one inside a worktree or a nested folder of this configuration repository, and never point
+  him at a worktree path to find his own work.
+- In any Quest Giver surface the Quest is the unit, never the session: list Quests with their progress,
+  hang worker sessions under the Quest step they served, and keep the Quest Giver's conversation as
+  home. A session list with a chat beside it is OpenCode again, which is what he is replacing. Show
+  models by the name people say ("Claude Haiku 4.5"), never a provider/id string, and usage as a
+  small glance, not a page.
+- Call the browser-based Quest Giver product **Quest Web**. Usage belongs in Quest Web; do not build,
+  preserve, or audit a `/usage` surface in OpenCode2.
+- Build chat and agent UI from existing open-source component kits (shadcn registries, the UIs other
+  harnesses published). Import the message, composer, model-selector and session components; do not
+  hand-roll them.
 - Routine worker permission reviews go to a lower-cost capable reviewer from his own routes, chosen
   with `/quest-reviewer` and retained for the giver session. Only a genuinely new decision wakes the
   giver; manual approval stays available as a fallback.

@@ -39,7 +39,11 @@ test('locations share one authenticated listener and retiring a worker keeps the
  const {discoverQuestAPI}=await import('../quest/client.mjs')
  const root=realpathSync.native(mkdtempSync(join(tmpdir(),'quest-api-listener-'))),store=new QuestStore(root)
  const calls:any[]=[]
- const service={call:async(method:string,input:any,context:any)=>{calls.push({method,input,context});return {id:input.id}}} as any
+ const service={call:async(method:string,input:any,context:any)=>{
+  calls.push({method,input,context})
+  if(method==='list')return input.offset===0?{items:[{title:'First'}],total:101,nextOffset:100}:{items:[{title:'Last'}],total:101,nextOffset:null}
+  return {id:input.id}
+ }} as any
  let giver:any,worker:any
  try {
   saveUserGiver(store.runtime,{state:'bound',sessionID:'ses_giver',directory:root})
@@ -50,16 +54,42 @@ test('locations share one authenticated listener and retiring a worker keeps the
   expect(record.pid).toBe(process.pid)
   expect(giver.url).toBe(worker.url)
   expect(giver.mcpURL).not.toBe(worker.mcpURL)
+  expect(giver.webURL).toBe(giver.url+'/web#access_token='+giver.token)
+  const page=await fetch(giver.url+'/web')
+  expect(page.status).toBe(200)
+  const html=await page.text()
+  expect(html).toContain('<title>Quest Web</title>')
+  expect(html).not.toContain(giver.token)
   expect((await fetch(giver.url+'/health')).status).toBe(403)
   expect((await fetch(giver.url+'/health',{headers:{authorization:'Bearer '+giver.token,origin:'https://example.com'}})).status).toBe(403)
+  expect((await fetch(giver.url+'/health',{headers:{authorization:'Bearer '+giver.token,origin:giver.url}})).status).toBe(200)
+  const quests=await fetch(giver.url+'/api/web/quests',{headers:{authorization:'Bearer '+giver.token,origin:giver.url}})
+  expect(quests.status).toBe(200)
+  expect((await quests.json()).items.map((row:any)=>row.title)).toEqual(['First','Last'])
+  expect(calls.filter(row=>row.method==='list')).toHaveLength(2)
+  expect(calls.find(row=>row.method==='list')).toMatchObject({input:{allProjects:true,archived:false,view:'summary',offset:0,limit:100},context:{external:true,sessionID:'ses_giver'}})
+  const usage=await fetch(giver.url+'/api/web/usage',{headers:{authorization:'Bearer '+giver.token,origin:giver.url}})
+  expect(usage.status).toBe(200)
+  expect(Array.isArray((await usage.json()).accounts)).toBe(true)
   expect((await discoverQuestAPI({registry})).url).toBe(giver.url)
   worker.dispose()
   const response=await fetch(giver.url+'/api/status',{method:'POST',headers:{authorization:'Bearer '+giver.token,'idempotency-key':'read-quest'},body:JSON.stringify({id:'quest'})})
   expect(response.status).toBe(200)
-  expect(calls[0].context.sessionID).toBe('ses_giver')
+  expect(calls.find(row=>row.method==='status').context.sessionID).toBe('ses_giver')
   giver.dispose()
   expect(readdirSync(registry)).toHaveLength(0)
  } finally {worker?.dispose();giver?.dispose();rmSync(root,{recursive:true,force:true})}
+})
+
+test('Quest Web links keep the API credential out of the requested URL and document',async()=>{
+ const {questWebHTML,questWebURL}=await import('../quest/web')
+ const {runQuestCLI}=await import('../quest/cli.mjs')
+ const link=questWebURL('http://127.0.0.1:4123','secret value')
+ expect(new URL(link).pathname).toBe('/web')
+ expect(new URL(link).search).toBe('')
+ expect(new URL(link).hash).toBe('#access_token=secret%20value')
+ expect(questWebHTML()).not.toContain('secret value')
+ expect(await runQuestCLI(['web'],{} as any,async()=>({url:'http://127.0.0.1:4123',token:'secret value'}))).toBe(link)
 })
 
 /** @core-observed September 13 the fresh host timed out discovery while synchronous workspace preparation admitted a real coding worker. */

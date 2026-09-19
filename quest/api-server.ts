@@ -9,6 +9,8 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { questOperations } from './operations.mjs'
 import { readUserGiver } from './giver-registry.mjs'
 import { physicalDirectory } from './project'
+import { getUsageStatus } from '../usage/status-api'
+import { questWebHTML, questWebURL, QUEST_WEB_PATH } from './web'
 import type { QuestStore } from './store'
 import type { createQuestService } from './service'
 
@@ -35,7 +37,7 @@ export async function serveQuestAPI(store: QuestStore, service: ReturnType<typeo
   }
   try {
     const endpoint = await current.endpoint
-    return { url: endpoint.url, token: endpoint.token, mcpURL: endpoint.url + '/mcp/session/' + registration.id,
+    return { url: endpoint.url, token: endpoint.token, webURL: questWebURL(endpoint.url, endpoint.token), mcpURL: endpoint.url + '/mcp/session/' + registration.id,
       dispose() { remove(); if (!current.registrations.size) endpoint.dispose() },
     }
   } catch (error) { remove(); throw error }
@@ -107,15 +109,39 @@ async function openQuestServer(store: QuestStore, registrations: Set<Registratio
   }
   const http = createServer(async (request, response) => {
     const json = (status: number, value: unknown) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(value)) }
+    const pathname = new URL(request.url ?? '/', 'http://127.0.0.1').pathname
+    if (pathname === QUEST_WEB_PATH && request.method === 'GET') {
+      response.writeHead(200, {
+        'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store',
+        'referrer-policy': 'no-referrer',
+        'content-security-policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+      })
+      response.end(questWebHTML()); return
+    }
     const authorization = Buffer.from(request.headers.authorization ?? '')
     const expected = Buffer.from('Bearer ' + token)
-    if (request.headers.origin || authorization.length !== expected.length || !timingSafeEqual(authorization, expected)) {
-      json(403, { code: 'FORBIDDEN', message: 'Quest API credentials are required; browser-origin requests are not accepted.' }); return
+    const origin = request.headers.origin
+    const sameOrigin = !origin || origin === 'http://' + request.headers.host
+    if (!sameOrigin || authorization.length !== expected.length || !timingSafeEqual(authorization, expected)) {
+      json(403, { code: 'FORBIDDEN', message: 'Quest API credentials and the local Quest Web origin are required.' }); return
     }
     try {
-      if (request.url === '/health' && request.method === 'GET') { json(200, { instance, ready: ready(), giverSessionID: ready() ? giverSession : undefined, pid: process.pid, startedAt, ...identity }); return }
-      if (request.url === '/contract' && request.method === 'GET') { json(200, questOperations); return }
-      if (request.url === '/events' && request.method === 'GET') {
+      if (pathname === '/health' && request.method === 'GET') { json(200, { instance, ready: ready(), giverSessionID: ready() ? giverSession : undefined, pid: process.pid, startedAt, ...identity }); return }
+      if (pathname === '/contract' && request.method === 'GET') { json(200, questOperations); return }
+      if (pathname === '/api/web/quests' && request.method === 'GET') {
+        const items: unknown[] = []
+        let offset = 0, page: any
+        for (;;) {
+          page = await call('list', { allProjects: true, archived: false, view: 'summary', offset, limit: 100 }, giver()?.sessionID, instance + ':' + randomUUID(), giver()?.service, true)
+          if (Array.isArray(page.items)) items.push(...page.items)
+          if (page.nextOffset === null || page.nextOffset === undefined) break
+          if (!Number.isInteger(page.nextOffset) || page.nextOffset <= offset) throw Error('Quest pagination did not advance')
+          offset = page.nextOffset
+        }
+        json(200, { ...page, items, total: page?.total ?? items.length, nextOffset: null }); return
+      }
+      if (pathname === '/api/web/usage' && request.method === 'GET') { json(200, await getUsageStatus({ allSessions: true })); return }
+      if (pathname === '/events' && request.method === 'GET') {
         response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
         response.write('data: ' + JSON.stringify({ type: 'connected', instance }) + '\n\n')
         // One write to a journal raises several watch events; a reader wants one line per saved change.
@@ -125,8 +151,8 @@ async function openQuestServer(store: QuestStore, registrations: Set<Registratio
         response.on('close', () => { stop(); clearInterval(beat); for (const timer of pending.values()) clearTimeout(timer) })
         return
       }
-      const sessionRoute = request.url?.match(/^\/mcp\/session\/([a-f0-9-]+)$/)?.[1]
-      if (request.url === '/mcp' || sessionRoute) {
+      const sessionRoute = pathname.match(/^\/mcp\/session\/([a-f0-9-]+)$/)?.[1]
+      if (pathname === '/mcp' || sessionRoute) {
         const registration = sessionRoute && [...registrations].find(row => row.id === sessionRoute)
         if (sessionRoute && !registration) { json(410, { code: 'LOCATION_CLOSED', message: 'The owning OpenCode location disconnected.' }); return }
         const mcp = new Server({ name: 'quests', version: '1.0.0' }, { capabilities: { tools: {} } })
@@ -135,7 +161,7 @@ async function openQuestServer(store: QuestStore, registrations: Set<Registratio
           try {
             // OpenCode supplies correlation metadata outside model-controlled arguments.
             const metadata = message.params._meta?.sessionID
-            const sessionID = typeof metadata === 'string' ? metadata : request.url === '/mcp' ? giver()?.sessionID : undefined
+            const sessionID = typeof metadata === 'string' ? metadata : pathname === '/mcp' ? giver()?.sessionID : undefined
             if (!sessionID) throw Error('The OpenCode MCP connection must supply its session identity.')
             const result = await call(message.params.name, message.params.arguments ?? {}, sessionID, instance + ':' + randomUUID() + ':' + extra.requestId, registration ? registration.service : giver()?.service, !registration)
             return { content: [{ type: 'text' as const, text: JSON.stringify(result) }], structuredContent: result }
@@ -149,7 +175,7 @@ async function openQuestServer(store: QuestStore, registrations: Set<Registratio
         await transport.handleRequest(request, response)
         return
       }
-      const method = request.url?.match(/^\/api\/([a-z]+)$/)?.[1]
+      const method = pathname.match(/^\/api\/([a-z]+)$/)?.[1]
       if (!method || request.method !== 'POST') { json(404, { code: 'NOT_FOUND', message: 'Unknown Quest API endpoint' }); return }
       const chunks: Buffer[] = []
       for await (const chunk of request) chunks.push(Buffer.from(chunk))

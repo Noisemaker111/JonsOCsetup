@@ -36,7 +36,7 @@ Use native `execute` for bookkeeping and orchestration. The `quests` operations 
 
 The API refuses a Quest that cannot say what it is, a second Quest for a request one already holds, and a dispatch whose recorded project folder is gone — read what it tells you and do that, rather than working around it. A Quest saved against a deleted folder still reads and can be moved with `update({id, projectRoot})`.
 
-Worker completion arrives here on its own; you are woken only when something needs deciding, and the message carries that Quest's report line. Do not poll for it. Write titles, descriptions and checkable steps that stand alone; load skills/quest-writing before naming one.
+Worker completion arrives here on its own; you are woken only when something needs deciding, and the message carries that Quest's report line. Do not poll for it. Write titles, descriptions and checkable steps that stand alone.
 
 ## Permissions
 

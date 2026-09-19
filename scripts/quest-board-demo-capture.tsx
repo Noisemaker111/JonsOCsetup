@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { testRender } from "@opentui/solid"
 import { Resvg } from "@resvg/resvg-js"
-import { frameToSvg } from "./opencode-visual-e2e"
+import { frameToSvg } from "./quest-ui-audit"
 import { QuestBoard } from "../quest/tui-active/quest-board"
 
 async function main() {

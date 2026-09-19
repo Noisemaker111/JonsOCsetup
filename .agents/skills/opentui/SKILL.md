@@ -1,6 +1,6 @@
 ---
 name: opentui
-description: Build terminal UIs with OpenTUI. Covers Core, frameworks, components, application APIs, testing, extensions, integrations, deployment, and public API lookup.
+description: Use when implementing or testing terminal interfaces against OpenTUI APIs and components.
 ---
 
 # OpenTUI Skill

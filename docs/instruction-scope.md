@@ -19,6 +19,6 @@ A skill's availability does not make it applicable. The current project's instru
 
 This repository is the starting directory for OpenCode maintenance and its own hub; `oh` opens it and `oc` launches OpenCode in it. Its instructions are its own tracked root files, so nothing installs them. The root `AGENTS.md` is also the global overlay every OpenCode session loads (the host reads `<config dir>/AGENTS.md`, and the config dir is this repository), which is why repository-only guidance lives in the `opencode` skill rather than in that file. [setup](../setup/README.md) describes the files that are installed elsewhere and linked back; update a tracked source and its manifest hash together.
 
-Keep one current owner for each rule. The `agents-and-main` skill is portable; this repository's concrete policy uses `agents` and `main`. Internal runtime paths containing `dev` identify persistent state, not a Git branch. Dated receipts retain historical names and observations but never override current policy.
+Keep one current owner for each rule. This repository's concrete policy uses `agents` and `main`. Internal runtime paths containing `dev` identify persistent state, not a Git branch. Dated receipts retain historical names and observations but never override current policy.
 
 Use the [documentation index](README.md) for current guides. Do not copy an old model assignment, host version, price, test count, or unfinished task statement into current instructions.

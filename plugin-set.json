@@ -10,7 +10,7 @@
     "context-graph/server.ts"
   ],
   "tuiEntrypoints": [
-    "usage/tui-active/usage.tsx",
+    "system/tui-active/system.tsx",
     "quest/tui-active/quests.tsx",
     "composer/tui-active/composer.tsx",
     "context-graph/tui-active/context-graph.tsx",
@@ -32,7 +32,8 @@
     "plugins-active/quests.ts": "quests",
     "plugins-active/favorite-router.ts": "harness",
     "usage/server.ts": "usage",
-    "usage/tui-active/usage.tsx": "usage",
+    "system/tui-active/system.tsx": "system",
+    "tui-bootstrap/system/tui.tsx": "system",
     "quest/tui-active/quests.tsx": "quests",
     "plugins-active/harness-run.ts": "harness",
     "plugins-active/claude-code-session.ts": "harness",
@@ -97,6 +98,7 @@
   ],
   "packages": [
     "usage/plugin.json",
+    "system/plugin.json",
     "quest/plugin.json",
     "models/plugin.json",
     "papercut/plugin.json",

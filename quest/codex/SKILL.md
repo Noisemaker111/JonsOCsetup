@@ -1,6 +1,6 @@
 ---
 name: quest
-description: Create, resume and update shared Quests in Codex with plans, results and deliverables.
+description: Use to create, inspect, resume, or update a persistent Quest from Codex.
 ---
 
 Use the directly named Quest operations discovered in this session. They call the

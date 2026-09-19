@@ -4,8 +4,8 @@ import {tmpdir} from 'node:os'
 import {createHash} from 'node:crypto'
 import {acquireLock} from './locking'
 export type WorkspaceMode='worktree'|'shared'
-export {workspaceSettingsFile} from '../skills/workspace-flow/scripts/settings.mjs'
-import {workspaceSettingsFile,readWorkspaceSettings} from '../skills/workspace-flow/scripts/settings.mjs'
+export {workspaceSettingsFile} from './workspace-settings-lib.mjs'
+import {workspaceSettingsFile,readWorkspaceSettings} from './workspace-settings-lib.mjs'
 export function workspaceSettings(file=workspaceSettingsFile()):{version:1;workspaceMode:WorkspaceMode} {return readWorkspaceSettings(file)}
 export function setWorkspaceMode(mode:WorkspaceMode,file=workspaceSettingsFile()) {
  if(!['worktree','shared'].includes(mode))throw new Error('Workspace mode must be worktree or shared')

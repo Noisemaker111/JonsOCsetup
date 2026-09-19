@@ -115,7 +115,7 @@ const KIND: Record<string, string> = {
 }
 
 // These providers are configured local lanes even when they have no recent DB
-// row yet. Keeping a shell entry makes /usage honest about what can be picked:
+// row yet. Keeping a shell entry makes account reporting honest about what can be picked:
 // unknown is visibly different from an absent provider.
 const CONFIGURED_SOURCES = ["claude-code", "grok-build", "codex", "openrouter"]
 
@@ -476,7 +476,7 @@ async function runProbes(): Promise<ProbeResult[]> {
   return Promise.all(
     PROBES.map(async (p) => {
       // Probe endpoints concurrently. A sequential 4 x 5s Cursor fallback
-      // used to outlive the TUI's 8s collector wait and leave /usage showing
+      // used to outlive the collector's request budget and leave consumers with
       // stale or empty data even when a later endpoint was reachable.
       const results = await Promise.all(p.urls.map(async (url) => {
         try {
@@ -745,7 +745,7 @@ export function buildCache(
   }
   // Configured harness/metered lanes may be perfectly usable while still
   // having no provider usage API or recent OpenCode DB message. Include them
-  // as unknown shells instead of making the picker and /usage disagree about
+  // as unknown shells instead of making the picker and Quest Web disagree about
   // what exists.
   for (const id of CONFIGURED_SOURCES) {
     if (sourcesOut.some((s) => s.id === id)) continue

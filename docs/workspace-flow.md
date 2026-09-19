@@ -1,3 +1,3 @@
 # Workspace flow implementation and verification
 
-See the authoritative [skill reference](../skills/workspace-flow/reference.md) for behavior, limits, commands, results and activation status. The [compact skill](../skills/workspace-flow/SKILL.md) is the agent entry point.
+Workspace ownership, preparation, collection and retirement are implemented by the `quest/workspace-*` modules and verified by the Quest workspace tests. Agents receive the applicable ownership boundary directly in their dispatch prompt.

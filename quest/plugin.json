@@ -6,6 +6,7 @@
   "tui": "quest/tui-active/quests.tsx",
   "assets": [
     "quest/cli.mjs",
+    "quest/web.ts",
     "quest/quest.schema.json"
   ]
 }
