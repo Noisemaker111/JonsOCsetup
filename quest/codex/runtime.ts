@@ -15,7 +15,7 @@ import {sameDirectory,hasCheckout,checkoutIndependent,recoverWorkspace,validateR
 export type HookInput={session_id:string;cwd:string;hook_event_name:string;tool_name?:string;tool_use_id?:string;tool_input?:any;tool_response?:any;transcript_path?:string;source?:string}
 type Session={diagnostics?:Record<string,string>;recovery?:RecoveryBinding;directory:string;sessionID:string;questID?:string;pending:string[];calls?:Record<string,{tool:string;outer?:string;running?:boolean;fingerprint?:string;updatedInput?:any;recoveryTicket?:string}>;reconciled?:string[];baseline?:string;clean?:boolean;snapshotUnavailable?:string;ended?:boolean;detached?:boolean;transcript?:string;events:any[]}
 const key=(v:string)=>createHash('sha256').update(v).digest('hex')
-import {readRecoveryFile,checkRecoveryPath} from './recovery-loader'
+import {readRecoveryFile,checkRecoveryPath} from './recovery-loader-lib'
 // Exported for exact-bundle boundary tests; source .ts execution retains its
 // development imports. Production always stages the sibling installed .js.
 export function stagedRecoveryCommand(runner:string,recovered:{command:string;ticket:string}){
