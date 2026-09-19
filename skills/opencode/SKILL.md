@@ -15,7 +15,7 @@ Internals for this repo only. Global rules stay in `AGENTS.md`, which every Open
 |---|---|
 | `~/.config/opencode` | Installed configuration, runtime registry and snapshots. Inspect here; edit the maintained source in this repository. Not a source checkout: never initialize Git there again. Preserve dirty historical checkouts under it; never reset them to repair source selection. |
 | `~/.local/share/opencode` | Host data: sessions and messages in `opencode.db` (sqlite), `log/`, `tool-output/`, `auth.json`. Read to debug. Never hand-edit. |
-| `~/.local/state/opencode` | State our plugins write: usage cache, orchestration ledger, `plugin-health.json`, requests. Evidence, not source. |
+| `~/.config/opencode/.channels/state/dev/xdg/opencode` | State the managed `oc` channel's plugins write: `account-usage.json` (live quota per account, refreshed every two minutes) and its `.observations` history, `usage-cache.json`, `plugin-health.json`. `~/.local/state/opencode` is the same layout for the standalone host only; its usage snapshot is stale whenever `oc` is what is running, so never read quota from it. |
 | `~/.opencode` | Historical standalone Quest ledger. Managed `oc` and the shared API use `~/.config/opencode/.channels/state/dev/quests`; preserve both histories. |
 | npm global `@opencode-ai/cli` | The `opencode2` binary that is actually running. Read-only. |
 | `~/Projects/opencode2` (branch v2) | anomalyco/opencode source for the host we run. Read it to learn how plugins, slots, tools, hooks and instructions load. **Never edit, never commit, never open PRs from here.** |
