@@ -93,7 +93,12 @@ export class QuestWorkspaces {
       this.save(value)
       const sources = (input.inheritRunIDs ?? []).map(runID => {
         const source = this.get(runID)
-        if (!source || source.questID !== input.questID || source.projectID !== project.id) throw new Error("Dependency workspace is unavailable or has different ownership: " + runID)
+        // Naming which of the three this is turns a permanent refusal into something the giver can act
+        // on. "Fix physical Ctrl+Backspace" and "Investigate secure phone access" each sat undispatchable
+        // for days behind the single sentence these replace, which said only that something was wrong.
+        if (!source) throw new Error(`Dependency workspace ${runID} has no record left, so nothing can say whether it held unmerged work. Re-run the step that produced it in this project, or save that step's result naming what supersedes it.`)
+        if (source.questID !== input.questID) throw new Error(`Dependency workspace ${runID} belongs to Quest ${source.questID}, not ${input.questID}; it is not this Quest's to inherit.`)
+        if (source.projectID !== project.id) throw new Error(`Dependency workspace ${runID} was created under ${source.root} and this Quest now runs in ${project.root}, so its tree cannot be applied here. Re-run the step that produced it in this project, or save that step's result naming what supersedes it.`)
         if(source.removed){
           if(!source.integration)throw new Error("Removed dependency has no verified integration: "+runID)
           const retained=spawnSync("git",["-C",root,"merge-base","--is-ancestor",source.integration.workerHead,base],{windowsHide:true})
