@@ -84,54 +84,23 @@ stale line in place, delete a wrong one. User instructions outrank memory.
   a count here, it rots.
 - Quota is not usability. A route with capacity can still answer that it does not support this model,
   so a provider's own limits say nothing about whether a model will serve.
-- Every Codex tool call replays the whole conversation to the model and again to the approvals
-  reviewer, so a call costs far more than the work inside it however it prints. Dispatch, not
-  execution, dominates every tool that writes: a write-class call spends seconds being dispatched
-  against tens of milliseconds running, fewer, larger calls is the only thing that moves it, and a
-  faster disk changes nothing. The measured incident and its figures live in the `@core-observed`
-  block of `drive-settle`; re-measure them before quoting, because they drift as the session database
-  grows.
-- The running `oc` TUI is its own Windows Terminal window, not a tab of the window Jon reads chat
-  in, so `wt -w 0 focus-tab` and `wt -w 0 focus-pane` land in the wrong window and look like focus
-  refusing to move. Its title is `OC | <session title>` while a session is open and plain `OpenCode`
-  right after `/new`. A title does not identify it: a driven candidate opened in its own window is
-  also titled `OpenCode`, so a title match can send keys to Jon's session. Find candidates by
-  enumerating top-level `CASCADIA_HOSTING_WINDOW_CLASS` windows for the WindowsTerminal process, then
-  address the one you mean by the handle of the window you launched or confirmed; never store the HWND
-  across launches, it changes every launch. Drive it natively: `WScript.Shell.AppActivate`, and when Windows still refuses
-  the foreground change from a background process, send a lone Alt (`SendKeys "%"`) and call
-  `SetForegroundWindow` again; confirm the foreground handle equals the one you found before sending
-  anything, then send keys and capture the window rect. Refusing to send when the
-  focus check fails is what keeps stray keystrokes out of his other tabs. This is the visible-window
-  control surface he asks for; `runtime:drive` spawns a separate PTY and does not exercise the session
-  he is looking at.
 
 ## Where the rest lives
 
-Everything this file used to say about how the code behaves is enforced by a core test in
-`test/`, whose `@core-observed` block holds the incident that produced it. That is the better
-home: a test fails when the behaviour regresses, and it costs nothing to carry. Look there first.
+The explicit product suites in `scripts/core-suite.mjs` define the checks that run on every change.
+Other tests are implementation-specific and run only when their owning code changes.
 
-- Sandboxed drives redirecting every home or none — `drive-isolation`
-- Waiting for a driven host instead of polling it, and the Codex tool-call cost behind it —
-  `drive-settle`
-- Tool timing: no `state.time`, spans capped to the turn, approval-blocked time, interrupted calls —
-  `duration-graph`, `execute-abort-attribution`, `execute-attribution`, `context-graph`
 - A stale local branch building the wrong candidate — `try-ref-candidate`
 - A prompt lost to a stale model catalog, and an explicit `/model` choice superseding the launch
   default — `refused-request-visibility`
 - A derived route reaching dispatch unusable — `live-route-derivation`, `task-aware-effort`
 - Reasoning effort and task classification — `model-selection-policy`, `task-aware-effort`
-- Oversized tool results re-sent every turn — `result-budget`
 - Locks and leases outliving the process that took them — `release-lock-reclaim`,
   `release-lease-evidence`, `deploy-lock-reclaim`
 - Worktree retirement and checkout ownership — `worktree-retirement`, `quest-review-invariants`
 - Concurrent protected worker tools, and workspace preferences surviving an isolated launch —
   `workspace-tool-wait`, `workspace-settings-home`
-- Ctrl-Backspace word delete in the composer — `composer-word-delete`
 - Quest claims, waits, naming, duplicates, worker identity, permissions and the bounded completion
   return — the `quest-*` tests
-- `/new` and the single Quest Giver — `new-conversation-stays-home`,
-  `new-conversation-succeeds-giver`, `giver-discovery-scan`
-- The shared Quest contract served by the CLI, MCP and HTTP interfaces — `quest-api-contract`
+- The shared Quest contract served to Quest Web — `quest-api-contract`
 - Tracked setup hashes and links — `setup-manifest`
