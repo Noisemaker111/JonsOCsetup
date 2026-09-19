@@ -26,6 +26,7 @@ const groups = {
     "server-plugin-lifecycle.test.ts",
   ],
   securityAndAuthority: [
+    "activation-evidence.test.ts",
     "quest-artifact-preview.test.ts",
     "recovery-loader.test.ts",
     "quest-permission-length-not-authority.test.ts",
