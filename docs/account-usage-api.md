@@ -2,7 +2,7 @@
 
 The account API discovers existing connections and retrieves plans and limits.
 The Quest giver does not need the user to transcribe usage percentages or reset
-times. It is the source used by `usage_status`, the usage dialog, the collector,
+times. It is the source used by `usage_status`, Quest Web, the collector,
 the model capacity adapter, the account-status command, and the pre-dispatch check.
 
 ## Use it

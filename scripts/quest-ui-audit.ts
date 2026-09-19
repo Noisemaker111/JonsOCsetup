@@ -16,7 +16,7 @@ import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep 
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { startValidationProvider } from "./validation-provider"
 
-export type VisualScenario = "usage" | "quests"
+export type VisualScenario = "quests"
 
 type CastEvent = [number, "o" | "i", string]
 type Artifact = { scenario: VisualScenario; screenshot: string; text: string; spans: string; cast: string }
@@ -140,20 +140,6 @@ async function createQuestFixture(sourceRoot: string, project: string, ledger: s
   }
   return {store,id,project:projectIdentity(project)}
 }
-function createUsageFixture(config: string): void {
-  const usage = join(config, "usage")
-  mkdirSync(usage, { recursive: true })
-  writeFileSync(join(usage, "usage-cache.json"), JSON.stringify({
-    updated: new Date().toISOString(),
-    sources: [
-      { id: "openai", probe: "ok", windows: [{ label: "5h", usedTokens: 35000, used: 35, cap: 100000, pct: 35, resetsInSeconds: 3600 }] },
-      { id: "opencode-go", probe: "ok", windows: [{ label: "7d", usedTokens: 78000, used: 78, cap: 100000, pct: 78, resetsInSeconds: 172800 }] },
-    ],
-  }, null, 2))
-  writeFileSync(join(usage, "usage-plans.json"), JSON.stringify({ plans: {} }, null, 2))
-  writeFileSync(join(usage, "usage-collector.ts"), "process.exit(0)\n", "utf8")
-}
-
 async function waitForScreen(
   render: () => Promise<{ text: string; frame: CapturedFrame }>,
   predicate: (text: string) => boolean,
@@ -171,7 +157,7 @@ async function waitForScreen(
 }
 
 async function runScenario(root: string, scenario: VisualScenario, out: string, keepRun: boolean, probe: boolean, cliPlugins = false): Promise<Artifact> {
-  const entry = join(root, scenario === "usage" ? "usage/tui-active/usage.tsx" : "quest/tui-active/quests.tsx")
+  const entry = join(root, "quest/tui-active/quests.tsx")
   if (!existsSync(entry)) throw new Error(`${scenario} entrypoint missing: ${entry}`)
   const runs = join(root, ".visual-e2e", "runs")
   const run = join(runs, `visual-e2e-${scenario}-${process.pid}-${Date.now()}`)
@@ -215,8 +201,7 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
     ...(responseFixture?{model:"validation-fixture/model",providers:{"validation-fixture":{package:"@opencode-ai/ai/providers/openai-compatible",env:[],settings:{baseURL:responseFixture.origin+"/v1",apiKey:"fixture-only"},models:{model:{limit:{context:128000,output:1000}}}}}}:{}),
     agent: { "quest-giver": { mode: "primary", description: "Isolated Quest Giver navigation fixture",...(responseFixture?{model:"validation-fixture/model"}:{}) } }, mcp: {} }, null, 2) + "\n", "utf8")
   let questFixture:Awaited<ReturnType<typeof createQuestFixture>>|undefined
-  if (scenario === "usage") createUsageFixture(config)
-  else questFixture=await createQuestFixture(root, project, join(run,"ledger"))
+  questFixture=await createQuestFixture(root, project, join(run,"ledger"))
   const policyFile=join(run,"dispatch-policy.json")
   if(questFixture&&has("--workflow")) {
     const policy=JSON.parse(readFileSync(join(root,"models/dispatch-policy.json"),"utf8"))
@@ -259,7 +244,7 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
     OPENCODE_TELEMETRY_FILE: telemetryFile,
     OPENCODE_ACCOUNT_DISCOVERY_ROOT: join(run,"auth"),
     OPENCODE_ACCOUNT_USAGE_FILE: join(run,"account-usage.json"),
-    OPENCODE_USAGE_CACHE_FILE: join(run,"usage-cache.json"),
+    OPENCODE_USAGE_CACHE_FILE: join(config,"usage","usage-cache.json"),
     OPENCODE_PLUGIN_GENERATION: "",
     OPENCODE_RUNTIME_RECEIPT: join(out,"runtime-load.jsonl"),
     ...(has("--workflow")?{OPENCODE_DISPATCH_POLICY:policyFile}:{}),
@@ -342,16 +327,6 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
     let captured: { text: string; frame: CapturedFrame }
     if (probe) {
       captured = await waitForScreen(render, (text) => text.includes("VISUAL E2E PROBE"), 5_000, "visual plugin probe")
-    } else if (scenario === "usage") {
-      await paste("/usage", 200)
-      await enter(200)
-      captured = await waitForScreen(render, (text) => text.includes("Subscription usage") && text.includes("Usage · all"), 15_000, "/usage dialog")
-      writeScreenshot(captured.frame,captured.text,join(out,"usage-initial"),"OpenCode2 usage initial")
-      await clickText("Choose scope")
-      await waitForScreen(render,text=>text.includes("All recorded sessions"),5000,"inline scope picker")
-      await clickText("All recorded sessions")
-      await clickText("Show history")
-      captured=await waitForScreen(render,text=>text.includes("UTC time")&&text.includes("recorded"),5000,"shared request history")
     } else {
       await paste("/quests",200);await enter(300)
       captured=await waitForScreen(render,t=>(t.includes("Quests ·")||t.includes("OPENCODE | quests"))&&t.includes("matching"),15000,"populated real Quest board")
@@ -463,9 +438,9 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
 
 export async function main(): Promise<void> {
   const root = resolve(option("--root") ?? process.cwd())
-  const requested = option("--scenario") ?? "both"
-  if (!/^(usage|quests|both)$/.test(requested)) throw new Error("--scenario must be usage, quests, or both")
-  const scenarios: VisualScenario[] = requested === "both" ? ["usage", "quests"] : [requested as VisualScenario]
+  const requested = option("--scenario") ?? "quests"
+  if (requested !== "quests") throw new Error("--scenario must be quests")
+  const scenarios: VisualScenario[] = ["quests"]
   const out = resolve(option("--out") ?? join(root, ".visual-e2e", "artifacts"))
   const artifacts: Artifact[] = []
   for (const scenario of scenarios) artifacts.push(await runScenario(root, scenario, out, has("--keep-run"), has("--probe"), has("--cli-plugins")))

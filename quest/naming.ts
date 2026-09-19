@@ -14,7 +14,7 @@
  * refused; "Integration: fold the router into the dev channel" is not. An objective opening
  * "Jk: ..." is refused; one that mentions Jk in a later sentence is not. Everything softer -- a
  * title that fails to distinguish its siblings, authorization tangled into the goal sentence, a
- * pinned date that will go stale -- stays advisory in skills/quest-writing, because refusing on a
+ * pinned date that will go stale -- stays advisory in the giver prompt, because refusing on a
  * guess would block work over wording.
  */
 

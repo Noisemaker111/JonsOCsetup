@@ -294,7 +294,7 @@ export function upsertAgentsRouting(existing: string, card: string) {
     "",
     card,
     "",
-    "Load the `model-routing` skill when the choice is not obvious. Agent `description` fields repeat lane/tier/cost/BEST/AVOID so the Task tool can see them.",
+    "Use these measured route facts when the choice is not obvious. Agent `description` fields repeat lane/tier/cost/BEST/AVOID so the Task tool can see them.",
     "",
     AGENTS_MARK_END,
   ].join("\n")

@@ -7,7 +7,7 @@ import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs'
 import {join} from 'node:path'
 import {tmpdir,homedir} from 'node:os'
 import {workspaceSettingsFile,workspaceSettings,setWorkspaceMode} from '../quest/workspace-settings'
-import {readWorkspaceSettings} from '../skills/workspace-flow/scripts/settings.mjs'
+import {readWorkspaceSettings} from '../quest/workspace-settings-lib.mjs'
 
 test('preferences follow the persistent ledger and explicit override, not each launch config',()=>{
  const root=mkdtempSync(join(tmpdir(),'workspace-settings-')),keys=['OPENCODE_QUEST_ROOT','OPENCODE_QUEST_SETTINGS','OPENCODE_CONFIG_DIR','OPENCODE_RELEASE_CHANNEL'] as const

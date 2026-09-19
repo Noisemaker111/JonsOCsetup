@@ -17,7 +17,7 @@
  * of the repository, and a property nobody checks is a property that drifts.
  */
 import { spawnSync } from "node:child_process"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -69,7 +69,10 @@ const HOMES = ["OPENCODE_DB", "OPENCODE_QUEST_ROOT", "OPENCODE_ORCHESTRATION_LED
 const READS_REAL_DATABASE = new Set(["scripts/verify-runtime.ts"])
 const partial = []
 for (const file of git("ls-files", "scripts/*.ts", "scripts/*.mjs")) {
-  const text = readFileSync(resolve(root, file), "utf8")
+  const path = resolve(root, file)
+  // A worktree may be checking a deliberate deletion before it is staged.
+  if (!existsSync(path)) continue
+  const text = readFileSync(path, "utf8")
   // Setting the variable is what matters; a file that merely names it in prose or a README template
   // is not a harness, and plugin-package.ts documents the name inside a generated readme.
   const sets = home => new RegExp(`${home}\\s*[:=]`).test(text)

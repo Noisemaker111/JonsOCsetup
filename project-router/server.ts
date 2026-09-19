@@ -141,7 +141,7 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
    *
    * The wording is the giver's, not this handler's. A command can only put the raw sentence in both
    * the title and the objective, which is exactly the unreadable Quest the naming guard exists to
-   * refuse; the giver has the quest-writing skill, the guard and the project context. So intake is a
+   * refuse; the giver has the naming guard and the project context. So intake is a
    * synthetic prompt: Session.synthetic admits it and calls execution.wake, so the giver takes a real
    * turn (packages/core/src/session/session.ts:334).
    */
@@ -149,7 +149,7 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
     `Jon stated this goal: ${goal}`,
     '',
     'File it as a Quest and start it, in this turn:',
-    '  1. Load the quest-writing skill, then create the Quest. The title names the outcome, not the',
+    '  1. Create the Quest. The title names the outcome, not the',
     '     activity, and says what this one owns that a sibling does not. The objective opens with the',
     '     goal itself; his words go after it, not first.',
     '  2. Give it steps that name the work of this task and the result each one is checked against.',

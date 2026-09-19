@@ -1,5 +1,5 @@
 /**
- * Node-only PTY transport for opencode-visual-e2e.ts.
+ * Node-only PTY transport for quest-ui-audit.ts.
  *
  * OpenTUI's Windows FFI currently needs Bun, while node-pty's Windows input
  * transport needs Node. This bridge owns one exact isolated --standalone

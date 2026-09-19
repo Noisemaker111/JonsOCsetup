@@ -284,7 +284,7 @@ export function usageSummaryLine(cache: UsageCache | undefined): string {
   const stale = age >= USAGE_STALE_MS
   const ageBit = `${formatAgeMs(age)}${stale ? " STALE" : ""}`
   if (!cache || !Array.isArray(cache.sources) || cache.sources.length === 0) {
-    return `USAGE (${ageBit}) missing — /usage`
+    return `USAGE (${ageBit}) missing — Quest Web`
   }
   const parts: string[] = []
   for (const source of cache.sources) {
@@ -308,13 +308,13 @@ export function usageSummaryLine(cache: UsageCache | undefined): string {
     }
   }
   const body = parts.length ? parts.slice(0, 4).join(" · ") : "no 5h windows"
-  const line = `USAGE (${ageBit}) ${body} — /usage`
+  const line = `USAGE (${ageBit}) ${body} — Quest Web`
   return line.length <= 220 ? line : `${line.slice(0, 217)}...`
 }
 
 /**
  * Agent-facing quota feed. Unlike usageSummaryLine (which intentionally omits
- * quiet/empty sources to keep /usage compact), this always names every source
+ * quiet/empty sources to keep a compact summary), this always names every source
  * in the cache so model selection cannot mistake missing output for available
  * quota. The context hook reads the JSON file on every turn; a stale marker is
  * retained rather than silently presenting old data as current.

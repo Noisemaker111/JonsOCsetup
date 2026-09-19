@@ -5,7 +5,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { createHash, randomUUID } from "node:crypto"
 import ts from "typescript"
 
-export type PluginPackage = { schema: 1; name: string; description: string; server: string; tui?: string; assets: string[] }
+export type PluginPackage = { schema: 1; name: string; description: string; server?: string; tui?: string; assets: string[] }
 export type PackagePlan = { spec: PluginPackage; files: string[]; dependencies: Record<string, string> }
 const posix = (p: string) => p.replaceAll("\\", "/")
 const builtin = new Set(builtinModules)
@@ -46,12 +46,12 @@ export function relativeTarget(root: string, file: string, specifier: string): s
 }
 
 export function planPackage(root: string, spec: PluginPackage): PackagePlan {
-  if (spec.schema !== 1 || !/^opencode-[a-z-]+$/.test(spec.name) || !spec.server || !Array.isArray(spec.assets)) throw new Error("Invalid plugin manifest")
+  if (spec.schema !== 1 || !/^opencode-[a-z-]+$/.test(spec.name) || (!spec.server && !spec.tui) || !Array.isArray(spec.assets)) throw new Error("Invalid plugin manifest")
   const files = new Set<string>(), dependencies: Record<string, string> = {}
   const visit = (file: string) => {
     file = posix(relative(resolve(root), inside(root, file)))
     // Distribution inputs are source/assets only, never credentials, config, state or build output.
-    if (!/^(?:usage|quest|models|papercut|harnesses|orchestration|plugins-active|scripts|project-router)\//.test(file) && !["tui-legacy.ts", "plugin-health.ts"].includes(file)) throw new Error(`Unapproved distribution input: ${file}`)
+    if (!/^(?:usage|quest|models|papercut|harnesses|orchestration|plugins-active|scripts|project-router|system|composer|context-graph|duration-graph|generation-indicator|interrupt)\//.test(file) && !["tui-legacy.ts", "plugin-health.ts"].includes(file)) throw new Error(`Unapproved distribution input: ${file}`)
     if (!/\.(?:[cm]?[jt]s|tsx|jsx|json)$/.test(file)) throw new Error(`Unapproved distribution asset: ${file}`)
     if (file.endsWith(".json") && !["models/model-profiles.json", "usage/usage-plans.json", "usage/usage-plugin.json", "quest/quest.schema.json", "quest/migration/legacy-ledger-report.schema.json"].includes(file)) throw new Error(`Unapproved JSON asset: ${file}`)
     if (files.has(file)) return
@@ -70,7 +70,7 @@ export function planPackage(root: string, spec: PluginPackage): PackagePlan {
       dependencies[name] = manifest.version
     }
   }
-  for (const file of [spec.server, ...(spec.tui ? [spec.tui] : []), ...spec.assets]) visit(file)
+  for (const file of [...(spec.server ? [spec.server] : []), ...(spec.tui ? [spec.tui] : []), ...spec.assets]) visit(file)
   // Runtime-spawned collectors and filesystem-loaded assets cannot be found in an import graph.
   if (files.has("usage/usage-lib.ts")) for (const f of ["usage/usage-collector.ts", "usage/usage-plans.json", "usage/usage-plugin.json"]) visit(f)
   if (files.has("models/model-router.ts")) visit("models/model-profiles.json")
@@ -83,7 +83,7 @@ export function writePackage(root: string, output: string, plan: PackagePlan): v
   mkdirSync(output, {recursive:true})
   for (const file of files) { const target = inside(output,file); mkdirSync(dirname(target),{recursive:true}); copyFileSync(inside(root,file),target) }
   const json = (file: string, value: unknown) => writeFileSync(join(output,file),JSON.stringify(value,null,2)+"\n")
-  json("package.json", { name:spec.name, version:"0.0.0", private:true, type:"module", description:spec.description, license:"MIT", exports:{".":`./${spec.server}`,...(spec.tui?{"./tui":`./${spec.tui}`}:{})}, dependencies })
+  json("package.json", { name:spec.name, version:"0.0.0", private:true, type:"module", description:spec.description, license:"MIT", exports:{".":`./${spec.server ?? spec.tui}`,...(spec.tui?{"./tui":`./${spec.tui}`}:{})}, dependencies })
   json("plugin.json",spec)
   json("distribution.json",{schema:1,files:files.map(path=>({path,sha256:createHash("sha256").update(readFileSync(join(root,path))).digest("hex")})), policy:"Relative dependencies are vendored from this source revision; no sibling checkout is required."})
   copyFileSync(join(root,"LICENSE"),join(output,"LICENSE"))
@@ -107,7 +107,7 @@ export async function buildPackages(root: string, output = join(root,".candidate
     const dest=join(staging,plan.spec.name)
     writePackage(root,dest,plan)
     if(plan.spec.tui) writeFileSync(join(dest,"tui.tsx"),`export { default } from "./${plan.spec.tui}"\n`)
-    const built = await Bun.build({entrypoints:[plan.spec.server,...(plan.spec.tui?[plan.spec.tui]:[])].map(file=>join(dest,file)),target:"bun",packages:"external",write:false})
+    const built = await Bun.build({entrypoints:[...(plan.spec.server?[plan.spec.server]:[]),...(plan.spec.tui?[plan.spec.tui]:[])].map(file=>join(dest,file)),target:"bun",packages:"external",write:false})
     if(!built.success) throw new AggregateError(built.logs, `Package validation failed: ${plan.spec.name}`)
   }
   writeFileSync(join(staging,"repos.json"),JSON.stringify(plans.map(p=>({name:p.spec.name,blurb:p.spec.description,peers:[]})),null,2)+"\n")

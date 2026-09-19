@@ -18,7 +18,7 @@
 - [Plugin ownership](plugin-standards.md): entrypoints, public surfaces, and local packaging.
 - [Verify through the user's controls](user-verification.md).
 - [Windows sandbox recovery](windows-sandbox-recovery.md): preserve the session after a native startup failure.
-- [Workspace flow](../skills/workspace-flow/SKILL.md).
+- [Workspace flow](workspace-flow.md).
 
 Current behavior is documented in these guides and implemented in the corresponding source. Account balances, prices, model choices, and loaded runtime identities come from live settings and observations, not a dated report.
 

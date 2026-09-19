@@ -96,8 +96,7 @@ does not roll back mutable data. Never propose releases during routine work.
 
 ## Branch controls and commands
 
-Use the shared helper in [agents-and-main](../skills/agents-and-main/SKILL.md).
-Install it once with that skill's `scripts/install.ps1`; use `sb agents` only in
+Use the installed `sb` branch helper; use `sb agents` only in
 a checkout you own. Stable is `main`, so use `sb main`, or `git switch main` followed by
 `git pull --ff-only origin main`. Do not switch another session's checkout.
 

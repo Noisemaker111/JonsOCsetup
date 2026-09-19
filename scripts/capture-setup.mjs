@@ -40,8 +40,13 @@ function tree(target){if(!existsSync(join(home,target)))return;for(const e of re
 // installed is a file that gets corrected repeatedly and lost every time: the dev-workflow skill was
 // reworded away from "dev release" twice before the wording reached this tree.
 for(const path of ['.agents/matt-pocock.md','.agents/user-verification.md','.agents/.skill-lock.json','.agents/plugins/marketplace.json','.codex/AGENTS.md','.codex/config.toml','.claude/CLAUDE.md','.claude/settings.json'])file(path)
-for(const path of ['.agents/scripts','.agents/docs','.codex/skills/convex-deploy-guard','.codex/rules'])tree(path)
-for(const e of readdirSync(join(home,'.agents/skills'),{withFileTypes:true})){const p='.agents/skills/'+e.name;if(statSync(join(home,p)).isDirectory())tree(p);else file(p)}
+for(const path of ['.agents/scripts','.agents/docs','.codex/rules'])tree(path)
+for(const e of readdirSync(join(home,'.agents/skills'),{withFileTypes:true})){
+ const p='.agents/skills/'+e.name,source=join(home,p)
+ if(statSync(source).isDirectory()){
+  if(existsSync(join(source,'SKILL.md')))tree(p)
+ }else file(p)
+}
 // Disabled skills stay disabled but remain reproducible source, including their licenses.
 tree('.agents/skills-disabled')
 const cache=join(home,'.codex/plugins/cache')
@@ -55,6 +60,8 @@ if(existsSync(cache))for(const publisher of readdirSync(cache,{withFileTypes:tru
 const claudeSkills=join(home,'.claude/skills')
 if(existsSync(claudeSkills))for(const e of readdirSync(claudeSkills,{withFileTypes:true}).filter(e=>e.isDirectory())){
  const path='.claude/skills/'+e.name
+ // Claude's runtime-managed synced bucket is a cache of bundled skills, not personal setup source.
+ if(e.name==='synced')continue
  let origin,commit
  try{
   origin=execFileSync('git',['-C',join(home,path),'remote','get-url','origin'],{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim()
