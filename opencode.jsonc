@@ -40,6 +40,21 @@
         }
       }
     },
+    "ollama-cloud": {
+      "name": "Ollama Cloud",
+      "package": "@opencode-ai/ai/providers/openai-compatible",
+      "env": ["OLLAMA_API_KEY"],
+      "settings": {
+        "baseURL": "https://ollama.com/v1",
+        "apiKey": "{file:~/.config/opencode/.secrets/ollama-api-key}"
+      },
+      "models": {
+        "kimi-k2.7-code": {
+          "name": "Kimi K2.7 Code (Ollama Cloud)",
+          "limit": { "context": 262144, "output": 262144 }
+        }
+      }
+    },
     "cliproxyapi": {
       "name": "CLIProxyAPI",
       "package": "@opencode-ai/ai/providers/openai-compatible",
