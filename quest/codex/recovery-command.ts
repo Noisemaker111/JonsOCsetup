@@ -28,8 +28,34 @@ export function lockedPackageApplies(entry:any,platform=process.platform,arch=pr
  }
  return accepts(entry[2]?.os,platform)&&accepts(entry[2]?.cpu,arch)
 }
-function provisionCache(destination:string,entries:any[],source:string){
- const budget={files:0,bytes:0},packages:string[]=[],deadline=Date.now()+30000
+/** The parent package a nested lock key belongs to, or null for a top-level entry.
+ * Bun writes a nested resolution as `<parent>/<name>` with the child's bare name last,
+ * while the locked specifier is `<name>@<version>`; compare against the bare name. */
+function nestedParent(key:string,entry:any){
+ const spec=entry?.[0]
+ if(typeof spec!=='string')return null
+ const at=spec.lastIndexOf('@'),name=at>0?spec.slice(0,at):spec
+ const cut=key.length-name.length-1
+ return cut>0&&key.slice(cut)==='/'+name?key.slice(0,cut):null
+}
+/** A locked entry Bun never fetches from the registry can have no private cache slot: a
+ * workspace member is materialized from the repository itself, a bundled package ships
+ * inside its parent's tarball, and a nested dependency of a package this platform will
+ * not install is never resolved. Demanding one refused every repository whose lockfile
+ * held a workspace member or a platform-only package with bundled deps. */
+export function lockedPackageNeedsCache(locked:Record<string,any>,key:string,entry:any,platform=process.platform,arch=process.arch){
+ if(/@workspace:/.test(String(entry[0])))return false
+ if(!lockedPackageApplies(entry,platform,arch))return false
+ if(entry[2]?.bundled===true)return false
+ for(let parent=nestedParent(key,entry);parent;parent=nestedParent(parent,locked[parent])){
+  const resolved=locked[parent]
+  if(!Array.isArray(resolved))return true
+  if(!lockedPackageApplies(resolved,platform,arch))return false
+ }
+ return true
+}
+function provisionCache(destination:string,locked:Record<string,any>,entries:[string,any][],source:string,limits={packages:2000,bytes:3*1024*1024*1024,files:200000,ms:600000}){
+ const budget={files:0,bytes:0},packages:string[]=[],deadline=Date.now()+limits.ms
  const read=(path:string)=>{
   const stat=cachePath(path)
   if(!stat.isFile()||stat.size>32*1024*1024)throw Error('Private cache requires regular package files of at most 32 MiB')
@@ -45,9 +71,9 @@ function provisionCache(destination:string,entries:any[],source:string){
   }finally{closeSync(fd)}
  }
  const copy=(from:string,to:string,depth=0)=>{
-  if(Date.now()>deadline)throw Error('Private cache exceeded 30 second provisioning budget; inspect partial cache before retrying')
+  if(Date.now()>deadline)throw Error('Private cache exceeded '+Math.round(limits.ms/1000)+' second provisioning budget; inspect partial cache before retrying')
   if(depth>32)throw Error('Private cache exceeds supported package directory depth')
-  budget.files++
+  if(++budget.files>limits.files)throw Error('Private cache exceeds '+limits.files+' file limit; owner handoff required')
   const stat=cachePath(from)
   if(stat.isDirectory()){
    mkdirSync(to);const dir=opendirSync(from)
@@ -67,13 +93,13 @@ function provisionCache(destination:string,entries:any[],source:string){
     for(;;){const count=readSync(sourceFD,buffer,0,buffer.length,null);if(!count)break;let offset=0;while(offset<count)offset+=writeSync(targetFD,buffer,offset,count-offset);copied+=count}
     const after=fstatSync(sourceFD);cachePath(from)
     if(copied!==stat.size||after.size!==stat.size||after.mtimeMs!==stat.mtimeMs)throw Error('Private cache source changed while copying')
-    budget.bytes+=copied
+    if((budget.bytes+=copied)>limits.bytes)throw Error('Private cache exceeds '+limits.bytes+' byte limit; owner handoff required')
    }finally{closeSync(sourceFD);if(targetFD!==undefined)closeSync(targetFD)}
   }
  }
- if(entries.length>256)throw Error('Private cache exceeds 256 locked packages; owner handoff required')
- for(const entry of entries){
-  if(!lockedPackageApplies(entry))continue
+ if(entries.length>limits.packages)throw Error('Private cache exceeds '+limits.packages+' locked packages; owner handoff required')
+ for(const [key,entry] of entries){
+  if(!lockedPackageNeedsCache(locked,key,entry))continue
   if(packages.includes(entry[0]))continue
   const at=entry[0].lastIndexOf('@'),name=entry[0].slice(0,at),version=entry[0].slice(at+1)
   let slot=name+'@'+version+'@@@1',from=join(source,slot)
@@ -122,9 +148,27 @@ export async function prepareRecoveredEnvironment(workspace:string,receipt:strin
  const fingerprint=createHash('sha256').update(bytes).update('\0').update(locked).digest('hex')
  const pkg=JSON.parse(bytes.toString()),data=Bun.JSONC.parse(locked.toString())
  if(pkg.packageManager&&!/^bun@/.test(pkg.packageManager))throw Error('Declared package manager is not Bun; reads and patches remain available')
- if(pkg.workspaces||Object.keys(data.workspaces??{}).some(path=>path!==''))throw Error('Workspace dependency preparation needs a separately verified recipe; reads and patches remain available')
+ const workspaceMembers=Object.entries(data.workspaces??{}).filter(([path])=>path!=='')
+ if(pkg.workspaces||workspaceMembers.length){
+  const names=new Set(workspaceMembers.map(([,w])=>w?.name).filter((n:any)=>typeof n==='string'))
+  for(const entry of Object.values(data.packages??{}) as any[]){
+   if(Array.isArray(entry))continue
+   const resolution=typeof entry==='string'?entry:''
+   const workspace=/^(.+)@workspace:/.exec(resolution)?.[1]
+   if(!workspace||!names.has(workspace))throw Error('Only integrity-locked registry packages and locked workspace members support automatic preparation; local/Git/unverified inputs require owner handoff')
+  }
+  const relativeWorkspace=(path:string)=>{if(!/^[A-Za-z0-9][A-Za-z0-9._\/-]*$/.test(path))throw Error('Workspace path is outside the recovery workspace; owner handoff required');return path}
+  for(const [path] of workspaceMembers){
+   const manifestPath=join(canonical,relativeWorkspace(path),'package.json')
+   if(!existsSync(manifestPath))throw Error('Locked workspace manifest is missing; owner handoff required')
+   const member=JSON.parse(readFileSync(manifestPath).toString())
+   for(const value of Object.values({...member.dependencies,...member.devDependencies,...member.optionalDependencies}) as string[])if(typeof value!=='string'||/^(?:file:|link:|git|https?:|\.\.?[\/]|[A-Za-z]:)/.test(value))throw Error('Local/Git dependency input requires owner handoff; reads and patches remain available')
+  }
+ }
  for(const entry of Object.values(data.packages??{}) as any[]){
-  if(!Array.isArray(entry)||typeof entry[0]!=='string'||entry[0].length>240||!/^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*@\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(entry[0])||entry[1]!==''||!lockedIntegrity(entry[3]))throw Error('Only integrity-locked default registry packages support automatic preparation; local/Git/unverified inputs require owner handoff')
+  if(!Array.isArray(entry))continue
+  if(/^(.+[^@])@workspace:/.test(String(entry[0])))continue
+  if(typeof entry[0]!=='string'||entry[0].length>240||!/^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*@\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(entry[0])||entry[1]!==''||!lockedIntegrity(entry[3]))throw Error('Only integrity-locked default registry packages support automatic preparation; local/Git/unverified inputs require owner handoff')
  }
  for(const value of Object.values({...pkg.dependencies,...pkg.devDependencies,...pkg.optionalDependencies}) as string[])if(typeof value!=='string'||/^(?:file:|link:|workspace:|git|https?:|\.\.?[\/]|[A-Za-z]:)/.test(value))throw Error('Local/Git dependency input requires owner handoff; reads and patches remain available')
  if(existsSync(receipt)){
@@ -148,7 +192,7 @@ export async function prepareRecoveredEnvironment(workspace:string,receipt:strin
  try{
    const owned=mkdtempSync(join(workspace,'.quest-preparation-')),config=join(owned,'bunfig.toml'),cache=join(owned,'cache');writeFileSync(config,'');mkdirSync(cache)
    record.cache={directory:cache,state:'started'};writeFileSync(receipt,JSON.stringify(record))
-   record.cache=provisionCache(cache,Object.values(data.packages??{}),sourceCache);writeFileSync(receipt,JSON.stringify(record))
+   record.cache=provisionCache(cache,data.packages??{},Object.entries(data.packages??{}) as [string,any][],sourceCache);writeFileSync(receipt,JSON.stringify(record))
    const command='& '+quote(process.execPath)+' install --frozen-lockfile --ignore-scripts --backend=copyfile --linker=hoisted --no-progress --config='+quote(config)+' --registry=http://127.0.0.1:9 --cache-dir='+quote(cache)
    const result=await execute(workspace,command,workspace)
    record.output={exitCode:result.exitCode,stdout:preparationOutput(result.stdout),stderr:preparationOutput(result.stderr)}

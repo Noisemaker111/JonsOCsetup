@@ -127,3 +127,39 @@ test('hashed cache lookup retries a known failed preflight and preserves its evi
   expect(executions).toBe(1)
  }finally{rmSync(root,{recursive:true,force:true})}
 })
+
+/** @core-observed AppforGutters Quest preparation blocked twice on inputs Bun never fetches: first @appforgutters/backend@workspace:packages/backend, then @emnapi/core@1.11.0, a bundled dependency of the cpu:"none" @tailwindcss/oxide-wasm32-wasi. */
+test('private preparation demands no cache slot for inputs Bun never fetches',async()=>{
+ const {lockedPackageNeedsCache,prepareRecoveredEnvironment}=await import('../quest/codex/recovery-command')
+ const {writeFileSync}=await import('node:fs')
+ const integrity='sha512-'+Buffer.alloc(64).toString('base64')
+ const member=['@fixture/backend@workspace:packages/backend']
+ const wasm=['@tailwindcss/oxide-wasm32-wasi@4.3.0','',{cpu:'none',dependencies:{'@emnapi/core':'^1.10.0'}},integrity]
+ const bundled=['@emnapi/core@1.11.0','',{bundled:true},integrity]
+ const nativeOnly=['native-only@1.0.0','',{os:'darwin',cpu:'arm64'},integrity]
+ const nativeChild=['native-child@1.0.0','',{},integrity]
+ const plain=['plain-package@1.0.0','',{},integrity]
+ const locked:Record<string,any>={'@fixture/backend':member,'@tailwindcss/oxide-wasm32-wasi':wasm,'@tailwindcss/oxide-wasm32-wasi/@emnapi/core':bundled,'native-only':nativeOnly,'native-only/native-child':nativeChild,'plain-package':plain}
+ const needs=(key:string,entry:any)=>lockedPackageNeedsCache(locked,key,entry,'win32','x64')
+ expect(needs('plain-package',plain)).toBe(true)
+ expect(needs('@fixture/backend',member)).toBe(false)
+ expect(needs('@tailwindcss/oxide-wasm32-wasi',wasm)).toBe(false)
+ expect(needs('@tailwindcss/oxide-wasm32-wasi/@emnapi/core',bundled)).toBe(false)
+ expect(needs('native-only/native-child',nativeChild)).toBe(false)
+ const {root,cwd}=fixture(),cache=join(root,'cache'),receipt=join(cwd,'preparation.json')
+ mkdirSync(cache);mkdirSync(join(cwd,'packages','backend'),{recursive:true})
+ const dependencies={'plain-package':'1.0.0'}
+ writeFileSync(join(cwd,'packages','backend','package.json'),JSON.stringify({name:'@fixture/backend',dependencies}))
+ writeFileSync(join(cwd,'package.json'),JSON.stringify({name:'fixture',workspaces:['packages/backend'],dependencies}))
+ writeFileSync(join(cwd,'bun.lock'),JSON.stringify({workspaces:{'':{name:'fixture',dependencies},'packages/backend':{name:'@fixture/backend',dependencies}},packages:locked}))
+ const slot=join(cache,'plain-package@1.0.0@@@1');mkdirSync(slot)
+ writeFileSync(join(slot,'package.json'),JSON.stringify({name:'plain-package',version:'1.0.0'}))
+ let executions=0
+ const execute=async()=>{executions++;mkdirSync(join(cwd,'node_modules'));return {exitCode:0,stdout:'',stderr:''}}
+ try{
+  const prepared=await prepareRecoveredEnvironment(cwd,receipt,execute,cache)
+  expect(prepared.state).toBe('ready')
+  expect(executions).toBe(1)
+  expect(prepared.cache.packages).toEqual(['plain-package@1.0.0'])
+ }finally{rmSync(root,{recursive:true,force:true})}
+})
