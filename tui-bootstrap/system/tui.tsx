@@ -1,5 +1,15 @@
 import { join } from "node:path"
-import { pathToFileURL } from "node:url"
-import { runtimeSource } from "../../scripts/runtime-contract.mjs"
+import { selectedPluginRoot, recordRuntimeLoad } from "../../scripts/runtime-contract.mjs"
+import { Plugin } from "../../tui-legacy"
 
-export default await import(pathToFileURL(join(runtimeSource(import.meta.dir), "system/tui-active/system.tsx")).href).then(module => module.default)
+const ROOT = join(import.meta.dir, "..", "..")
+export default Plugin.define({
+  id: "system",
+  async setup(ctx) {
+    const pluginRoot = selectedPluginRoot(ROOT)
+    const mod = await import(join(pluginRoot, "system/tui-active/system.tsx"))
+    const result = await mod.default.setup(ctx)
+    recordRuntimeLoad("tui:system", pluginRoot)
+    return result
+  },
+})
