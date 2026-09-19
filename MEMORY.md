@@ -39,6 +39,8 @@ stale line in place, delete a wrong one. User instructions outrank memory.
   small glance, not a page.
 - Call the browser-based Quest Giver product **Quest Web**. Usage belongs in Quest Web; do not build,
   preserve, or audit a `/usage` surface in OpenCode2.
+- Quest Web and the OpenCode2 server that supports it are the product boundary. Do not spend product
+  work or acceptance effort on OpenCode2 CLI/TUI behavior except a strictly necessary server launch path.
 - Build chat and agent UI from existing open-source component kits (shadcn registries, the UIs other
   harnesses published). Import the message, composer, model-selector and session components; do not
   hand-roll them.
