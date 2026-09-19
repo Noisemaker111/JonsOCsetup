@@ -1,6 +1,6 @@
 ---
 name: opencode
-description: Use for OpenCode2 configuration, plugins, Quests, model routing, TUI, verification, or development-channel activation in JonsOCsetup.
+description: Use when changing the OpenCode2 server, Quest runtime, Quest Web integration, model routing, or development activation in JonsOCsetup.
 ---
 
 # OpenCode2 development
@@ -9,10 +9,10 @@ description: Use for OpenCode2 configuration, plugins, Quests, model routing, TU
 
 Read only the task-relevant source plus `docs/development-workflow.md`. Follow `AGENTS.md` for ownership, authorization, model choice, and completion rules.
 
-Keep these boundaries intact:
+Keep these product boundaries intact:
 
 - Quest is the persistent work record and runtime; Quest Web is the browser product.
-- OpenCode2 retains Quest controls and typed runtime APIs. Usage presentation belongs in Quest Web.
+- OpenCode2 provides typed runtime APIs to Quest Web; terminal UI and slash-command presentation are outside the product target.
 - Models and routing stay user-editable; never hardcode a default or silent fallback.
 - Plugins expose specific typed tools. Do not add generic workspace or workflow tools.
 
