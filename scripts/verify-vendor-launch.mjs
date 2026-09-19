@@ -14,7 +14,7 @@ try {
  for(let i=0;i<60;i++) {
   await sleep(1000)
   if(existsSync(receipt)) loads=readFileSync(receipt,'utf8').trim().split('\n').map(JSON.parse)
-  if(['server','tui:usage','tui:quests'].every(c=>loads.some(l=>l.component===c))){ok=true;break}
+  if(['server','tui:system','tui:quests'].every(c=>loads.some(l=>l.component===c))){ok=true;break}
   if(exited) break
  }
 } finally {

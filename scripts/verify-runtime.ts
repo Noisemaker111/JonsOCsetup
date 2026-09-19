@@ -71,7 +71,7 @@ function loads(launch: any) {
 }
 function assertLoads(launch: any) {
   const rows = loads(launch)
-  return ["server", "tui:usage", "tui:quests"].every((component) => rows.some((row) => row.component === component && row.generation === launch.generation && row.sourceCommit === launch.sourceCommit && Number.isInteger(row.pid) && row.pid > 0))
+  return ["server", "tui:system", "tui:quests"].every((component) => rows.some((row) => row.component === component && row.generation === launch.generation && row.sourceCommit === launch.sourceCommit && Number.isInteger(row.pid) && row.pid > 0))
 }
 const report: any = { ok: false, run, marker, checks: {} }
 let db: Database | undefined
