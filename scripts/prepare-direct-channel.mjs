@@ -1,20 +1,38 @@
 /** Prepare channel environment only. Never own or proxy a terminal. */
-import {readFileSync,writeFileSync,mkdirSync,readdirSync,symlinkSync,copyFileSync} from 'node:fs'
+import {existsSync,readFileSync,writeFileSync,mkdirSync,readdirSync,symlinkSync,copyFileSync} from 'node:fs'
 import {join} from 'node:path'
 import {homedir} from 'node:os'
 import {pathToFileURL} from 'node:url'
 import {createRequire} from 'node:module'
+import {commitsBehind, sourceRepository} from './channel-prepare.mjs'
 const channel=process.argv[2]
 if(!['dev','stable'].includes(channel))throw Error('Choose dev or stable')
-const repository=join(homedir(),'.config','opencode'),registry=join(repository,'.channels')
+const runtimeHome=join(homedir(),'.config','opencode'),registry=join(runtimeHome,'.channels')
+const repository=channel==='dev'?sourceRepository():runtimeHome
 const read=path=>JSON.parse(readFileSync(path,'utf8'))
-const dev=read(join(registry,'dev.json')),root=channel==='dev'?dev.root:repository
+const selectedPath=join(registry,'dev.json'),selectedDev=existsSync(selectedPath)?read(selectedPath):undefined
+// Explicit candidate verification uses the ordinary native launcher and existing dev state.
+// A candidate never depends on activation and never changes it: trying a branch must work with no
+// selected dev release at all, and must leave the selected one exactly as it was.
+const candidate=channel==='dev'?process.env.OPENCODE_DEV_CANDIDATE:undefined
+const dev=candidate?read(join(candidate,'channel-release.json')):selectedDev
+if(!dev)throw Error('No dev channel is activated; prepare and activate one, or run a branch with oc <branch>')
+if(candidate&&(dev.channel!=='dev'||dev.root!==candidate))throw Error('Invalid explicit dev candidate')
+const root=channel==='dev'?dev.root:runtimeHome
+const {useRelease}=await import(pathToFileURL(join(dev.root,'scripts/release-retirement.mjs')))
+const ownerAt=process.argv.indexOf('--owner-pid'),ownerPID=Number(process.argv[ownerAt+1]);if(ownerAt<0||!Number.isSafeInteger(ownerPID)||ownerPID<1)throw Error('Direct launcher owner PID required')
+const releaseLease=useRelease(root,ownerPID)
 // Use the selected reviewed helper code, never dirty shared source.
 const {generationRoot,reviewedAgentConfig}=await import(pathToFileURL(join(dev.root,'scripts/runtime-contract.mjs')))
 const {inspectHostExecutable}=await import(pathToFileURL(join(dev.root,'project-router/executable.mjs')))
 const JSON5=createRequire(join(dev.root,'package.json'))('json5')
 const pointer=read(join(root,'plugin-activation.json')),generation=pointer.activeGeneration,selected=generationRoot(root,generation)
-if(!pointer.evidence?.ok||read(join(selected,'.deployment-source.json')).commit!==pointer.evidence.sourceCommit)throw Error('Channel generation differs from verified source')
+// `ok` additionally means a provider answered the preparation prompt, which is not what decides
+// whether this generation may run. `accepted` is: it requires the generation to have loaded at this
+// exact commit, and it tolerates an account with nothing left to answer with. Reading `ok` here kept
+// the launcher on older code for a reason that was never about the code. `ok` remains the fallback
+// for activation records written before preparation recorded the distinction.
+if(!(pointer.evidence?.accepted??pointer.evidence?.ok)||read(join(selected,'.deployment-source.json')).commit!==pointer.evidence.sourceCommit)throw Error('Channel generation differs from verified source')
 const control=join(root,'run','direct','launch-'+Date.now()+'-'+process.pid),config=join(control,'config')
 mkdirSync(config,{recursive:true})
 for(const entry of readdirSync(root,{withFileTypes:true})){
@@ -30,6 +48,19 @@ if(channel==='dev'){
  const state=join(registry,'state','dev');mkdirSync(state,{recursive:true})
  Object.assign(env,{XDG_STATE_HOME:join(state,'xdg'),OPENCODE_DB:join(state,'host.db'),OPENCODE_QUEST_ROOT:join(state,'quests'),OPENCODE_ORCHESTRATION_LEDGER:join(state,'orchestration.jsonl'),OPENCODE_TELEMETRY_FILE:join(state,'requests.jsonl')})
 }
-const plan={channel,host:inspectHostExecutable(),generation,sourceCommit:pointer.evidence.sourceCommit,env}
+const {readUserGiver}=await import(pathToFileURL(join(dev.root,'quest/giver-registry.mjs')))
+const giver=readUserGiver(join(env.OPENCODE_QUEST_ROOT??homedir(),'.opencode','.quest-runtime'))
+if(giver&&giver.state!=='bound')throw Error('Your giver creation is uncertain; inspect it before opening another conversation')
+const banner={candidate:candidate??undefined,ref:dev.ref,resolvedRef:dev.resolved,subject:dev.subject,commit:dev.commit,behind:commitsBehind(repository,dev.commit),model:channel==='dev'?dev.model:undefined,preparedAt:dev.preparedAt,activatedCommit:selectedDev?.commit,activatedRoot:selectedDev?.root}
+const hostOwnershipScript=join(dev.root,'scripts/host-ownership.mjs')
+// Where the giver conversation lives, so the launcher can open it there.
+//
+// Only the giver's own location coordinates the board: that is what keeps a worker's checkout from
+// also reconciling runs, consuming start requests and advancing continuations. There is one host
+// process and one plugin instance, at the directory the launcher opened, so opening the giver
+// anywhere else means no location is the giver's and the comparison can never pass. The board then
+// has no coordinator at all — which is what had happened: the giver was created in the hub, the
+// launcher opened it in the maintained source, and no poll had run since.
+const plan={channel,releaseLease,retirementScript:join(dev.root,'scripts/release-retirement.mjs'),...(existsSync(hostOwnershipScript)?{hostOwnershipScript}:{}),host:inspectHostExecutable(),generation,sourceCommit:pointer.evidence.sourceCommit,banner,env,...(giver?.sessionID?{giverSessionID:giver.sessionID,...(giver.directory?{giverDirectory:giver.directory}:{})}:{})}
 writeFileSync(join(control,'launch.json'),JSON.stringify(plan,null,2))
 console.log(JSON.stringify(plan))

@@ -1,3 +1,4 @@
+import {runtimeQueuePath,continuationFiles,readContinuations} from './runtime-queues'
 import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
@@ -5,29 +6,33 @@ import { acquireLock } from './locking'
 import { questsAPI, QuestError, type QuestContext, type RunQuest, type StartRun } from './api'
 import { QuestStore } from './store'
 import { RouteReservations } from '../models/route-reservations'
+import { TERMINAL_RUN } from './session-lineage'
 import { getAccountUsage } from '../usage/account-api'
 import { readAllQuests } from './index'
 import { redact } from './privacy'
 import type { Quest, QuestStage } from './types'
 import {dispatchReservationFile} from '../models/dispatch-planner'
 import { verifySourceBinding } from './project'
-function verified(q:Quest,s:QuestStage){const command=(q.extensions.routerVerification as Record<string,string>|undefined)?.[s.id]??s.commandID;return !!command&&s.proofs.some(p=>p.command===command&&p.verified===true&&(p.result==='passed'||p.verdict==='PASS'))}
+// A bound command is a verification contract. An ordinary worker step does not
+// acquire an unspecified command requirement merely because it belongs to a goal.
+function verified(q:Quest,s:QuestStage){const command=(q.extensions.routerVerification as Record<string,string>|undefined)?.[s.id]??s.commandID;return !command||s.proofs.some(p=>p.command===command&&p.verified===true&&(p.result==='passed'||p.verdict==='PASS'))}
 const verificationSnapshot=(q:Quest,ids:string[])=>Object.fromEntries(ids.map(id=>[id,(q.extensions.routerVerification as Record<string,string>|undefined)?.[id]??q.stages.find(s=>s.id===id)?.commandID??null]))
 
 export type ContinuationRunOptions = RunQuest & { maxConcurrent?:number; stepModels?:Record<string,string> }
 type Admission = { stepID:string; requestID:string; runID?:string; state:'waiting'|'claiming'|'running'|'unknown'|'stopped'|'done'; attempt:number; refreshes:number; nextAt:number; reason:string }
 export type GoalRoute = { routeID:string;accountID:string;providerID:string;modelID:string;reasoning:string;serviceTier:string }
-type Intent = { readOnly?:boolean; requestFingerprint?:string; maxConcurrent?:number; stepModels?:Record<string,string>; admissions?:Admission[]; id:string; goal?:boolean; worker?:boolean; unknown?:boolean; verification?:Record<string,string|null>; route?:GoalRoute; epoch?:number; eventIDs?:string[]; questID:string; description:string; context:QuestContext; model?:string; files?:string[]; steps:{id:string;title:string;detail?:string;needs:string[]}[]; state:'waiting'|'claiming'|'running'|'stopped'|'done'; runID?:string; attempt:number; refreshes:number; nextAt:number; reason:string }
+type Intent = { readOnly?:boolean; task?:string; requestFingerprint?:string; maxConcurrent?:number; stepModels?:Record<string,string>; admissions?:Admission[]; id:string; goal?:boolean; worker?:boolean; unknown?:boolean; verification?:Record<string,string|null>; route?:GoalRoute; epoch?:number; eventIDs?:string[]; questID:string; description:string; context:QuestContext; model?:string; files?:string[]; steps:{id:string;title:string;detail?:string;needs:string[]}[]; state:'waiting'|'claiming'|'running'|'stopped'|'done'; runID?:string; attempt:number; refreshes:number; nextAt:number; reason:string }
 const active = (state:string)=>['planned','executing','waiting','blocked'].includes(state)
 /** Only explicit run.continue requests enter this queue. Never infer authorization from logs. */
 export class QuestContinuation {
+ private retiredForeign=false
   readonly file:string
   private liveGoals=new Set<string>()
-  constructor(readonly store:QuestStore,readonly start:StartRun,readonly options:{goalMode?:boolean;routeBinding?:(selector:string)=>GoalRoute;workerPrompt?:(context:QuestContext,text:string,id:string,eventID?:string)=>Promise<void>;refresh?:typeof getAccountUsage;now?:()=>number;verifyContext?:(context:QuestContext)=>Promise<void>}={}) {this.file=join(store.runtime,'continuations.json')}
+  constructor(readonly store:QuestStore,readonly start:StartRun,readonly options:{runtimeGeneration?:string;goalMode?:boolean;routeBinding?:(selector:string)=>GoalRoute|Promise<GoalRoute>;workerPrompt?:(context:QuestContext,text:string,id:string,eventID?:string)=>Promise<void>;refresh?:typeof getAccountUsage;now?:()=>number;verifyContext?:(context:QuestContext)=>Promise<void>}={}) {this.file=runtimeQueuePath(store.runtime,'continuations',options.runtimeGeneration,'.json')}
  private now(){return this.options.now?.()??Date.now()}
  private read():Intent[]{return existsSync(this.file)?JSON.parse(readFileSync(this.file,'utf8')):[]}
  private change<T>(fn:(rows:Intent[])=>T):T {const lock=acquireLock(this.store.runtime,'continuations');try{const rows=this.read(),result=fn(rows);mkdirSync(this.store.runtime,{recursive:true});const tmp=this.file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(rows));renameSync(tmp,this.file);return result}finally{lock.release()}}
- status(questID:string){return this.read().filter(x=>x.questID===questID).map(row=>({...row,...(row.admissions?{desired:row.maxConcurrent??1,admitted:row.admissions.filter(a=>['claiming','running','unknown'].includes(a.state)).length,waiting:row.steps.filter(s=>!row.admissions!.some(a=>a.stepID===s.id&&['claiming','running','unknown','done','stopped'].includes(a.state))).length}:{} )}))}
+ status(questID:string){return readContinuations(this.store.runtime).filter(x=>x.questID===questID).map(row=>({...row,...(row.admissions?{desired:row.maxConcurrent??1,admitted:row.admissions.filter(a=>['claiming','running','unknown'].includes(a.state)).length,waiting:row.steps.filter(s=>!row.admissions!.some(a=>a.stepID===s.id&&['claiming','running','unknown','done','stopped'].includes(a.state))).length}:{} )}))}
   goalStatus(sessionID:string){return this.read().filter(x=>x.goal&&x.context.sessionID===sessionID).map(x=>({...x,live:this.liveGoals.has(x.id),resumeRequired:!this.liveGoals.has(x.id)&&x.state!=='done'}))}
   async resumeGoal(context:QuestContext){
    const row=this.read().findLast(x=>x.goal&&x.context.sessionID===context.sessionID)
@@ -66,7 +71,7 @@ export class QuestContinuation {
     if(row.verification&&JSON.stringify(row.verification)!==JSON.stringify(verificationSnapshot(q,row.steps.map(s=>s.id)))){stop('Verification contract changed; explicitly start a newly authorized goal');return}
     if(steps.some(s=>s.status==='blocked')){stop('Assigned step blocked; inspect its result');return}
     if(steps.some(s=>s.status==='done'&&!verified(q,s))){stop('Assigned result lacks a verified passing proof for its verification contract');return}
-    if(steps.every(s=>s.status==='done')){row.state='done';row.reason='Assigned verification passed';return}
+    if(steps.every(s=>s.status==='done')){row.state='done';row.reason='Assigned steps completed';return}
     if(row.attempt>=3){stop('Bounded worker goal turn budget exhausted; explicit resume after review required');return}
     row.state='claiming';claimed=structuredClone(row)
    })
@@ -87,26 +92,64 @@ export class QuestContinuation {
    }catch(error){this.change(rows=>{const current=rows.find(r=>r.id===id)!;if(current.state!=='stopped'){current.state='stopped';current.reason=(promptAttempted?'UNKNOWN_LAUNCH: ':'')+redact(error instanceof Error?error.message:String(error),1000)}})}
   }
   pauseGoal(context:QuestContext){this.change(rows=>{for(const row of rows.filter(r=>r.goal&&r.context.sessionID===context.sessionID)){if(row.context.project.id!==context.project.id)throw new QuestError('PROJECT_MISMATCH','Goal destination changed');this.liveGoals.delete(row.id);if(row.state!=='done'){row.state='stopped';row.reason='Explicit session goal pause; current ownership retained until resume or cancel'}}});return this.goalStatus(context.sessionID)}
- cancel(questID:string,context:QuestContext){questsAPI(this.store,context,this.start).get(questID);return this.change(rows=>{for(const row of rows.filter(x=>x.questID===questID&&!['done','stopped'].includes(x.state))){row.state='stopped';row.reason='Continuation cancelled; an already launched worker must be reconciled separately'}return rows.filter(x=>x.questID===questID)})}
+ cancel(questID:string,context:QuestContext){
+  questsAPI(this.store,context,this.start).get(questID)
+  const lock=acquireLock(this.store.runtime,'continuations')
+  try{for(const file of continuationFiles(this.store.runtime)){
+   const rows:Intent[]=JSON.parse(readFileSync(file,'utf8'));let changed=false
+   for(const row of rows.filter(x=>x.questID===questID&&!['done','stopped'].includes(x.state))){row.state='stopped';row.reason='Continuation cancelled; an already launched worker must be reconciled separately';changed=true}
+   if(changed){const tmp=file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(rows));renameSync(tmp,file)}
+  }return this.status(questID)}finally{lock.release()}
+ }
  async run(questID:string,input:ContinuationRunOptions,context:QuestContext){
   if(input.readOnly!==undefined&&typeof input.readOnly!=="boolean")throw new QuestError("INVALID_INPUT","readOnly must be a boolean")
-  if(input.maxConcurrent!==undefined&&(!Number.isInteger(input.maxConcurrent)||input.maxConcurrent<1||input.maxConcurrent>16))throw new QuestError('INVALID_INPUT','maxConcurrent must be an integer from 1 to 16')
+  if(input.maxConcurrent!==undefined&&(!Number.isSafeInteger(input.maxConcurrent)||input.maxConcurrent<1))throw new QuestError('INVALID_INPUT','maxConcurrent must be a positive safe integer')
   const q=questsAPI(this.store,context,this.start).get(questID)
   const id=createHash('sha256').update(questID+':'+context.sessionID+':'+context.requestID).digest('hex').slice(0,26)
-  const requestFingerprint=createHash('sha256').update(JSON.stringify({readOnly:input.readOnly===true,model:input.model??null,files:input.files??null,stepIDs:input.stepIDs??null,maxConcurrent:input.maxConcurrent??1,stepModels:input.stepModels?Object.fromEntries(Object.entries(input.stepModels).sort(([a],[b])=>a.localeCompare(b))):null})).digest('hex')
+  const requestFingerprint=createHash('sha256').update(JSON.stringify({readOnly:input.readOnly===true,task:input.task??null,model:input.model??null,files:input.files??null,stepIDs:input.stepIDs??null,maxConcurrent:input.maxConcurrent??1,stepModels:input.stepModels?Object.fromEntries(Object.entries(input.stepModels).sort(([a],[b])=>a.localeCompare(b))):null})).digest('hex')
   const sameRequest=(row:Intent)=>row.requestFingerprint?row.requestFingerprint===requestFingerprint:(row.readOnly===true)===(input.readOnly===true)&&row.model===input.model&&JSON.stringify(row.files??['.'])===JSON.stringify(input.files??['.'])&&(row.maxConcurrent??1)===(input.maxConcurrent??1)&&JSON.stringify(row.stepModels??{})===JSON.stringify(input.stepModels??{})&&JSON.stringify(row.steps.map(s=>s.id))===JSON.stringify(input.stepIDs??row.steps.map(s=>s.id))
   const existing=this.read().find(row=>row.id===id)
   if(existing){if(!sameRequest(existing))throw new QuestError('REQUEST_CONFLICT','This continuation request already authorized different work; use a new request identity');return {continuation:this.status(questID).find(row=>row.id===id)}}
   const ids=input.stepIDs??q.steps.filter(s=>s.state==='pending').map(s=>s.id)
   if(!ids.length||ids.some(id=>!q.steps.some(s=>s.id===id&&s.state==='pending')))throw new QuestError('NO_ELIGIBLE_STEPS','Continuation requires pending authorized steps')
   if(input.stepModels!==undefined&&(!input.stepModels||typeof input.stepModels!=='object'||Array.isArray(input.stepModels)||Object.entries(input.stepModels).some(([id,model])=>!ids.includes(id)||typeof model!=='string'||!model.trim())))throw new QuestError('INVALID_INPUT','stepModels must map authorized step IDs to explicit models')
-  if(ids.some(id=>!this.store.read(questID)!.stages.find(s=>s.id===id)?.commandID&&!input.stepModels?.[id])&&!input.model)throw new QuestError('EXPLICIT_MODEL_REQUIRED','Continuation requires an explicit model for worker steps')
-  const route=this.options.goalMode&&input.model?this.options.routeBinding?.(input.model):undefined
-  this.change(rows=>{const prior=rows.find(x=>x.id===id);if(prior){if(!sameRequest(prior))throw new QuestError('REQUEST_CONFLICT','This continuation request already authorized different work');return;}if(rows.some(x=>(x.questID===questID||this.options.goalMode&&x.goal&&x.context.sessionID===context.sessionID)&&!['done','stopped'].includes(x.state)))throw new QuestError('CONTINUATION_EXISTS','Inspect or cancel the existing continuation before replacing its authorization');rows.push({requestFingerprint,...(input.maxConcurrent!==undefined||input.stepModels?{maxConcurrent:input.maxConcurrent??1,stepModels:input.stepModels,admissions:[]}:{}),id,goal:this.options.goalMode===true,route,verification:this.options.goalMode?verificationSnapshot(this.store.read(questID)!,ids):undefined,questID,description:q.description,context,readOnly:input.readOnly,model:input.model,files:input.files,steps:q.steps.filter(s=>ids.includes(s.id)).map(s=>({id:s.id,title:s.title,detail:s.detail,needs:s.needs})),state:'waiting',attempt:0,refreshes:0,nextAt:0,reason:'Explicitly authorized continuation'})})
+  if(this.options.goalMode&&ids.some(id=>!this.store.read(questID)!.stages.find(s=>s.id===id)?.commandID&&!input.stepModels?.[id])&&!input.model)throw new QuestError('EXPLICIT_MODEL_REQUIRED','Continuation requires an explicit model for worker steps')
+  const route=this.options.goalMode&&input.model?await this.options.routeBinding?.(input.model):undefined
+  this.change(rows=>{const prior=rows.find(x=>x.id===id);if(prior){if(!sameRequest(prior))throw new QuestError('REQUEST_CONFLICT','This continuation request already authorized different work');return;}if(readContinuations(this.store.runtime).some(x=>(x.questID===questID||this.options.goalMode&&x.goal&&x.context.sessionID===context.sessionID)&&!['done','stopped'].includes(x.state)))throw new QuestError('CONTINUATION_EXISTS','Inspect or cancel the existing continuation before replacing its authorization');rows.push({requestFingerprint,...(input.maxConcurrent!==undefined||input.stepModels?{maxConcurrent:input.maxConcurrent??1,stepModels:input.stepModels,admissions:[]}:{}),id,goal:this.options.goalMode===true,route,verification:this.options.goalMode?verificationSnapshot(this.store.read(questID)!,ids):undefined,questID,description:q.description,context,readOnly:input.readOnly,task:input.task,model:input.model,files:input.files,steps:q.steps.filter(s=>ids.includes(s.id)).map(s=>({id:s.id,title:s.title,detail:s.detail,needs:s.needs})),state:'waiting',attempt:0,refreshes:0,nextAt:0,reason:'Explicitly authorized continuation'})})
   if(this.options.goalMode)this.liveGoals.add(id)
   await this.tick();return {continuation:this.status(questID).find(x=>x.id===id)}
  }
-  async tick(){for(const intent of this.read().filter(x=>!x.worker&&(x.goal?this.options.goalMode&&this.liveGoals.has(x.id):!this.options.goalMode)&&['waiting','running'].includes(x.state)&&x.nextAt<=this.now()))await (intent.admissions?this.advanceParallel(intent.id):this.advance(intent.id))}
+  /**
+   * Retire intents left by a runtime generation that is no longer running.
+   *
+   * Schedulers read only their own generation's file, deliberately, but ownership and conflict
+   * checks read every generation. A generation changes whenever the code does, so each restart on
+   * new code stranded the previous generation's running intents: nothing would ever advance them,
+   * and they went on owning their steps. Thirty-six such files had accumulated and six steps read
+   * "Owned by a continuation" with no scheduler anywhere that could move them. One host owns a
+   * database, so an intent in another generation's file has no scheduler at all.
+   */
+  private retireForeignGenerations(){
+   if(this.retiredForeign)return
+   this.retiredForeign=true
+   for(const file of continuationFiles(this.store.runtime)){
+    if(file===this.file)continue
+    let rows:any[]
+    try{rows=JSON.parse(readFileSync(file,'utf8'))}catch{continue}
+    if(!Array.isArray(rows))continue
+    let changed=false
+    for(const row of rows){
+     if(['stopped','done'].includes(row?.state))continue
+     row.state='stopped'
+     row.reason='Left by a runtime generation that is no longer running, so no scheduler owns it. Authorize the continuation again to resume this work.'
+     changed=true
+    }
+    if(!changed)continue
+    try{const tmp=file+'.'+process.pid+'.tmp';writeFileSync(tmp,JSON.stringify(rows));renameSync(tmp,file)}
+    catch(error){console.error('[quests] could not retire continuations from an older generation',error)}
+   }
+  }
+  async tick(){this.retireForeignGenerations();for(const intent of this.read().filter(x=>!x.worker&&(x.goal?this.options.goalMode&&this.liveGoals.has(x.id):!this.options.goalMode)&&['waiting','running'].includes(x.state)&&x.nextAt<=this.now()))await (intent.admissions?this.advanceParallel(intent.id):this.advance(intent.id))}
  /** Claims are serialized on disk; refresh and launch never hold the ledger lock. */
  private async advanceParallel(id:string){
   for(let turn=0;turn<16;turn++){
@@ -123,7 +166,12 @@ export class QuestContinuation {
      if(row.goal&&row.steps.some(s=>{const actual=q.stages.find(x=>x.id===s.id);return actual?.status==='done'&&!verified(q,actual)})){row.state='stopped';row.reason='Completed step has no verified passing proof for its contract; inspect results before continuing';return}
     for(const a of admissions){
      const run=q.sessions.find(s=>s.runID===a.runID)
-     if(run&&['completed','failed','cancelled'].includes(run.state)&&['running','unknown','claiming'].includes(a.state)){
+     // Every terminal state ends the admission, not only the three a worker reports for itself.
+     // Reconciliation writes missing and stale when it establishes a run is over, and leaving those
+     // out held the continuation in `running` — "Confirmed worker/command launch" — across a restart
+     // that had already killed the worker. The step read pending and never became ready, so eight
+     // dispatches reported running and produced no model request for twenty-two minutes.
+     if(run&&TERMINAL_RUN.has(run.state)&&['running','unknown','claiming'].includes(a.state)){
       a.state=run.state==='completed'&&q.stages.find(s=>s.id===a.stepID)?.status==='done'?'done':'stopped'
       a.reason=a.state==='done'?'Terminal worker completed its step':'Worker terminal outcome did not complete its step'
      }
@@ -158,7 +206,7 @@ export class QuestContinuation {
    try{
     await this.options.verifyContext?.(row.context)
      const reservations=new RouteReservations(dispatchReservationFile(this.store.runtime))
-    for(const entry of readAllQuests(this.store.projectRoot,{includeArchived:true}))for(const run of entry.quest?.sessions??[]){if(run.runID&&['completed','failed','cancelled'].includes(run.state)&&reservations.get(run.runID)&&reservations.get(run.runID)?.state!=='settled')reservations.settle(run.runID,{state:'settled',completedAt:run.updatedAt})}
+    for(const entry of readAllQuests(this.store.projectRoot,{includeArchived:true}))for(const run of entry.quest?.sessions??[]){if(run.runID&&TERMINAL_RUN.has(run.state)&&reservations.get(run.runID)&&reservations.get(run.runID)?.state!=='settled')reservations.settle(run.runID,{state:'settled',completedAt:run.updatedAt})}
     await (this.options.refresh??getAccountUsage)({refresh:true})
     const proceed=this.change(rows=>{
      const current=rows.find(x=>x.id===id)!,a=current.admissions!.find(x=>x.stepID===admission.stepID)!
@@ -171,7 +219,7 @@ export class QuestContinuation {
     })
     if(!proceed)continue
     const q=this.store.read(row.questID)!
-    const result=await questsAPI(this.store,{...row.context,requestID:admission.requestID},this.start).run(row.questID,{stepIDs:[admission.stepID],files:row.files,readOnly:row.readOnly,...(q.stages.find(s=>s.id===admission.stepID)?.commandID?{}:{model:row.stepModels?.[admission.stepID]??row.model})})
+    const result=await questsAPI(this.store,{...row.context,requestID:admission.requestID},this.start).run(row.questID,{stepIDs:[admission.stepID],files:row.files,readOnly:row.readOnly,task:row.task,...(q.stages.find(s=>s.id===admission.stepID)?.commandID?{}:{model:row.stepModels?.[admission.stepID]??row.model})})
     this.change(rows=>{const current=rows.find(x=>x.id===id)!,a=current.admissions!.find(x=>x.stepID===admission.stepID)!;a.runID=result.runID;a.state='running';a.refreshes=0;a.reason='Confirmed worker/command launch'})
    }catch(error){
     this.change(rows=>{
@@ -216,14 +264,14 @@ export class QuestContinuation {
    await this.options.verifyContext?.(row.context)
    // Reconcile only observed terminal runs, including another Quest holding this account.
     const reservations=new RouteReservations(dispatchReservationFile(this.store.runtime))
-   for(const entry of readAllQuests(this.store.projectRoot,{includeArchived:true}))for(const run of entry.quest?.sessions??[]){if(run.runID&&['completed','failed','cancelled'].includes(run.state)&&reservations.get(run.runID)?.state!=='settled'&&reservations.get(run.runID))reservations.settle(run.runID,{state:'settled',completedAt:run.updatedAt})}
+   for(const entry of readAllQuests(this.store.projectRoot,{includeArchived:true}))for(const run of entry.quest?.sessions??[]){if(run.runID&&TERMINAL_RUN.has(run.state)&&reservations.get(run.runID)?.state!=='settled'&&reservations.get(run.runID))reservations.settle(run.runID,{state:'settled',completedAt:run.updatedAt})}
    await (this.options.refresh??getAccountUsage)({refresh:true})
    // Cancellation during the asynchronous refresh wins before dispatch.
    const proceed=this.change(rows=>{const current=rows.find(x=>x.id===id)!;if(current.state!=='claiming')return false;current.attempt++;return true})
    if(!proceed)return
    const q=this.store.read(row.questID)!,step=row.steps.find(s=>q.stages.find(x=>x.id===s.id)?.status==='pending'&&s.needs.every(n=>q.stages.find(x=>x.id===n)?.status==='done'))!
    const requestID='continue:'+id+':'+row.attempt
-   const result=await questsAPI(this.store,{...row.context,requestID},this.start).run(row.questID,{stepIDs:[step.id],files:row.files,readOnly:row.readOnly,...(q.stages.find(s=>s.id===step.id)?.commandID?{}:{model:row.model})})
+   const result=await questsAPI(this.store,{...row.context,requestID},this.start).run(row.questID,{stepIDs:[step.id],files:row.files,readOnly:row.readOnly,task:row.task,...(q.stages.find(s=>s.id===step.id)?.commandID?{}:{model:row.model})})
    this.change(rows=>{const current=rows.find(x=>x.id===id)!;current.runID=result.runID;if(current.state!=='stopped'){current.state='running';current.refreshes=0;current.reason='Confirmed worker/command launch'}})
   }catch(error){this.change(rows=>{const current=rows.find(x=>x.id===id)!;if(current.state==='stopped')return;const reason=redact(error instanceof Error?error.message:String(error),2000)
     // Only a known pre-launch account hold is retryable, at most three refreshes.

@@ -1,5 +1,4 @@
 import {getUsagePacing} from "./portfolio-pacing"
-import { installUsageContext } from "./context-summary"
 import { recordRequest } from "./telemetry-store"
 import { startPassiveUsage, recordLedgerRequest } from "./passive-ledger"
 import { accountRegime } from "./calibration-store"
@@ -11,8 +10,7 @@ import { startAccountUsageRefresh } from "./account-api"
 
 import { installContextEvents } from "./context-events"
 import { installRequestTelemetry } from "./request-collector"
-import { getUsageStatus, formatUsageStatus, type UsageStatusQuery } from "./status-api"
-import {compactUsageTool} from './tool-projection'
+import { getUsageStatus, getUsageDetail, formatUsageStatus, formatUsageDetail, USAGE_DETAIL_VIEWS, type UsageDetailQuery, type UsageDetailView } from "./status-api"
 import type { ExperienceQuery } from "./experience"
 import { getUsageExperience } from "./experience-api"
 export { getUsageExperience } from "./experience-api"
@@ -24,7 +22,6 @@ export default define({
     startPassiveUsage()
     await installRequestTelemetry(ctx,record=>{recordRequest(record);recordLedgerRequest(record)})
     await installContextEvents(ctx)
-    await installUsageContext(ctx)
     const tool = (ctx as { tool?: { transform?: Function } }).tool
     if (!tool?.transform) return
     await tool.transform((draft: { add: (tool: unknown) => void }) => {
@@ -34,15 +31,15 @@ export default define({
       draft.add({
         name: "usage_status",
         output: { type: "object", additionalProperties: true },
-        description: "Preferred global API for accounts, plans, quotas and resets. Call directly from tools/code mode in any project; no shell or config-repo cwd needed. Reuses logins and a shared cache. Use format=json; stale/unknown values are explicit. Includes portfolio with separate account/reset pacing, requested slots and ambiguous account-selection limits. Includes accounting.sessionBurn with exact per-session token rates, provisional allowance rates, per-request estimates and chronologically tested quota residuals against a 0.01 percentage-point target. Includes account-wide reset planning and required burn pace for every pool, independent of conversation filters. For Luna/Astra comparisons supply workloads with exact routes, explicit serviceTier (standard or fast) and per-request token mixes; session counts alone are insufficient. Published credits are not included-plan percentages. Check all shared/model pools and refresh as work proceeds; never use Spark reset as an Astra reset.",
+        description: "Preferred global API for accounts, plans, quotas and resets. Call directly from tools/code mode in any project; no shell or config-repo cwd needed. Reuses logins and a shared cache. Use format=json; stale/unknown values are explicit. The default answer is a digest whose size does not depend on how much history the machine holds: every discovered account with its plan, scoped quota windows, used/remaining percentages, absolute resets, freshness and errors; pacing with separate per-account balances, required versus measured rate and requested slots; this conversation's own request and token counters; and collector freshness. History lives behind view: requests, sessions, timeline, pools (allowance calibration and chronologically tested residuals against a 0.01 percentage-point target, needs accountID), models, workloads (supply exact routes, explicit serviceTier and per-request token mixes; session counts alone are insufficient), harvest (local Codex rollout counters, supplemental, never added to OpenCode totals). Each view returns one page sized by offset/limit and reports total and nextOffset. Published credits are not included-plan percentages. Check all shared/model pools and refresh as work proceeds; never use Spark reset as an Astra reset.",
         input: {
           type: "object",
           properties: {
-            allSessions: {type:"boolean",description:"Return counts for every captured session instead of defaulting to this session."},
+            view: { type: "string", enum: [...USAGE_DETAIL_VIEWS], description: "Ask for one detail page instead of the digest. Omit for the digest." },
+            allSessions: {type:"boolean",description:"Count every captured session instead of defaulting to this conversation."},
             deadlineAt: {type:"number",description:"Optional future Unix-millisecond target; takes precedence over the saved account target. Planning stops at the earlier of this deadline and each pool reset."},
-            harvest: { type: "boolean", description: "Read numeric usage counters from all local Codex rollouts, including child and guardian sessions. Explicit supplemental evidence; never added to OpenCode totals. from/to default to the last four hours, maximum seven days. No prompts or credentials returned." },
             reservePoints: { type: "number", minimum: 0, maximum: 100, description: "Percentage points to leave unused in each pool; default 0." },
-            workloads: { type: "array", maxItems: 20, description: "Independent workload alternatives, not a combined dispatch plan.", items: {
+            workloads: { type: "array", maxItems: 20, description: "Independent workload alternatives for view=workloads, not a combined dispatch plan.", items: {
               type: "object", additionalProperties: false, required: ["label","accountID","route","requests","tokens"], properties: {
                 label: { type: "string", minLength: 1 }, accountID: { type: "string", minLength: 1 }, requests: { type: "integer", minimum: 1, maximum: 1000000 },
                 route: { type: "object", additionalProperties: false, required: ["providerID","modelID"], properties: {
@@ -53,20 +50,21 @@ export default define({
                 } }
               }
             } },
-            refresh: { type: "boolean", description: "Refresh observations, respecting shared in-flight work and provider backoff." },
+            refresh: { type: "boolean", description: "Ask the providers now instead of reading the shared cache, respecting in-flight work and provider backoff." },
             format: { type: "string", enum: ["text", "json"], description: "JSON returns account IDs, plan tiers, scoped windows, reset timestamps, freshness and errors." },
             accountID: { type: "string", description: "Optional exact account ID from a previous result." },
             sessionID: { type: "string" }, questID: { type: "string" }, includeWorkers: { type: "boolean" },
             from: { type: "number", description: "Start time in Unix milliseconds." }, to: { type: "number", description: "End time in Unix milliseconds." },
-            offset: { type: "integer", minimum: 0 }, limit: { type: "integer", minimum: 1, maximum: 100 },
+            offset: { type: "integer", minimum: 0, description: "First row of the requested view's page." }, limit: { type: "integer", minimum: 1, maximum: 100, description: "Rows in the requested view's page; default 25." },
           },
           required: [], additionalProperties: false,
         },
-        execute: async (input: UsageStatusQuery & { format?: string }, context?: { sessionID?: string }) => {
-          const snapshot = await getUsageStatus({ ...input, sessionID: input.allSessions ? undefined : input.sessionID ?? context?.sessionID })
-          if (input.accountID && !snapshot.accounts.length) throw new Error("Account not found in current connections.")
-          const json = JSON.stringify(compactUsageTool(snapshot,input.offset!==undefined||input.limit!==undefined||input.from!==undefined||input.to!==undefined))
-          return { output: JSON.parse(json), content: input.format === "json" ? json : formatUsageStatus(snapshot) }
+        execute: async (input: UsageDetailQuery & { format?: string; view?: UsageDetailView }, context?: { sessionID?: string }) => {
+          const query = { ...input, sessionID: input.allSessions ? undefined : input.sessionID ?? context?.sessionID }
+          const result = input.view ? await getUsageDetail({ ...query, view: input.view }) : await getUsageStatus(query)
+          if (input.accountID && !input.view && !(result as any).accounts.length) throw new Error("Account not found in current connections.")
+          const json = JSON.stringify(result)
+          return { output: JSON.parse(json), content: input.format === "json" ? json : input.view ? formatUsageDetail(result as any) : formatUsageStatus(result as any) }
         },
       })
     })

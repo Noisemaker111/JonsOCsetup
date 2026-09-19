@@ -1,3 +1,4 @@
+import {removeIntegratedWorktree,integrationRef} from "./cleanup-git.mjs"
 import {workspaceBootstrap} from "./workspace-bootstrap"
 import {coordination} from "./coordination"
 import type {QuestStore} from "./store"
@@ -9,7 +10,7 @@ import { projectIdentity, sourceCheckout, physicalDirectory, type ProjectIdentit
 import { acquireLock } from "./locking"
 
 export type Changes = { available: boolean; files: { path: string; additions: number | null; deletions: number | null; untracked: boolean }[]; commits: string[]; at: string; error?: string }
-export type Workspace = { source?:string; version: 1; runID: string; questID: string; projectID: string; root: string; path: string; branch: string; base: string; comparisonTree?:string; changes?: Changes; removed?: boolean; mode?: "shared" | "worktree" | "research"; fileScopes?: string[]; sharedReleased?: boolean; allocationVersion?: 2; physicalRunID?: string; claimedRunID?: string; preparedHead?: string; preparedStamp?: string; preparedBootstrap?: string; preparationMs?: number; bootstrapComplete?: boolean; inheritedRunIDs?: string[]; integration?:{workerHead:string;projectHead:string;verifiedAt:string;method:"ancestor"} }
+export type Workspace = { source?:string; cleanupProtocol?:1; cleanup?:{removed:boolean;reason:string;at:string;logicalBytes?:number}; version: 1; runID: string; questID: string; projectID: string; root: string; path: string; branch: string; base: string; comparisonTree?:string; changes?: Changes; removed?: boolean; mode?: "shared" | "worktree" | "research"; fileScopes?: string[]; sharedReleased?: boolean; allocationVersion?: 2; physicalRunID?: string; claimedRunID?: string; preparedHead?: string; preparedStamp?: string; preparedBootstrap?: string; preparationMs?: number; bootstrapComplete?: boolean; inheritedRunIDs?: string[]; integration?:{workerHead:string;projectHead:string;verifiedAt:string;method:"ancestor"} }
 const inside = (root: string, path: string) => { const rel = relative(root, path); return !!rel && !rel.startsWith("..") && !isAbsolute(rel) }
 function git(cwd: string, args: string[]): string {
   const out = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8", windowsHide: true, maxBuffer: 16 * 1024 * 1024 })
@@ -22,6 +23,19 @@ function worktreeExclusions(root:string) {
     .filter(path=>inside(resolve(root),resolve(path)))
     .map(path=>":(exclude,literal)"+relative(root,path).replaceAll("\\","/")).sort()
 }
+/**
+ * Whether a finished dependency has anything for a later worker to inherit. Research workspaces hold
+ * no tree at all, and a worktree that recorded neither files nor commits contributes an empty diff.
+ * Carrying such a dependency costs nothing and risks everything: create() verifies its project
+ * ownership, and a Quest re-pointed to another project can never satisfy that check again.
+ */
+export function dependencyContributes(workspace: Workspace | undefined): boolean {
+  if (!workspace) return true // Still a missing dependency, and still reported as one.
+  if (workspace.mode === "research") return false
+  const changes = workspace.changes
+  return !(changes?.available === true && !changes.files.length && !changes.commits.length)
+}
+
 export class QuestWorkspaces {
   constructor(readonly runtime: string) {}
   private file(runID: string) {
@@ -71,7 +85,7 @@ export class QuestWorkspaces {
       const path = join(parent, "quest-" + input.runID), branch = "quest/" + input.runID
       if (existsSync(path)) throw new Error("Workspace path exists without runtime ownership; preserving it")
       git(root, ["worktree", "add", "-b", branch, path, base])
-      const value: Workspace = { version: 1, allocationVersion: 2, runID: input.runID, questID: input.questID, projectID: project.id, root, path, branch, base, bootstrapComplete: false, preparedBootstrap: input.skipPrepared ? JSON.stringify(input.bootstrap??[]) : undefined }
+      const value: Workspace = { version: 1, cleanupProtocol:1, allocationVersion: 2, runID: input.runID, questID: input.questID, projectID: project.id, root, path, branch, base, bootstrapComplete: false, preparedBootstrap: input.skipPrepared ? JSON.stringify(input.bootstrap??[]) : undefined }
       value.source=source
       this.save(value)
       if(git(source,["ls-files","--unmerged"]).trim())throw new Error("Resolve selected checkout conflicts before creating an editing worker; workspace retained")
@@ -124,7 +138,7 @@ export class QuestWorkspaces {
         if(retained.status!==0)throw new Error("Integrate isolated dependency commits before running shared")
       }
       const join=coordination(input.store,{directory:source,sessionID:"quest-run:"+input.runID,host:"opencode"})({action:"join",title:"Quest "+input.questID,questID:input.questID,scopes:input.files??["."],activity:"Shared worker assignment"})
-      if(!join.acquired)throw new Error("Shared workspace file conflict; inspect quest_workspace reservations before retrying: "+JSON.stringify((join as any).conflicts.map((x:any)=>({title:x.title,scopes:x.scopes}))))
+      if(!join.acquired)throw new Error("Shared workspace file conflict; runtime could not acquire the assigned scope: "+JSON.stringify((join as any).conflicts.map((x:any)=>({title:x.title,scopes:x.scopes}))))
       try {
         const fileScopes=join.participants.find(x=>x.id===join.participantID)!.scopes
         const base=git(source,["rev-parse","HEAD"]).trim(),branch=git(source,["symbolic-ref","--short","HEAD"]).trim()
@@ -238,17 +252,32 @@ export class QuestWorkspaces {
     // Include HEAD paths removed from the real index by staged deletions.
     const selectedFiles=()=>git(source,["ls-files","--cached","--with-tree="+head,"--others","--exclude-standard","-z","--",...scopes.map(scope=>":(literal)"+scope),":(exclude,glob)**/.claude/worktrees/**",...excluded])
     const paths=selectedFiles()
+    // Only paths already tracked by Git may override ignore rules. New files
+    // come from --others --exclude-standard and must still pass normal add.
+    const tracked=new Set(git(source,["ls-files","--cached","--with-tree="+head,"-z"]).split("\0").filter(Boolean))
+    const names=paths.split("\0").filter(Boolean)
+    const trackedPaths=names.filter(name=>tracked.has(name)).map(name=>name+"\0").join("")
+    const newPaths=names.filter(name=>!tracked.has(name)).map(name=>name+"\0").join("")
+    const stage=()=>{
+      if(trackedPaths)run(["add","-A","--force","--pathspec-from-file=-","--pathspec-file-nul"],trackedPaths)
+      if(newPaths)run(["add","-A","--pathspec-from-file=-","--pathspec-file-nul"],newPaths)
+    }
     try {
       run(["read-tree", head])
-      if(paths)run(["add","-A","--pathspec-from-file=-","--pathspec-file-nul"],paths)
+      stage()
       const tree=run(["write-tree"])
       // Rebuild from the same baseline: the first add removed deleted entries,
       // so adding those literal paths again to that index would fail to match.
       run(["read-tree", head])
-      if(paths)run(["add","-A","--pathspec-from-file=-","--pathspec-file-nul"],paths)
+      stage()
       const changed=selectedFiles()!==paths?"file list":run(["write-tree"])!==tree?"content":git(source,["rev-parse","HEAD"]).trim()!==head?"HEAD":JSON.stringify(worktreeExclusions(source))!==JSON.stringify(excluded)?"worktree registration":undefined
       if(changed)throw new Error("Source changed during workspace snapshot ("+changed+"); retry after edits settle")
       if(!target)return tree
+      // A retained index can equal an already integrated revision even when its
+      // checkout HEAD is older. Replaying that old patch onto later edits creates
+      // conflicts and can restore superseded code. Exact reachable tree identity
+      // proves this whole snapshot was incorporated; neither checkout is changed.
+      if(git(target,["log","--format=%T","HEAD"]).split(/\r?\n/).includes(tree))return tree
       const diff = spawnSync("git", ["-C", source, "diff", "--binary", "--full-index", base, tree, "--"], { windowsHide: true, maxBuffer: 32 * 1024 * 1024 })
       if (diff.status !== 0) throw new Error("Could not read dependency snapshot")
       if (!diff.stdout.length) return tree
@@ -298,24 +327,23 @@ export class QuestWorkspaces {
     value.changes = { available: true, files, commits: value.mode==="shared"?[]:git(value.path, ["rev-list", value.base + "..HEAD"]).trim().split("\n").filter(Boolean), at }
     this.save(value); return value
   }
-  cleanup(runID: string): { removed: boolean; reason: string } {
+  retain(runID:string,reason:string) {
+    const value=this.get(runID);if(!value)throw Error("Unknown workspace")
+    value.cleanup={removed:false,reason,at:new Date().toISOString()};this.save(value);return value.cleanup
+  }
+  cleanup(runID: string, beforeRemove:()=>void): { removed: boolean; reason: string } {
     this.file(runID)
-    if(this.get(runID)?.mode==="shared")return {removed:false,reason:"Shared project checkout is never removed"}
-    const lock = acquireLock(this.runtime, "workspace-" + runID)
+    let lock;try{lock=acquireLock(this.runtime,"workspace-"+runID,{timeoutMs:0})}catch{return {removed:false,reason:"Workspace tool or cleanup is still running"}}
     try {
-      const value = this.collect(runID)
-      if(value.mode==="research")return {removed:false,reason:"Research uses the original read-only directory; it is never removed"}
-      if (value.removed) return { removed: true, reason: "Already removed; retained records available" }
-      if (!value.changes?.available) return { removed: false, reason: "Workspace unavailable; retaining records" }
-      if (git(value.path, ["status", "--porcelain", "--untracked-files=all"]).trim()) return { removed: false, reason: "Uncommitted work is preserved" }
-      const head = git(value.path, ["rev-parse", "HEAD"]).trim()
-      const projectHead = git(value.root,["rev-parse","HEAD"]).trim()
-      const integrated = spawnSync("git", ["-C", value.root, "merge-base", "--is-ancestor", head, projectHead], { windowsHide: true })
-      if (integrated.status !== 0) return { removed: false, reason: "Unintegrated commits are preserved" }
-      value.integration={workerHead:head,projectHead,verifiedAt:new Date().toISOString(),method:"ancestor"};this.save(value)
-      git(value.root, ["worktree", "remove", value.path])
-      value.removed = true; this.save(value)
-      return { removed: true, reason: "Clean workspace removed after integration; commits and changes retained" }
-    } finally { lock.release() }
+      const value=this.get(runID)
+      if(!value)throw Error("Unknown workspace")
+      if(value.removed)return {removed:true,reason:"Already removed; retained records available"}
+      if(value.mode==="shared"||value.mode==="research")return this.retain(runID,"Original checkout is never removed")
+      Object.assign(value,this.collect(runID));this.verify(value);beforeRemove()
+      const result=removeIntegratedWorktree({root:value.root,path:value.path,ref:integrationRef(value.root,value.source??value.root),branch:value.branch,beforeRemove})
+      if(result.removed){value.removed=true;value.integration={workerHead:result.workerHead!,projectHead:result.projectHead!,verifiedAt:new Date().toISOString(),method:"ancestor"}}
+      value.cleanup={...result,at:new Date().toISOString()};this.save(value);return result
+    }catch(error){return this.retain(runID,error instanceof Error?error.message:String(error))}
+    finally {lock.release()}
   }
 }

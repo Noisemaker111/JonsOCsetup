@@ -24,7 +24,6 @@ import { QUOTA_FAILOVER_PATTERN } from "../quest/reducer"
 import type { Quest } from "../quest/types"
 
 export const STATE_DIR = join(homedir(), ".local", "state", "opencode")
-export const TUI_USAGE_LOG = join(STATE_DIR, "tui-usage.log")
 export const TUI_PROBE_LOG = join(STATE_DIR, "tui-probe.log")
 
 export type IncidentSource = "papercut" | "plugin-health" | "orchestration-ledger" | "tui-log" | "manual"
@@ -123,7 +122,6 @@ export function detectLedgerIncidents(threshold = 2, file = LEDGER_FILE, sinceMs
 export type TuiLogPattern = { file: string; pattern: RegExp; family: string; title: string }
 export function defaultTuiLogPatterns(stateDir = STATE_DIR): TuiLogPattern[] {
   return [
-    { file: join(stateDir, "tui-usage.log"), pattern: /usage\.show missing/i, family: "tui-usage", title: "usage.show slash command missing after boot" },
     { file: join(stateDir, "tui-probe.log"), pattern: /Keymap\.Provider is missing/i, family: "tui-probe", title: "keymap.layer setup fails: Keymap.Provider is missing" },
   ]
 }

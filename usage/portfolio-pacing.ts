@@ -36,12 +36,24 @@ export function portfolioPacingLines(portfolio:ReturnType<typeof portfolioPacing
  return ["Subscription portfolio: "+portfolio.requestedSlots+" requested slots across "+portfolio.readyAccounts+" ready account(s); balances stay separate",...portfolio.accounts.map(a=>a.provider+"/"+a.accountID.slice(-6)+" "+a.plan+": "+a.state+"; "+a.mode+(a.focus?.paceMultiplier==null?"":"; "+a.focus.paceMultiplier.toFixed(2)+"x current pace required")+(a.pacing?"; desired "+a.pacing.desiredSlots+"/"+a.pacing.ceiling:""))]
 }
 
+/**
+ * Pacing reads a rate, and a rate is measured between two observations minutes apart: `resetPlan`
+ * only ever looks back thirty minutes from the account's own observation. Reading the whole
+ * observation log to answer that made every pacing question cost the machine's entire history.
+ */
+export const PACING_OBSERVATION_WINDOW_MS=45*60000
+export function readPacingObservations(now=Date.now()){
+ return readQuotaObservations(ACCOUNT_USAGE_FILE+".observations",{from:now-PACING_OBSERVATION_WINDOW_MS}).observations
+}
 /** Small scheduler-facing status: no transcripts, request history, charts or coefficient matrices. */
-export async function getUsagePacing(query:{refresh?:boolean;accountID?:string}={}){
- const snapshot=await getAccountUsage({refresh:query.refresh}),now=Date.now(),observations=readQuotaObservations(ACCOUNT_USAGE_FILE+".observations").observations
- const targets=renewUsageTargets(snapshot.accounts,now),controls=updateBurnControls(snapshot.accounts,observations,now,targets),portfolio=portfolioPacing(snapshot.accounts,observations,targets,controls,now)
- const accounts=portfolio.accounts.filter(a=>!query.accountID||a.accountID===query.accountID).map(a=>({accountID:a.accountID,provider:a.provider,plan:a.plan,state:a.state,mode:a.mode,requestedSlots:a.requestedSlots,pacing:a.pacing,targetBasis:a.targetBasis,
+export function pacingView(accounts:AccountUsage[],observations:Observation[],now:number,query:{accountID?:string}={}){
+ const targets=renewUsageTargets(accounts,now),controls=updateBurnControls(accounts,observations,now,targets),portfolio=portfolioPacing(accounts,observations,targets,controls,now)
+ const rows=portfolio.accounts.filter(a=>!query.accountID||a.accountID===query.accountID).map(a=>({accountID:a.accountID,provider:a.provider,plan:a.plan,state:a.state,mode:a.mode,requestedSlots:a.requestedSlots,pacing:a.pacing,targetBasis:a.targetBasis,
   deadlineAt:a.target?.deadlineAt??null,windowID:a.focus?.windowID??null,resetAt:a.focus?.resetAt??null,remainingPoints:a.focus?.remainingPoints??null,minutesToTarget:a.focus?.minutesToTarget??null,requiredPointsPerMinute:a.focus?.requiredPointsPerMinute??null,observedPointsPerMinute:a.focus?.observedPointsPerMinute??null,paceMultiplier:a.focus?.paceMultiplier??null,projectedUnusedPoints:a.projectedUnusedPoints,sharedConstraints:a.sharedConstraints,ambiguousBindings:a.bindings.filter(b=>b.state==="ambiguous-account-selection"),
   pools:a.pools.map(p=>({windowID:p.windowID,scope:p.scope,model:p.model??null,state:p.state,remainingPoints:p.remainingPoints,resetAt:p.resetAt,observedAt:p.observedAt,reason:p.reason}))}))
- return {at:now,accounts,requestedSlots:accounts.reduce((n,a)=>n+a.requestedSlots,0),workSupply:"Not observed here; requested slots are not confirmed workers",limitations:portfolio.limitations,diagnostics:snapshot.diagnostics}
+ return {at:now,accounts:rows,requestedSlots:rows.reduce((n,a)=>n+a.requestedSlots,0),workSupply:"Not observed here; requested slots are not confirmed workers",limitations:portfolio.limitations}
+}
+export async function getUsagePacing(query:{refresh?:boolean;accountID?:string}={}){
+ const snapshot=await getAccountUsage({refresh:query.refresh}),now=Date.now()
+ return {...pacingView(snapshot.accounts,readPacingObservations(now),now,query),diagnostics:snapshot.diagnostics}
 }

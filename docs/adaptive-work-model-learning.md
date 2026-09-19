@@ -1,3 +1,5 @@
+> Historical record: this is a dated investigation or implementation receipt, not current operating instructions. Its pending work, model choices, commands, and verification counts describe that run. Use the [current documentation](README.md).
+
 # Adaptive parallel work and learned model suitability
 
 Research snapshot: 2026-09-07 Eastern. This is an implementation brief, not a claim that adaptive splitting, session steering or model learning is deployed. The existing portfolio pacing PR is a separate change: https://github.com/Noisemaker111/opencode-config/pull/9.

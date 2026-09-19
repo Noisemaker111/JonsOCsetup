@@ -5,7 +5,6 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, read
 import { randomUUID } from 'node:crypto'
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
-import { taskState } from "../models/capacity-registry"
 import { canonicalWorkerTitle, workerIdentityFromEvent, type ReasoningEffort, type WorkerRuntime } from "./dispatch"
 
 /** Tests and one-off tools point this elsewhere; a test once wrote rows into the live ledger. */
@@ -143,6 +142,36 @@ export function registerCompletionEvidenceHandler(handler: (completion: Completi
   return () => handlers.delete(handler)
 }
 
+const DELIVERY_CLAIMANTS = Symbol.for("opencode-config.orchestration.delivery-claimants")
+/** Owners that deliver a completion themselves. A claimant answering true makes the native synthetic a duplicate. */
+function deliveryClaimants(): Set<(completion: CompletionEvidence) => boolean> {
+  const global = globalThis as { [DELIVERY_CLAIMANTS]?: Set<(completion: CompletionEvidence) => boolean> }
+  return global[DELIVERY_CLAIMANTS] ??= new Set()
+}
+
+/**
+ * Register a delivery owner for completions it already returns to the parent.
+ *
+ * The watchdog exists because a background subagent's completion can be lost,
+ * so it re-injects a synthetic result when the parent sits idle. A Quest run
+ * has its own return owner (QuestWorkerReturns), and delivering both wakes the
+ * same giver twice for one result. The claimant makes that single ownership
+ * explicit instead of guessing from the ledger shape.
+ */
+export function registerCompletionDeliveryClaimant(claimant: (completion: CompletionEvidence) => boolean): () => void {
+  const claimants = deliveryClaimants()
+  claimants.add(claimant)
+  return () => claimants.delete(claimant)
+}
+
+/** True when a registered owner already delivers this completion to its parent. */
+export function completionDeliveryClaimed(completion: CompletionEvidence): boolean {
+  for (const claimant of deliveryClaimants()) {
+    try { if (claimant(completion)) return true } catch { /* a broken claimant never blocks native delivery */ }
+  }
+  return false
+}
+
 export function pendingCompletionEvidence(parentID?: string, file = LEDGER_FILE): CompletionEvidence[] {
   const events = readLedger(file)
   const legacyDelivered = new Set(events.filter((event) => event.kind === "message-delivered" && event.messageID).map((event) => event.messageID))
@@ -181,14 +210,14 @@ export function recordCompletionDeliveryFailed(parentID: string, idempotencyKey:
   }) === true
 }
 
-/** Consume a terminal notification that represents a deliberately parked worker. */
-export function suppressCompletionDelivery(completion: CompletionEvidence, file = LEDGER_FILE): boolean {
+/** Consume a terminal notification whose parent must not receive the native synthetic. */
+export function suppressCompletionDelivery(completion: CompletionEvidence, file = LEDGER_FILE, reason = "parked dependency; parent delivery suppressed"): boolean {
   return withLedgerLock(file, () => {
     const events = readLedger(file)
     const latest = events.findLast((event) => event.kind === "completion-delivery" && event.deliveryKey === completion.idempotencyKey)
     if (latest?.deliveryState === "delivered") return true
     mkdirSync(dirname(file), { recursive: true })
-    appendFileSync(file, JSON.stringify({ v: 1, at: new Date().toISOString(), kind: "completion-delivery", parentID: completion.parentID, callID: completion.callID, deliveryKey: completion.idempotencyKey, deliveryState: "delivered", description: "parked dependency; parent delivery suppressed" }) + "\n", "utf8")
+    appendFileSync(file, JSON.stringify({ v: 1, at: new Date().toISOString(), kind: "completion-delivery", parentID: completion.parentID, callID: completion.callID, deliveryKey: completion.idempotencyKey, deliveryState: "delivered", description: reason }) + "\n", "utf8")
     pruneLedger(file)
     return true
   }) === true
@@ -482,7 +511,6 @@ export function recordSpawn(event: any, file = LEDGER_FILE) {
     role: validID(input.role) ? input.role : undefined,
     deliverables: Array.isArray(input.deliverables) ? input.deliverables.slice(0, 50).map(String) : undefined,
   }, file)
-  taskState(callID, parentID, callID, identity?.providerID ?? "other", "accepted")
 }
 
 export function recordLifecycle(parentID: string, callID: string, state: LedgerEvent["state"], childID?: string, file = LEDGER_FILE) {
@@ -499,7 +527,6 @@ export function recordSpawnResult(event: any, output?: unknown, file = LEDGER_FI
   if (childID) {
     const openCodeSessionId = verifiedNativeSession(output ?? event, parentID)
     appendLedger({ kind: "bound", parentID, callID, childID, runtime: "native", openCodeSessionId, runID: identity?.runID ?? callID }, file)
-    taskState(callID, parentID, callID, identity?.providerID ?? "other", "executing")
   }
 }
 
@@ -512,7 +539,6 @@ export function recordTerminal(parentID: string, childID: string, state: "comple
   if (validID(parentID) && validID(childID)) {
     const callID = readLedger(file).filter((event) => event.parentID === parentID && event.childID === childID).at(-1)?.callID ?? childID
     appendLedger({ kind: "terminal", parentID, callID, childID, state }, file)
-    taskState(childID, parentID, childID, "other", "terminal", state)
   }
 }
 

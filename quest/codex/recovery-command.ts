@@ -1,13 +1,13 @@
 /** Execute a claimed recovery command through the installed host's restricted
  * command/exec boundary. No model, shell elevation or host configuration changes. */
 import {spawn} from 'node:child_process'
-import {existsSync, readFileSync, renameSync, realpathSync, writeFileSync, mkdtempSync, lstatSync, mkdirSync, opendirSync, openSync, closeSync, fstatSync, readSync, constants} from 'node:fs'
+import {existsSync, readFileSync, renameSync, realpathSync, writeFileSync, mkdtempSync, lstatSync, mkdirSync, opendirSync, openSync, closeSync, fstatSync, readSync, writeSync, constants} from 'node:fs'
 import {createHash} from 'node:crypto'
 import {homedir} from 'node:os'
 import {isAbsolute,join,relative,dirname,resolve} from 'node:path'
 import {createInterface} from 'node:readline'
 import {recoveryWorkingDirectory,validateRecoveryBinding} from './recovery-workspace'
-// Bun's known extracted registry layout only. Never enumerate the shared cache,
+// Bun's known extracted registry layout only. Read matching package slots; never
 // follow its package aliases, or grant the installer writes to it.
 function cachePath(path:string){
  path=resolve(path)
@@ -17,12 +17,48 @@ function cachePath(path:string){
  }
  return lstatSync(path)
 }
-function provisionCache(destination:string,entries:any[],source:string){
- const budget={files:0,bytes:0},packages:string[]=[],deadline=Date.now()+30000
+export function lockedPackageApplies(entry:any,platform=process.platform,arch=process.arch){
+ const accepts=(constraint:unknown,value:string)=>{
+  if(constraint===undefined)return true
+  const values=Array.isArray(constraint)?constraint:[constraint]
+  if(values.some(v=>typeof v!=='string'))throw Error('Invalid locked platform constraint')
+  if(values.includes('!'+value))return false
+  const positive=values.filter(v=>!v.startsWith('!'))
+  return !positive.length||positive.includes('any')||positive.includes(value)
+ }
+ return accepts(entry[2]?.os,platform)&&accepts(entry[2]?.cpu,arch)
+}
+/** The parent package a nested lock key belongs to, or null for a top-level entry.
+ * Bun writes a nested resolution as `<parent>/<name>` with the child's bare name last,
+ * while the locked specifier is `<name>@<version>`; compare against the bare name. */
+function nestedParent(key:string,entry:any){
+ const spec=entry?.[0]
+ if(typeof spec!=='string')return null
+ const at=spec.lastIndexOf('@'),name=at>0?spec.slice(0,at):spec
+ const cut=key.length-name.length-1
+ return cut>0&&key.slice(cut)==='/'+name?key.slice(0,cut):null
+}
+/** A locked entry Bun never fetches from the registry can have no private cache slot: a
+ * workspace member is materialized from the repository itself, a bundled package ships
+ * inside its parent's tarball, and a nested dependency of a package this platform will
+ * not install is never resolved. Demanding one refused every repository whose lockfile
+ * held a workspace member or a platform-only package with bundled deps. */
+export function lockedPackageNeedsCache(locked:Record<string,any>,key:string,entry:any,platform=process.platform,arch=process.arch){
+ if(/@workspace:/.test(String(entry[0])))return false
+ if(!lockedPackageApplies(entry,platform,arch))return false
+ if(entry[2]?.bundled===true)return false
+ for(let parent=nestedParent(key,entry);parent;parent=nestedParent(parent,locked[parent])){
+  const resolved=locked[parent]
+  if(!Array.isArray(resolved))return true
+  if(!lockedPackageApplies(resolved,platform,arch))return false
+ }
+ return true
+}
+function provisionCache(destination:string,locked:Record<string,any>,entries:[string,any][],source:string,limits={packages:2000,bytes:3*1024*1024*1024,files:200000,ms:600000}){
+ const budget={files:0,bytes:0},packages:string[]=[],deadline=Date.now()+limits.ms
  const read=(path:string)=>{
   const stat=cachePath(path)
   if(!stat.isFile()||stat.size>32*1024*1024)throw Error('Private cache requires regular package files of at most 32 MiB')
-  if((budget.bytes+=stat.size)>128*1024*1024)throw Error('Private cache exceeds 128 MiB byte limit')
   const fd=openSync(path,constants.O_RDONLY|(constants.O_NOFOLLOW??0))
   try{
    const opened=fstatSync(fd)
@@ -35,8 +71,9 @@ function provisionCache(destination:string,entries:any[],source:string){
   }finally{closeSync(fd)}
  }
  const copy=(from:string,to:string,depth=0)=>{
-  if(Date.now()>deadline)throw Error('Private cache exceeded 30 second provisioning budget; inspect partial cache before retrying')
-  if(depth>32||++budget.files>10000)throw Error('Private cache exceeds depth/file limit (32/10000)')
+  if(Date.now()>deadline)throw Error('Private cache exceeded '+Math.round(limits.ms/1000)+' second provisioning budget; inspect partial cache before retrying')
+  if(depth>32)throw Error('Private cache exceeds supported package directory depth')
+  if(++budget.files>limits.files)throw Error('Private cache exceeds '+limits.files+' file limit; owner handoff required')
   const stat=cachePath(from)
   if(stat.isDirectory()){
    mkdirSync(to);const dir=opendirSync(from)
@@ -44,14 +81,45 @@ function provisionCache(destination:string,entries:any[],source:string){
     if(entry.name.length>200||/[\\:]/.test(entry.name)||/^(?:\.env(?:\..*)?|\.git|\.npmrc|\.bunfig\.toml|bunfig\.toml|\.netrc|\.ssh|\.aws|\.credentials|.*\.(?:pem|key|pfx))$/i.test(entry.name))throw Error('Private cache package contains an unsupported sensitive filename')
     copy(join(from,entry.name),join(to,entry.name),depth+1)
    }}finally{dir.closeSync()}
-  }else writeFileSync(to,read(from),{flag:'wx',mode:stat.mode&0o777})
+  }else{
+   if(!stat.isFile())throw Error('Private cache source must be a regular package file')
+   const sourceFD=openSync(from,constants.O_RDONLY|(constants.O_NOFOLLOW??0))
+   let targetFD:number|undefined
+   try{
+    const opened=fstatSync(sourceFD)
+    if(!opened.isFile()||opened.dev!==stat.dev||opened.ino!==stat.ino||opened.size!==stat.size)throw Error('Private cache source changed while opening')
+    targetFD=openSync(to,'wx',stat.mode&0o777)
+    const buffer=Buffer.alloc(64*1024);let copied=0
+    for(;;){const count=readSync(sourceFD,buffer,0,buffer.length,null);if(!count)break;let offset=0;while(offset<count)offset+=writeSync(targetFD,buffer,offset,count-offset);copied+=count}
+    const after=fstatSync(sourceFD);cachePath(from)
+    if(copied!==stat.size||after.size!==stat.size||after.mtimeMs!==stat.mtimeMs)throw Error('Private cache source changed while copying')
+    if((budget.bytes+=copied)>limits.bytes)throw Error('Private cache exceeds '+limits.bytes+' byte limit; owner handoff required')
+   }finally{closeSync(sourceFD);if(targetFD!==undefined)closeSync(targetFD)}
+  }
  }
- if(entries.length>256)throw Error('Private cache exceeds 256 locked packages; owner handoff required')
- for(const entry of entries){
+ if(entries.length>limits.packages)throw Error('Private cache exceeds '+limits.packages+' locked packages; owner handoff required')
+ for(const [key,entry] of entries){
+  if(!lockedPackageNeedsCache(locked,key,entry))continue
   if(packages.includes(entry[0]))continue
   const at=entry[0].lastIndexOf('@'),name=entry[0].slice(0,at),version=entry[0].slice(at+1)
-  const slot=name+'@'+version+'@@@1',from=join(source,slot),to=join(destination,slot)
-  if(!existsSync(from))throw Error('Private cache missing exact locked package '+entry[0]+' (expected Bun @@@1 layout); populate the trusted cache separately or hand off')
+  let slot=name+'@'+version+'@@@1',from=join(source,slot)
+  // Bun hashes prerelease/build suffixes. Inspect only this package's matching
+  // version prefix and require exact package metadata; aliases and patches stay excluded.
+  if(!existsSync(from)&&/[-+]/.test(version)){
+   const parent=name.startsWith('@')?join(source,name.split('/')[0]):source
+   const base=name.split('/').at(-1)!+'@'+version.split(/[-+]/)[0]+'-'
+   if(existsSync(parent)){
+    cachePath(parent);const entries=opendirSync(parent)
+    try{for(let item=entries.readSync();item;item=entries.readSync()){
+     if(!item.name.startsWith(base)||!/^.*-[a-f0-9]+@@@1$/.test(item.name))continue
+     const candidate=join(parent,item.name)
+     const metadata=JSON.parse(read(join(candidate,'package.json')).toString())
+     if(metadata.name===name&&metadata.version===version){slot=(name.startsWith('@')?name.split('/')[0]+'/':'')+item.name;from=candidate;break}
+    }}finally{entries.closeSync()}
+   }
+  }
+  const to=join(destination,slot)
+  if(!existsSync(from))throw Error('Private cache missing exact locked package '+entry[0]+'; populate the trusted cache separately or hand off')
   const metadata=JSON.parse(read(join(from,'package.json')).toString())
   if(metadata.name!==name||metadata.version!==version)throw Error('Private cache package name/version mismatch for '+entry[0])
   if(name.startsWith('@'))mkdirSync(dirname(to),{recursive:true})
@@ -80,14 +148,38 @@ export async function prepareRecoveredEnvironment(workspace:string,receipt:strin
  const fingerprint=createHash('sha256').update(bytes).update('\0').update(locked).digest('hex')
  const pkg=JSON.parse(bytes.toString()),data=Bun.JSONC.parse(locked.toString())
  if(pkg.packageManager&&!/^bun@/.test(pkg.packageManager))throw Error('Declared package manager is not Bun; reads and patches remain available')
- if(pkg.workspaces||Object.keys(data.workspaces??{}).some(path=>path!==''))throw Error('Workspace dependency preparation needs a separately verified recipe; reads and patches remain available')
+ const workspaceMembers=Object.entries(data.workspaces??{}).filter(([path])=>path!=='')
+ if(pkg.workspaces||workspaceMembers.length){
+  const names=new Set(workspaceMembers.map(([,w])=>w?.name).filter((n:any)=>typeof n==='string'))
+  for(const entry of Object.values(data.packages??{}) as any[]){
+   if(Array.isArray(entry))continue
+   const resolution=typeof entry==='string'?entry:''
+   const workspace=/^(.+)@workspace:/.exec(resolution)?.[1]
+   if(!workspace||!names.has(workspace))throw Error('Only integrity-locked registry packages and locked workspace members support automatic preparation; local/Git/unverified inputs require owner handoff')
+  }
+  const relativeWorkspace=(path:string)=>{if(!/^[A-Za-z0-9][A-Za-z0-9._\/-]*$/.test(path))throw Error('Workspace path is outside the recovery workspace; owner handoff required');return path}
+  for(const [path] of workspaceMembers){
+   const manifestPath=join(canonical,relativeWorkspace(path),'package.json')
+   if(!existsSync(manifestPath))throw Error('Locked workspace manifest is missing; owner handoff required')
+   const member=JSON.parse(readFileSync(manifestPath).toString())
+   for(const value of Object.values({...member.dependencies,...member.devDependencies,...member.optionalDependencies}) as string[])if(typeof value!=='string'||/^(?:file:|link:|git|https?:|\.\.?[\/]|[A-Za-z]:)/.test(value))throw Error('Local/Git dependency input requires owner handoff; reads and patches remain available')
+  }
+ }
  for(const entry of Object.values(data.packages??{}) as any[]){
-  if(!Array.isArray(entry)||typeof entry[0]!=='string'||entry[0].length>240||!/^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*@\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(entry[0])||entry[1]!==''||!lockedIntegrity(entry[3]))throw Error('Only integrity-locked default registry packages support automatic preparation; local/Git/unverified inputs require owner handoff')
+  if(!Array.isArray(entry))continue
+  if(/^(.+[^@])@workspace:/.test(String(entry[0])))continue
+  if(typeof entry[0]!=='string'||entry[0].length>240||!/^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*@\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(entry[0])||entry[1]!==''||!lockedIntegrity(entry[3]))throw Error('Only integrity-locked default registry packages support automatic preparation; local/Git/unverified inputs require owner handoff')
  }
  for(const value of Object.values({...pkg.dependencies,...pkg.devDependencies,...pkg.optionalDependencies}) as string[])if(typeof value!=='string'||/^(?:file:|link:|workspace:|git|https?:|\.\.?[\/]|[A-Za-z]:)/.test(value))throw Error('Local/Git dependency input requires owner handoff; reads and patches remain available')
  if(existsSync(receipt)){
   const prior=JSON.parse(readFileSync(receipt,'utf8'))
   if(prior.fingerprint!==fingerprint)throw Error('Preparation inputs changed; preserve the old receipt and retry with a fresh command ticket')
+  if(prior.state==='blocked'&&!prior.output&&!existsSync(join(workspace,'node_modules'))){
+   // The installer never ran. Preserve the failed preflight and partial cache,
+   // then prepare a fresh private cache; the original command was not executed.
+   renameSync(receipt,receipt+'.failed-'+Date.now()+'.json')
+   return prepareRecoveredEnvironment(workspace,receipt,execute,sourceCache)
+  }
   if(prior.state!=='ready')throw Error('Prior dependency preparation is '+prior.state+'; inspect '+receipt+' before retrying')
   if(typeof prior.cache?.directory!=='string'||!/^\.quest-preparation-[^/\\]+[/\\]cache$/.test(relative(canonical,prior.cache.directory))||!cachePath(prior.cache.directory).isDirectory())throw Error('Prepared private cache receipt is missing or replaced; inspect before retrying')
   if(!existsSync(join(workspace,'node_modules'))||lstatSync(join(workspace,'node_modules')).isSymbolicLink())throw Error('Prepared dependencies are missing or replaced')
@@ -100,7 +192,7 @@ export async function prepareRecoveredEnvironment(workspace:string,receipt:strin
  try{
    const owned=mkdtempSync(join(workspace,'.quest-preparation-')),config=join(owned,'bunfig.toml'),cache=join(owned,'cache');writeFileSync(config,'');mkdirSync(cache)
    record.cache={directory:cache,state:'started'};writeFileSync(receipt,JSON.stringify(record))
-   record.cache=provisionCache(cache,Object.values(data.packages??{}),sourceCache);writeFileSync(receipt,JSON.stringify(record))
+   record.cache=provisionCache(cache,data.packages??{},Object.entries(data.packages??{}) as [string,any][],sourceCache);writeFileSync(receipt,JSON.stringify(record))
    const command='& '+quote(process.execPath)+' install --frozen-lockfile --ignore-scripts --backend=copyfile --linker=hoisted --no-progress --config='+quote(config)+' --registry=http://127.0.0.1:9 --cache-dir='+quote(cache)
    const result=await execute(workspace,command,workspace)
    record.output={exitCode:result.exitCode,stdout:preparationOutput(result.stdout),stderr:preparationOutput(result.stderr)}
@@ -134,10 +226,11 @@ export async function executeRecoveredCommand(directory:string,command:string,wo
  try{
   await rpc('initialize',{clientInfo:{name:'quest-isolated-recovery',version:'1'},capabilities:{experimentalApi:true}})
   child.stdin.write(JSON.stringify({method:'initialized',params:{}})+'\n')
-  return await rpc('command/exec',{command:[join(process.env.SystemRoot??'C:/Windows','System32','WindowsPowerShell','v1.0','powershell.exe'),'-NoProfile','-NonInteractive','-Command',command],cwd:directory,sandboxPolicy:{type:'workspaceWrite',writableRoots:[workspace],networkAccess:false,excludeTmpdirEnvVar:true,excludeSlashTmp:true},timeoutMs:90000})
+  return await rpc('command/exec',{command:[join(process.env.SystemRoot??'C:/Windows','System32','WindowsPowerShell','v1.0','powershell.exe'),'-NoProfile','-NonInteractive','-Command',command],cwd:directory,env:{GIT_CONFIG_COUNT:'1',GIT_CONFIG_KEY_0:'safe.directory',GIT_CONFIG_VALUE_0:workspace},sandboxPolicy:{type:'workspaceWrite',writableRoots:[workspace],networkAccess:false,excludeTmpdirEnvVar:true,excludeSlashTmp:true},timeoutMs:90000})
  }finally{clearTimeout(timer);child.stdin.end();child.kill()}
 }
 export async function runRecoveryTicket(ticket:string,expectedHash?:string){
+ let preflightReceipt:{path:string;hash:string}|undefined
  try{
    if(!ticket||!/(?:^|[/\\])[a-f0-9-]{36}\.json$/.test(ticket))throw Error('Invalid recovery command ticket')
   // Atomic claim prevents a host retry from executing a command twice. Unknown
@@ -156,6 +249,7 @@ export async function runRecoveryTicket(ticket:string,expectedHash?:string){
    // Exclusive creation, unlike rename-over-existing, is an atomic no-replay
    // claim even if two ordinary tool executions arrive concurrently.
    cachePath(dirname(ticket));writeFileSync(claimed,bytes,{flag:'wx',mode:0o600})
+   preflightReceipt={path:receipt,hash}
    const input=JSON.parse(bytes.toString())
    if(input.version!==1||typeof input.command!=='string'||typeof input.directory!=='string')throw Error('Invalid recovery command record')
    if(input.binding)validateRecoveryBinding(input.binding)
@@ -171,9 +265,10 @@ export async function runRecoveryTicket(ticket:string,expectedHash?:string){
      const preparation=await prepareRecoveredEnvironment(workspace,join(workspace,'.quest-environment-'+fingerprint+'.json'))
     console.error('Quest isolated preparation: '+JSON.stringify(preparation))
    }
+  preflightReceipt=undefined
   const result=await executeRecoveredCommand(directory,input.command,input.workspace??input.directory)
    writeFileSync(receipt+'.tmp',JSON.stringify({...result,ticketHash:hash}),{flag:'wx'});renameSync(receipt+'.tmp',receipt)
   process.stdout.write(result.stdout??'');process.stderr.write(result.stderr??'');process.exitCode=result.exitCode??1
- }catch(error){console.error('Quest isolated recovery: '+(error instanceof Error?error.message:String(error)));process.exitCode=1}
+ }catch(error){const message='Quest isolated recovery: '+(error instanceof Error?error.message:String(error));if(preflightReceipt&&!existsSync(preflightReceipt.path))writeFileSync(preflightReceipt.path,JSON.stringify({ticketHash:preflightReceipt.hash,exitCode:1,stdout:'',stderr:message,commandStarted:false}),{flag:'wx'});console.error(message);process.exitCode=1}
 }
 if(import.meta.main)await runRecoveryTicket(process.argv[2])

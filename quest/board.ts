@@ -22,13 +22,18 @@ export function isAssigned(q: Quest): boolean {
   return Boolean(q.owner || q.integrationOwner || q.sessions.some((s) => ["planned", "executing", "waiting", "blocked"].includes(s.state)))
 }
 
-/** Unassigned Waiting quests are the to-do lane. Assigned/executing quests are active work. */
-export function questLane(q: Quest): QuestLane {
-  if (q.state === "Archived") return "archived"
-  if (q.state === "Ready to complete" || q.state === "Complete") return "ready"
-  if (q.state === "Needs attention") return "attention"
-  if (q.state === "Verifying") return "verifying"
-  if (q.state === "Working" || isAssigned(q)) return "assigned"
+/**
+ * Unassigned Waiting quests are the to-do lane. Assigned/executing quests are active work.
+ *
+ * `state` defaults to the saved one, but every surface passes the derived state from
+ * `questTruth`, so a lane cannot say Assigned for a Quest whose owning host confirms nothing.
+ */
+export function questLane(q: Quest, state: Quest["state"] = q.state): QuestLane {
+  if (state === "Archived") return "archived"
+  if (state === "Ready to complete" || state === "Complete") return "ready"
+  if (state === "Needs attention") return "attention"
+  if (state === "Verifying") return "verifying"
+  if (state === "Working" || isAssigned(q)) return "assigned"
   return "unassigned"
 }
 

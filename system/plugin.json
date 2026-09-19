@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "name": "opencode-system",
+  "description": "OpenCode2 maintenance commands",
+  "server": "system/server.ts",
+  "tui": "system/tui-active/system.tsx",
+  "assets": []
+}

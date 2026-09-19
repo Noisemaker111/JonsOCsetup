@@ -4,7 +4,7 @@ import { join,resolve } from "node:path"
 import { testRender } from "@opentui/solid"
 import { QuestStore } from "../quest/store"
 import { QuestBoard } from "../quest/tui-active/quest-board"
-import { frameToSvg } from "./opencode-visual-e2e"
+import { frameToSvg } from "./quest-ui-audit"
 import { Resvg } from "@resvg/resvg-js"
 const root=resolve(import.meta.dir,".."),dir=join(root,".visual-e2e","quest-contract-"+Date.now());mkdirSync(dir,{recursive:true});process.env.OPENCODE_QUEST_ROOT=dir
 const store=new QuestStore(dir),q=store.create({id:"01j00000000000000000000666",title:"Build project activity view",objective:"Show activity and explain how to use it",stages:[{id:"implement",title:"Implement and verify the activity view",status:"done",needs:[],todos:[],proofs:[],claim:{repos:[],include:[],exclude:[]},attempt:1}],usageInstructions:["Run bun run dev and open Activity."],setbacks:[{id:"old",stageID:"implement",attempt:1,reason:"Earlier retry"}] as any})

@@ -21,8 +21,9 @@ export function deriveState(q: Quest, lookup?: (id: string) => Quest | undefined
     const sessions=latestSessionAttempts(q.sessions),active=sessions.filter(s=>["planned","executing","waiting","blocked"].includes(s.state))
     const missing=completionMissing(q,lookup),done=q.stages.length>0&&q.stages.every(s=>s.status==="done")
     if(q.archive||q.state==="Archived")return {state:"Archived",reason:q.archive?.reason??"Archived",nextAction:"Reopen to resume",missing:[]}
-    const state:QuestState=active.some(s=>s.state==="executing")?"Working":q.stages.some(s=>s.status==="blocked")||!done&&sessions.some(s=>["failed","missing","stale"].includes(s.state))?"Needs attention":done&&!active.length?"Ready to complete":"Waiting"
-    return {state,reason:q.stages.filter(s=>s.status==="done").length+"/"+q.stages.length+" steps done",nextAction:nextStepAction(q),missing}
+    const unfinished=!active.length&&sessions.some(run=>['completed','cancelled'].includes(run.state)&&run.deliverables.some(id=>q.stages.some(step=>step.id===id&&step.status!=='done')))
+    const state:QuestState=active.some(s=>s.state==="executing")?"Working":unfinished||q.stages.some(s=>s.status==="blocked")||!done&&sessions.some(s=>["failed","missing","stale"].includes(s.state))?"Needs attention":done&&!active.length?"Ready to complete":"Waiting"
+    return {state,reason:unfinished?"Worker ended without saved completion of its assigned steps":q.stages.filter(s=>s.status==="done").length+"/"+q.stages.length+" steps done",nextAction:unfinished?"Inspect the worker result with your giver before resuming unfinished work":nextStepAction(q),missing}
   }
   if (q.state === "Archived") return { state: "Archived", reason: q.reason || "Archived", nextAction: q.nextAction || "Reopen to resume work", missing: q.missingRequirements }
   if (q.state === "Complete") return { state: "Complete", reason: q.reason || "Explicitly completed", nextAction: q.nextAction || "Archive when no longer active", missing: [] }

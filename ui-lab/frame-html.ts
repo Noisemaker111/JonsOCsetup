@@ -28,7 +28,7 @@ export const FONT_SIZE = 16
 export const QUEST_PALETTE: Palette = { bg: "#07111b", fg: "#d8d4ca" }
 /** The host's default theme as seen in screenshots: near-black ground, light gray text. */
 export const HOST_PALETTE: Palette = { bg: "#0f0f0f", fg: "#e2e2e2" }
-/** The host dialog frame (what /usage sits in): a lifted gray panel. */
+/** The host dialog frame: a lifted gray panel. */
 export const HOST_DIALOG_PALETTE: Palette = { bg: "#1c1c1c", fg: "#e2e2e2" }
 
 function esc(value: string): string {

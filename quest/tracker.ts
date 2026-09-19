@@ -1,3 +1,4 @@
+import {boundedInspection} from './worker-observation.mjs'
 import { readRequests } from "../usage/telemetry-api"
 import { aggregateTelemetry } from "../usage/telemetry-api"
 import { existsSync } from "node:fs"
@@ -9,15 +10,16 @@ import { requestFingerprint, redact } from "./privacy"
 import type { Quest, QuestSession } from "./types"
 import { readAllQuests } from "./index"
 import { parseWorkerReport } from "./report"
+import { isTerminalSession as terminalSession } from "./session-lineage"
 import { deferGoalTerminal } from './goal-lifecycle'
 import {dispatchReservationFile} from '../models/dispatch-planner'
+import {physicalDirectory} from './project'
 import { findStep } from "./steps"
 import { workerIdentityFromEvent } from "../orchestration/dispatch"
 import type { CompletionEvidence } from "../orchestration/orchestration-ledger"
 
 export type QuestDispatch = { questID: string; callID: string; taskID?: string; role: string; deliverables: string[]; model?: string; harness?: string; branch?: string; worktree?: string; agentRole?: string; providerID?: string; modelID?: string; reasoningEffort?: QuestSession["reasoningEffort"]; fast?: boolean; runtime?: "native" | "claude-code"; runID?: string; task?: string; parentID?: string; scope?: Record<string, unknown> }
 
-const terminalSession = (state: string) => ["completed", "failed", "cancelled", "missing", "stale"].includes(state)
 const ACTIVE_SESSION = new Set(["planned", "executing", "waiting", "blocked"])
 const SESSION_ID = /^ses_[A-Za-z0-9_-]+$/
 
@@ -198,6 +200,18 @@ export class QuestTracker {
       scope: input.scope && typeof input.scope === "object" ? input.scope as Record<string, unknown> : undefined,
     })
   }
+  /**
+   * True when this Quest owns the completed run.
+   *
+   * A dispatched Quest run carries a saved runID and its giver return is owned
+   * by QuestWorkerReturns, so the orchestration watchdog must not inject its own
+   * synthetic completion for the same result. Runs with no saved runID (a legacy
+   * native-subagent binding) are not claimed and keep the native delivery.
+   */
+  deliversCompletion(completion: CompletionEvidence): boolean {
+    if (!completion.questID || completion.questID === "unbound" || !completion.runID) return false
+    return Boolean(this.store.read(completion.questID)?.sessions.some((session) => session.runID === completion.runID))
+  }
   onCompletion(completion: CompletionEvidence, parkedDeliverySuppressed = false): "recorded" | "duplicate" | "parked" | undefined {
     if (!completion.questID || !this.enabled) return
     const quest = this.store.read(completion.questID)
@@ -334,6 +348,8 @@ export class QuestTracker {
       this.indexedAt = 0
       return "identified"
     }
+    // Shutdown is a resumable ownership handoff, not a terminal worker outcome.
+    if(type==="session.execution.interrupted"&&data.reason==="shutdown")return
     const terminal = HOST_TERMINAL[type]
     if (terminal && typeof data.sessionID === "string") {
       if(deferGoalTerminal(this.store.runtime,data.sessionID,()=>this.onHostEvent(event),String((event as any).id??data.executionID??'')))return
@@ -341,16 +357,54 @@ export class QuestTracker {
       if (!ref || !ACTIVE_SESSION.has(ref.session.state)) return
       if (ref.session.state === "blocked" && ref.session.dependency && ref.session.dependency.status !== "resumed") return
       const error = data.error as { message?: unknown; data?: { message?: unknown } } | string | undefined
-      const detail = typeof error === "string" ? error : typeof error?.message === "string" ? error.message : typeof error?.data?.message === "string" ? error.data.message : undefined
+      const message = typeof error === "string" ? error : typeof error?.message === "string" ? error.message : typeof error?.data?.message === "string" ? error.data.message : undefined
+      // An interrupt carries no error; its cause is the reason the host shut the turn down.
+      const detail = message ?? (typeof data.reason === "string" && data.reason ? data.reason : undefined)
       const result = "Host reported execution " + type.split(".").pop() + (detail ? ": " + redact(detail, 2000) : "")
-      this.store.apply(ref.questID, "session-state", { callID: ref.session.callID, state: terminal, evidence: result, result }, "host:execution")
+      return this.settleWorker(data.sessionID,terminal,result,"host:execution",typeof data.observedAt==="string"?data.observedAt:undefined)
+    }
+  }
+  /** A rejected permission is an explicit cancellation, not a fabricated host execution event. */
+  async settlePermissionRejection(questID:string,runID:string,host:any) {
+    const run=this.store.read(questID)?.sessions.find(s=>s.runID===runID)
+    const decision=run?.permissionDecisions?.find(d=>d.reply==='reject'&&d.state==='acknowledged')
+    if(!run||!decision||!ACTIVE_SESSION.has(run.state))return
+    const sessionID=run.openCodeSessionId??run.sessionID
+    if(!sessionID||typeof host.wait!=='function')return
+    // Native wait means awaitIdle: it never starts or resumes work.
+    await boundedInspection(signal=>host.wait({sessionID},{signal}))
+    const fresh=this.store.read(questID)?.sessions.find(s=>s.runID===runID)
+    if(!fresh||(fresh.openCodeSessionId??fresh.sessionID)!==sessionID||!ACTIVE_SESSION.has(fresh.state)||!fresh.permissionDecisions?.some(d=>d.requestID===decision.requestID&&d.reply==='reject'&&d.state==='acknowledged'))return
+    return this.settleWorker(sessionID,'cancelled','Permission rejected by '+decision.actor+'. Owning host confirmed execution idle. '+decision.reason,'quest:permission-rejection')
+  }
+  async settleInterruptedDispatch(questID:string,runID:string,host:any) {
+    const run=this.store.read(questID)?.sessions.find(s=>(s.runID??s.callID)===runID)
+    const sessionID=run?.openCodeSessionId??run?.sessionID
+    if(run?.state!=='planned'||!sessionID||typeof host.wait!=='function'||typeof host.context!=='function'||typeof host.get!=='function')return
+    const {interruptedBoundDispatch}=await import('./dispatch-intent')
+    const reason=interruptedBoundDispatch(this.store.runtime,runID,sessionID)
+    if(!reason)return
+    await boundedInspection(signal=>host.wait({sessionID},{signal}))
+    const response=await boundedInspection(signal=>host.get({sessionID},{signal})),session=response?.data??response
+    const context=await boundedInspection(()=>host.context({sessionID})),messages=context?.data??context
+    if(session?.id!==sessionID||session?.outcome||!Array.isArray(messages)||messages.length)return
+    if(typeof run.scope?.worktree!=='string'||typeof session.location?.directory!=='string'||physicalDirectory(session.location.directory)!==physicalDirectory(run.scope.worktree))return
+    if(session.agent!==run.agentRole||session.model?.providerID!==run.providerID||session.model?.id!==run.modelID||run.reasoningEffort&&session.model?.variant!==run.reasoningEffort)return
+    const fresh=this.store.read(questID)?.sessions.find(s=>(s.runID??s.callID)===runID)
+    if(fresh?.state!=='planned'||(fresh.openCodeSessionId??fresh.sessionID)!==sessionID||interruptedBoundDispatch(this.store.runtime,runID,sessionID)!==reason)return
+    return this.settleWorker(sessionID,'failed',reason+' Owning host confirmed the bound session is idle with no recorded messages. Dispatch did not complete; retained session, workspace and retry lineage.','quest:interrupted-dispatch')
+  }
+  private settleWorker(sessionID:string,terminal:'completed'|'failed'|'cancelled',result:string,actor:string,observedAt?:string) {
+    const ref=this.sessionIndex(0).get(sessionID)
+    if(!ref||!ACTIVE_SESSION.has(ref.session.state))return
+    this.store.apply(ref.questID, "session-state", { callID: ref.session.callID, state: terminal, evidence: result, result }, actor)
       if (ref.session.runID) {
-        try { const workspaces=new QuestWorkspaces(this.store.runtime);if(workspaces.get(ref.session.runID)){workspaces.collect(ref.session.runID);workspaces.releaseShared(ref.session.runID,this.store,"Observed host terminal outcome")} } catch(error) { console.error("[quests] Could not collect completed worker changes",error) }
+        try { const workspaces=new QuestWorkspaces(this.store.runtime);if(workspaces.get(ref.session.runID)){workspaces.collect(ref.session.runID);workspaces.releaseShared(ref.session.runID,this.store,result)} } catch(error) { console.error("[quests] Could not collect completed worker changes",error) }
         const file=dispatchReservationFile(this.store.runtime)
-        if(existsSync(file))try{const ledger=new RouteReservations(file),reservation=ledger.get(ref.session.runID),requests=readRequests().records.filter(r=>r.sessionID===data.sessionID);const currency=reservation?.cash?.currency;const cash=currency&&requests.length&&requests.every(r=>r.completedAt!==undefined&&r.actualCharge?.currency===currency&&Number.isFinite(r.actualCharge.value)&&r.actualCharge.value>=0)?{currency,value:aggregateTelemetry(requests).actualCharges[currency]}:undefined;ledger.settle(ref.session.runID,{state:"settled",completedAt:new Date().toISOString(),cash})}catch(error){console.error("[quests] Could not settle route reservation",error)}
+        if(existsSync(file))try{const ledger=new RouteReservations(file),reservation=ledger.get(ref.session.runID),requests=readRequests().records.filter(r=>r.sessionID===sessionID);const currency=reservation?.cash?.currency;const cash=currency&&requests.length&&requests.every(r=>r.completedAt!==undefined&&r.actualCharge?.currency===currency&&Number.isFinite(r.actualCharge.value)&&r.actualCharge.value>=0)?{currency,value:aggregateTelemetry(requests).actualCharges[currency]}:undefined;ledger.settle(ref.session.runID,{state:"settled",completedAt:observedAt??new Date().toISOString(),cash})}catch(error){console.error("[quests] Could not settle route reservation",error)}
       }
       this.indexedAt = 0
       return "settled"
-    }
   }
+
 }

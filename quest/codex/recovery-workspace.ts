@@ -1,9 +1,10 @@
 import {createHash, randomUUID} from 'node:crypto'
-import {existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync} from 'node:fs'
-import {homedir} from 'node:os'
+import {existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync} from 'node:fs'
 import {dirname, isAbsolute, join, relative, resolve} from 'node:path'
 import {spawnSync} from 'node:child_process'
 import type {QuestStore} from '../store'
+import {gitMetadataDirectory} from '../project'
+import {readOnlyShell} from './read-command'
 
 export type RecoveryBinding = {origin:string; repository:string; directory:string; branch:string; head:string; sessionID:string; preparation?:{state:'ready'|'blocked'; source:'clean-checkout'|'explicit-commit'|'tracked-snapshot'; tree?:string; applied?:boolean; applicationStarted?:boolean; dirty:boolean; environment:string; reason?:string}}
 // An explicit immutable source is caller authorization, never inferred from a
@@ -12,10 +13,12 @@ export type RecoveryBinding = {origin:string; repository:string; directory:strin
 export type RecoveryOptions = {aliases?:Record<string,string>; runner?:string; sourceCommit?:string; needsEnvironment?:boolean}
 const key=(value:string)=>process.platform==='win32'?resolve(value).toLowerCase():resolve(value)
 function safeGit(directory:string){
- const config=spawnSync('git',['-C',directory,'config','--name-only','--get-regexp','^filter[.]'],{encoding:'utf8',windowsHide:true,timeout:20000})
+ directory=realpathSync(directory)
+ const trust=['-c','safe.directory='+directory]
+ const config=spawnSync('git',[...trust,'-C',directory,'config','--name-only','--get-regexp','^filter[.]'],{encoding:'utf8',windowsHide:true,timeout:20000})
  if(config.error||![0,1].includes(config.status??-1))throw Error('Could not inspect repository filter configuration')
  const drivers=[...new Set(config.stdout.trim().split('\n').map(line=>/^filter\.(.+)\.(?:clean|smudge|process|required)$/.exec(line.trim())?.[1]).filter((v):v is string=>!!v))]
- return ['-C',directory,'-c','core.fsmonitor=false','-c','core.hooksPath=',...drivers.flatMap(driver=>['-c',`filter.${driver}.clean=`,'-c',`filter.${driver}.smudge=`,'-c',`filter.${driver}.process=`,'-c',`filter.${driver}.required=false`])]
+ return [...trust,'-C',directory,'-c','core.fsmonitor=false','-c','core.hooksPath=',...drivers.flatMap(driver=>['-c',`filter.${driver}.clean=`,'-c',`filter.${driver}.smudge=`,'-c',`filter.${driver}.process=`,'-c',`filter.${driver}.required=false`])]
 }
 const git=(directory:string,args:string[])=>{
  const r=spawnSync('git',[...safeGit(directory),...args],{encoding:'utf8',windowsHide:true,timeout:20000})
@@ -25,9 +28,6 @@ const git=(directory:string,args:string[])=>{
 const save=(file:string,value:unknown)=>{const temp=file+'.'+randomUUID()+'.tmp';writeFileSync(temp,JSON.stringify(value));renameSync(temp,file)}
 const contained=(root:string,path:string)=>{const rel=relative(root,path);return rel===''||(!isAbsolute(rel)&&rel!=='..'&&!rel.startsWith('../')&&!rel.startsWith('..\\'))}
 export function sameDirectory(a:string,b:string){return key(realpathSync(a))===key(realpathSync(b))}
-// This personal configuration has an explicitly documented non-Git hub. Never
-// guess a repository by scanning children: the hub also contains upstream repos.
-export function checkoutAliases(){return {[join(homedir(),'Projects','opencode-hub')]:join(homedir(),'.config','opencode')}}
 // Same temporary-index/two-pass mechanism as QuestWorkspaces.applySnapshot,
 // narrowed to tracked regular files. hash-object avoids repository clean filters;
 // no source index mutation, lifecycle command, or arbitrary untracked-file copy.
@@ -81,52 +81,74 @@ function trackedSnapshot(store:QuestStore,repository:string,head:string):string{
  }finally{if(existsSync(index))unlinkSync(index)}
 }
 export function recoverWorkspace(store:QuestStore,origin:string,sessionID:string,options:RecoveryOptions={}):RecoveryBinding{
- const aliases=options.aliases??checkoutAliases()
+ const aliases=options.aliases??{}
  const alias=Object.entries(aliases).find(([path])=>existsSync(path)&&sameDirectory(path,origin))?.[1]
  const repository=realpathSync(git(alias??origin,['rev-parse','--show-toplevel']))
- const id=createHash('sha256').update(key(origin)+'\0'+sessionID).digest('hex').slice(0,24)
- const directory=join(repository,'.worktrees','quest-recovery-'+id),branch='quest/recovery-'+id
+ // A session keeps its origin+session identity when the hub mapping moves to
+ // another checkout; the resolved repository distinguishes its bindings so a
+ // receipt for one source is never overwritten by another.
+ const fingerprint=(directory:string)=>createHash('sha256').update(key(directory)).digest('hex').slice(0,12)
+ const sessionIdentity=createHash('sha256').update(key(origin)+'\0'+sessionID).digest('hex').slice(0,24)
+ const repositoryIdentity=sessionIdentity+'-'+fingerprint(repository)
  const records=join(store.runtime,'codex','workspaces');mkdirSync(records,{recursive:true})
- const receipt=join(records,id+'.json')
- let binding:RecoveryBinding
- if(existsSync(receipt)){
-  binding=JSON.parse(readFileSync(receipt,'utf8'))
-  if(binding.sessionID!==sessionID||key(binding.origin)!==key(origin)||key(binding.repository)!==key(repository)||key(binding.directory)!==key(directory)||binding.branch!==branch)throw Error('Worktree recovery receipt does not match this session; preserving it')
- }else{
+ // Receipts named for this origin+session are this session's evidence. A valid
+ // owned workspace outranks the current mapping; anything else is preserved
+ // untouched rather than rejected, adopted or replaced.
+ const receipts:Array<{file:string;binding:RecoveryBinding;workspace:boolean}>=[]
+ for(const name of readdirSync(records).sort()){
+  if(!name.endsWith('.json'))continue
+  const id=name.slice(0,-5),suffix=id.slice(sessionIdentity.length+1),scoped=id!==sessionIdentity
+  if(scoped&&!(id.startsWith(sessionIdentity+'-')&&id.length===sessionIdentity.length+13&&/^[0-9a-f]{12}$/.test(suffix)))continue
+  const file=join(records,name)
+  let candidate:RecoveryBinding
+  try{candidate=JSON.parse(readFileSync(file,'utf8'))}catch{throw Error('Worktree recovery receipt is unreadable; preserving it: '+file)}
+  if(typeof candidate?.head!=='string'||!/^[a-f0-9]{40}$/.test(candidate.head)||candidate.sessionID!==sessionID||typeof candidate.origin!=='string'||key(candidate.origin)!==key(origin)||typeof candidate.repository!=='string'||typeof candidate.directory!=='string'||typeof candidate.branch!=='string'||key(candidate.directory)!==key(join(candidate.repository,'.worktrees','quest-recovery-'+id))||candidate.branch!=='quest/recovery-'+id||(scoped&&suffix!==fingerprint(candidate.repository)))throw Error('Worktree recovery receipt does not match this session; preserving it: '+file)
+  const workspace=existsSync(candidate.directory)
+  if(workspace)validateRecoveryBinding(candidate)
+  receipts.push({file,binding:candidate,workspace})
+ }
+ const current=receipts.find(entry=>key(entry.binding.repository)===key(repository))
+ const selected=current?.workspace?current:(receipts.find(entry=>entry.workspace)??current)
+ let binding:RecoveryBinding,receipt:string
+ if(selected){binding=selected.binding;receipt=selected.file}
+ else{
+  const id=receipts.length?repositoryIdentity:sessionIdentity
+  const directory=join(repository,'.worktrees','quest-recovery-'+id),branch='quest/recovery-'+id
   // A deterministic name is not proof that an existing tree or branch is ours.
   if(existsSync(directory))throw Error('Recovery destination exists without a session receipt; preserving it')
   const head=options.sourceCommit??git(repository,['rev-parse','HEAD'])
   if(!/^[a-f0-9]{40}$/.test(head)||git(repository,['rev-parse',head+'^{commit}'])!==head)throw Error('Recovery source must be an exact commit')
   binding={origin:realpathSync(origin),repository,directory,branch,head,sessionID}
+  receipt=join(records,id+'.json')
   save(receipt,binding)
  }
- if(!existsSync(directory)){
+ if(!existsSync(binding.directory)){
   const dirty=false
   const explicit=options.sourceCommit===binding.head
   binding.preparation={state:'ready',source:explicit?'explicit-commit':'clean-checkout',dirty,environment:'not inspected'}
   if(!explicit){
-   try{const tree=trackedSnapshot(store,repository,binding.head);if(tree!==git(repository,['rev-parse',binding.head+'^{tree}'])){binding.preparation.tree=tree;binding.preparation.source='tracked-snapshot';binding.preparation.dirty=true}}
+   try{const tree=trackedSnapshot(store,binding.repository,binding.head);if(tree!==git(binding.repository,['rev-parse',binding.head+'^{tree}'])){binding.preparation.tree=tree;binding.preparation.source='tracked-snapshot';binding.preparation.dirty=true}}
    catch(error){binding.preparation.state='blocked';binding.preparation.dirty=true;binding.preparation.reason=String(error);save(receipt,binding);throw Error(binding.preparation.reason+'; receipt: '+receipt)}
   }
-  if(!explicit&&git(repository,['rev-parse','HEAD'])!==binding.head)throw Error('Recovery source HEAD changed before preparation; preserve receipt for inspection')
+  if(!explicit&&git(binding.repository,['rev-parse','HEAD'])!==binding.head)throw Error('Recovery source HEAD changed before preparation; preserve receipt for inspection')
   save(receipt,binding)
  }
- if(!existsSync(directory)){
-  const parent=dirname(directory);mkdirSync(parent,{recursive:true})
-  if(!contained(repository,realpathSync(parent)))throw Error('Recovery worktree parent resolves outside the repository')
-  const branchExists=spawnSync('git',['-C',repository,'show-ref','--verify','--quiet','refs/heads/'+branch],{windowsHide:true}).status===0
+ if(!existsSync(binding.directory)){
+  const parent=dirname(binding.directory);mkdirSync(parent,{recursive:true})
+  if(!contained(binding.repository,realpathSync(parent)))throw Error('Recovery worktree parent resolves outside the repository')
+  const branchExists=spawnSync('git',['-C',binding.repository,'show-ref','--verify','--quiet','refs/heads/'+binding.branch],{windowsHide:true}).status===0
   if(branchExists)throw Error('Recovery branch exists without its worktree; preserving it for inspection')
-   git(repository,['-c','core.hooksPath=','worktree','add','-b',branch,directory,binding.head])
+  git(binding.repository,['-c','core.hooksPath=','worktree','add','-b',binding.branch,binding.directory,binding.head])
  }
  validateRecoveryBinding(binding)
  if(binding.preparation?.tree&&!binding.preparation.applied){
   // An interrupted application is never replayed onto unknown edits.
   if(binding.preparation.applicationStarted)throw Error('Snapshot application has unknown completion; preserve recovery worktree for inspection')
   binding.preparation.applicationStarted=true;save(receipt,binding)
-  const patch=spawnSync('git',['-C',repository,'diff','--binary','--full-index','--no-ext-diff','--no-textconv',binding.head,binding.preparation.tree,'--'],{windowsHide:true,maxBuffer:32*1024*1024})
+  const patch=spawnSync('git',['-C',binding.repository,'diff','--binary','--full-index','--no-ext-diff','--no-textconv',binding.head,binding.preparation.tree,'--'],{windowsHide:true,maxBuffer:32*1024*1024})
   if(patch.status!==0)throw Error('Could not read immutable recovery snapshot')
   if(patch.stdout.length){
-   const applied=spawnSync('git',[...safeGit(directory),'apply','--index','--whitespace=nowarn','-'],{input:patch.stdout,encoding:'utf8',windowsHide:true,timeout:20000})
+   const applied=spawnSync('git',[...safeGit(binding.directory),'apply','--index','--whitespace=nowarn','-'],{input:patch.stdout,encoding:'utf8',windowsHide:true,timeout:20000})
    if(applied.status!==0)throw Error('Recovery snapshot application failed; retained worktree: '+applied.stderr)
   }
   binding.preparation.applied=true;save(receipt,binding)
@@ -135,7 +157,7 @@ export function recoverWorkspace(store:QuestStore,origin:string,sessionID:string
  // argv or dependency snapshot. Do not run repository scripts or share writable
  // node_modules with the owner. Make this constraint durable and visible.
  if(!binding.preparation)throw Error('Legacy recovery has no source/preparation receipt; inspect before reusing it')
- const manifest=join(directory,'package.json')
+ const manifest=join(binding.directory,'package.json')
  const pkg=existsSync(manifest)?JSON.parse(readFileSync(manifest,'utf8')):{}
  const dependencies=Object.keys({...pkg.dependencies,...pkg.devDependencies,...pkg.optionalDependencies}).length>0||!!pkg.workspaces
  binding.preparation.environment=dependencies?'requires isolated configured bootstrap':'no package dependencies'
@@ -166,18 +188,26 @@ const CHECKOUT_FREE_CONTROLS=new Set([
  // Each child session still passes its own shell/patch calls through this hook.
  ...['spawn_agent','send_message','followup_task','interrupt_agent'].flatMap(name=>[name,'collaboration.'+name,'collaboration'+name]),
 ])
+/** A home or project container is not a checkout reservation for every tool on the machine. */
+export function hasCheckout(directory:string):boolean {
+ const actual=realpathSync(directory)
+ if(!gitMetadataDirectory(actual)&&!process.env.GIT_DIR&&!process.env.GIT_WORK_TREE)return false
+ const result=spawnSync('git',['-C',actual,'rev-parse','--is-inside-work-tree'],{encoding:'utf8',windowsHide:true,timeout:15000})
+ if(result.error)throw result.error
+ if(result.status===0)return result.stdout.trim()==='true'
+ if(/not a git repository/i.test(result.stderr))return false
+ throw Error('Cannot establish checkout scope: '+result.stderr.trim())
+}
 export function checkoutIndependent(tool:string,input:any):boolean{
+ // These servers operate on their own documentation index or browser session;
+ // they do not execute code or write files in the selected checkout.
+ if(/^mcp__docs__(?:search_docs|list_libraries|find_version|fetch_url|list_jobs|get_job_info|scrape_docs|refresh_version|cancel_job|remove_docs)$/.test(tool))return true
+ if(tool==='mcp__cua_repl__js_reset')return true
+ // CUA's JavaScript surface is programmable; only its literal inventory call is intrinsically checkout independent.
+ if(tool==='mcp__cua_repl__js'&&typeof input?.code==='string'&&/^\s*await cua\.getState\(\);?\s*$/.test(input.code))return true
  if(CHECKOUT_FREE_CONTROLS.has(tool)||WEB_TOOLS.has(tool)||['Read','Glob','Grep','view_image'].includes(tool))return true
  if(tool!=='Bash'||typeof input?.command!=='string')return false
- // Deliberately tiny literal-only PowerShell read grammar. No expressions,
- // variables, redirection, pipelines, wildcards, invocation operators or scriptblocks.
- // A nonmatching command takes the normal isolated execution path.
- return input.command.trim().split(';').every((part:string)=>{
-   if(/^\s*Get-Location\s*$/i.test(part))return true
-   const match=/^\s*Get-Content\s+(?:(?:-LiteralPath|-Path)\s+)?(?:'([^'$`*?\[\]\r\n]+)'|"([^"$`*?\[\]\r\n]+)"|([A-Za-z]:[\\/][^\s;'"$`|&<>*?\[\]{}()]+))\s*(?:-(?:TotalCount|Head|Tail)\s+\d+)?\s*$/i.exec(part)
-  const path=match&&(match[1]??match[2]??match[3])
-  return !!path&&isAbsolute(path)
- })
+ return readOnlyShell(input.command)
 }
 export function recoveryReadInput(binding:RecoveryBinding,tool:string,input:any):any{
  if(tool==='Bash'){

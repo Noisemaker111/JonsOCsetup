@@ -1,15 +1,25 @@
+import {choosePermissionReviewer} from './reviewer-settings'
+import {reviewWorkerPermissions} from './worker-permissions'
+import {inspectWorker} from "../worker-inspection"
+import { ensureUserGiver, userGiverID } from "../user-giver"
+import { QuestStore } from "../store"
+import { questRoot } from "../root"
+import { useWorkerObservations } from "./worker-observation"
+import { ownedRuns } from "../activity"
 /** @jsxImportSource @opentui/solid */
 import {workspaceSettings,setWorkspaceMode} from "../workspace-settings"
 import { Plugin } from "../../tui-legacy"
 import { For, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
-import { questIndicator, filterQuests, QUEST_FILTERS, type QuestFilter } from "../tui-model"
-import { boardProject, projectQuests, resolveBoardProject } from "../board-project"
+import { filterTruths, questTruths, QUEST_FILTERS, type QuestFilter } from "../tui-model"
+import { questCounts, questTruth, runReachability } from "../reachability"
+import { allProjectsByDefault, boardProject, projectQuests, resolveBoardProject, scopeLabel } from "../board-project"
 import { activeSessionID } from "../../scripts/runtime-contract.mjs"
 import { createGiver, hasQuestReturn, returnToQuest } from "../tui-workflow"
+import { giverHomeEntry } from "../tui-navigation"
 import type { Quest, QuestSession } from "../types"
 import { watchQuests } from "../watcher"
 import { progressGlyph, questProgress } from "../steps"
-import { C, QuestBoard, activate, footerWidth, liveWorkerLines, openWorkerSession, projectRoot, quests, workerLabel } from "./quest-board"
+import { C, QuestBoard, activate, fitTitle, openWorkerSession, projectRoot, quests, toneColor, workerLabel, workerTask } from "./quest-board"
 
 /**
  * Snapshot of the route live right now, shaped the way the host's own router
@@ -29,7 +39,8 @@ function currentRoute(context: any): unknown {
 
 /**
  * The host composer IS the Quest Giver conversation: quest-giver is the
- * default agent, so every session Jk types in has the normal slash commands
+ * default agent for intake. Worker sessions retain their assigned native agent;
+ * the giver has the normal slash commands
  * and one context for every Quest. The board is a view: `/quests`, the footer
  * count, or a sidebar row opens it; Esc returns to the chat. It never opens
  * itself at startup and never carries its own chat.
@@ -40,7 +51,7 @@ function currentRoute(context: any): unknown {
  * `data.returnRoute` before navigating in, so the board's back action can
  * navigate back to it instead.
  */
-function openBoard(context: any, questID?: string, filter: QuestFilter = "open") {
+function openBoard(context: any, questID?: string, filter: QuestFilter = "all") {
   if (typeof context?.ui?.router?.navigate === "function") {
     context.ui.router.navigate({ type: "plugin", name: "quests", data: { ...(questID ? { questID } : {}), filter, returnRoute: currentRoute(context) } })
     return
@@ -75,25 +86,26 @@ function sessionKey(quest: Quest, session: QuestSession): string {
   return `${quest.id}:${session.callID}`
 }
 
-async function openSessionPicker(context: any, allProjects = false) {
+async function openSessionPicker(context: any, allProjects = Boolean(userGiverID())) {
   const dialog = context?.ui?.dialog
   if (typeof dialog?.select !== "function") return
   const project=await resolveBoardProject(context,activeSessionID(context))
   const rows = allWorkerSessions(context,project.id,allProjects)
   const byKey = new Map(rows.map((row) => [sessionKey(row.quest, row.session), row]))
-  const options = [...byKey.entries()].map(([key, { quest, session }]) => {
+  const options = await Promise.all([...byKey.entries()].map(async ([key, { quest, session }]) => {
+    const live = await inspectWorker(context.client.session,session)
     const id = session.openCodeSessionId ?? session.sessionID
-    const task = session.task ?? session.taskDescription ?? "delegated work"
+    const task = workerTask(quest,session)
     return {
       value: key,
-      title: `${workerLabel(session)} · ${task}`,
+      title: task,
       category: quest.title,
       searchText: `${id ?? ""} ${workerLabel(session)} ${task}`,
-      description: id,
-      footer: session.state.toUpperCase(),
+      details: [workerLabel(session), live.reason],
+      footer: live.state.toUpperCase(),
     }
-  })
-  const picked = await dialog.select({ title: `Worker sessions · ${allProjects?"All projects":"current project"}`, placeholder: "Paste or search a ses_… id", options:[{value:"scope",title:allProjects?"Show current project":"Show All projects",description:project.error},...options] })
+  }))
+  const picked = await dialog.select({ title: `Worker sessions · ${allProjects?"All projects":"current project"}`, placeholder: "Search Quest, step, or model", options:[{value:"scope",title:allProjects?"Show current project":"Show All projects",description:project.error},...options] })
   if (!picked) return
   if(picked==="scope")return openSessionPicker(context,!allProjects)
   const row = byKey.get(picked)
@@ -105,15 +117,32 @@ async function chooseWorkspaceMode(context:any) {
  const choice=await context.ui.dialog.select({title:"Quest workspace mode · all future runs",options:[{value:"worktree",title:"Separate worktrees"+(current==="worktree"?" (current)":"")},{value:"shared",title:"Shared project checkout"+(current==="shared"?" (current)":"")}]})
  if(choice==="worktree"||choice==="shared")setWorkspaceMode(choice)
 }
+// Startup with nothing open, as opposed to the user asking for home; see giverHomeEntry.
+const openRegisteredGiver = giverHomeEntry()
+
 function Commands(props: { context: any }) {
+  createEffect(() => {
+    const route=props.context.ui.router.current()
+    if(!openRegisteredGiver(route?.type))return
+    // Let the native composer create the first session and retain its focus/model.
+    if(!userGiverID()&&!quests(projectRoot(props.context)).some(q=>q.integrationOwner?.startsWith("ses_")))return
+    let cancelled=false
+    onCleanup(()=>{cancelled=true})
+    void ensureUserGiver(new QuestStore(questRoot()),props.context.client.session,undefined,props.context.location?.directory??props.context.state?.path?.directory??process.cwd()).then(row=>{
+      if(!cancelled&&props.context.ui.router.current()?.type==="home")props.context.ui.router.navigate({type:"session",sessionID:row.id})
+    }).catch(error=>{if(!cancelled)void props.context.ui.dialog.alert({title:"Your Quest Giver",message:String(error)})})
+  })
   props.context.keymap.layer(() => ({
     mode: "global",
     commands: [
+      { id: "quests.reviewer", title: "Choose permission reviewer", group: "Quests", palette: true, slash: { name: "quest-reviewer" }, run: () => choosePermissionReviewer(props.context) },
+      { id: "quests.approvals", title: "Review worker permissions", group: "Quests", palette: true, slash: { name: "quest-approvals" }, run: () => reviewWorkerPermissions(props.context) },
       { id: "quests.workspace-mode", title: "Quest workspace mode (global)", group: "System", palette: true, slash: { name: "quest-workspace" }, run: () => chooseWorkspaceMode(props.context).catch(error=>props.context.ui.dialog.alert({title:"Quest workspace mode",message:String(error)})) },
       { id: "quests.open", title: "Open Quest board", group: "System", palette: true, suggested: true, slash: { name: "quests", aliases: ["quest", "board"] }, run: () => openBoard(props.context) },
       { id: "quests.session", title: "Jump to worker session", group: "System", palette: true, suggested: false, slash: { name: "session", aliases: ["jump"] }, run: () => openSessionPicker(props.context) },
-      { id: "quests.new", title: "Start Quest · new giver conversation", group: "Quests", palette: true, slash: { name: "quest-new" }, run: () => createGiver(props.context).catch(error => props.context.ui.dialog.alert({title:"Start Quest",message:String(error)})) },
-      { id: "quests.return", title: "Return to Quest", group: "Quests", palette: true, slash: { name: "quest-back" }, run: () => returnToQuest(props.context) },
+      { id: "quests.giver", title: "Go to your Quest Giver", group: "Quests", palette: true, suggested: true, slash: { name: "giver" }, bind: "ctrl+alt+g", run: () => createGiver(props.context).catch(error => props.context.ui.dialog.alert({title:"Quest Giver unavailable",message:String(error)})) },
+      { id: "quests.new", title: "Plan a Quest with your giver", group: "Quests", palette: true, slash: { name: "quest-new" }, run: () => createGiver(props.context).catch(error => props.context.ui.dialog.alert({title:"Start Quest",message:String(error)})) },
+      { id: "quests.return", title: "Return to Quest", group: "Quests", palette: true, slash: { name: "quest-back" }, bind:"ctrl+alt+q", run: () => returnToQuest(props.context) },
     ],
   }))
   return null
@@ -123,67 +152,133 @@ function useQuests(context: any) {
   const root = projectRoot(context)
   const [all, setAll] = createSignal<Quest[]>([])
   const [error,setError]=createSignal<string>()
+  const [scope,setScope]=createSignal(scopeLabel(allProjectsByDefault(userGiverID())))
   let project = boardProject(context?.location?.directory ?? context?.state?.path?.directory)
   let request=0
-  const refresh = () => { try { setAll(projectQuests(quests(root), project.id)) } catch {} }
+  // The same scope rule the board and the CLI apply: the one giver reads the whole ledger, any
+  // other session reads its own project. The words are shared so three surfaces cannot imply
+  // three different backlogs.
+  const refresh = () => { try { const allProjects=allProjectsByDefault(userGiverID()); setScope(scopeLabel(allProjects,project.root)); setAll(projectQuests(quests(root), project.id,allProjects)) } catch {} }
   createEffect(()=>{const sessionID=activeSessionID(context),version=++request;project=boardProject(undefined);setAll([]);setError("Checking current project");void resolveBoardProject(context,sessionID).then(p=>{if(version===request){project=p;setError(p.error);refresh()}})})
   onMount(() => { const stop = watchQuests(root, refresh); onCleanup(stop) })
   onCleanup(()=>{request++})
-  return Object.assign(all,{error})
+  return Object.assign(all,{error,scope})
 }
 
 /**
- * Live worker status, teleported straight from the Quest ledger — this is
- * the one source of truth Jk asked for: "the chat status and the agent's
- * quick-look at the board should be the same 1:1... immediately brought
- * from that rather than duplicated or having 2 different sources." The
- * giver reports each step via the `quest` tool (action=step); the moment
- * that lands, this slot reflects it — the giver never retypes status lines
- * the footer already shows (see AGENTS.md FACE DISCLOSURE bullet).
+ * The laid-out width of a box, for deciding where a title has to be shortened.
  *
- * Each row is 1:1 with the one Quest it came from and is a click target,
- * same convention as the count line above it and the board's own rows:
- * activate() + openBoard(context, questID) → router.navigate({type:"plugin",
- * name:"quests", data:{questID, returnRoute}}), landing straight on that Quest.
+ * Not the terminal's width: these surfaces live in the composer and the sidebar column, both
+ * narrower than the screen and narrower again as panes open. Over-budget the title and the
+ * shortening falls back to the renderer, whose ellipsis is a middle cut with no setting to change
+ * it, so it lands inside a word. There is no laid-out width until the first frame, hence the
+ * measurement once mount returns.
  */
-export function Footer(props: { context: any }) {
+function useBoxWidth(context: any, fallback = 120) {
+  let box: { width?: number } | undefined
+  const [width, setWidth] = createSignal(fallback)
+  const measure = () => { const value = box?.width; if (typeof value === "number" && value > 0) setWidth(value) }
+  onMount(() => {
+    measure()
+    const settle = setTimeout(measure, 0)
+    const renderer = context?.renderer
+    renderer?.on?.("resize", measure)
+    onCleanup(() => { clearTimeout(settle); renderer?.off?.("resize", measure) })
+  })
+  return { width, ref: (node: any) => { box = node; measure() } }
+}
+
+/** Quest status occupies its own composer rows; the host footer keeps its native controls. */
+export function QuestStatus(props: { context: any }) {
   const all = useQuests(props.context)
-  const lines = () => liveWorkerLines(all(), footerWidth(props.context))
-  const counts = async () => {
-    const picked=await props.context.ui.dialog.select({title:all.error()??"Quest counts · current project",options:QUEST_FILTERS.filter(f=>f.id!=="all").map(f=>({value:f.id,title:`${filterQuests(all(),f.id).length} ${f.label}`}))})
+  // Owned runs, not every session ever recorded: a retried run keeps its earlier attempts, and
+  // rendering the lineage rather than its current attempt printed the same worker twice on adjacent
+  // rows. It also decides what gets inspected, so listing finished and superseded sessions had this
+  // status bar polling the host for workers that ended hours ago.
+  const runs=()=>all().flatMap(quest=>ownedRuns(quest).map(session=>({quest,session})))
+  const observation=useWorkerObservations(props.context,()=>runs().map(row=>row.session))
+  const reach=(row:{quest:Quest;session:QuestSession})=>runReachability(row.session,observation)
+  const {width,ref:measureBox}=useBoxWidth(props.context)
+  const lines=()=>runs().sort((a,b)=>Number(reach(b).state==='blocked')-Number(reach(a).state==='blocked')||b.session.updatedAt.localeCompare(a.session.updatedAt)).slice(0,2)
+  // One derivation per frame feeds the "N open" line and the count dialog, so the number Jk clicks
+  // and the list he lands on are the same set. They used to be two independent reads.
+  const truths=()=>questTruths(all(),observation)
+  const counts=()=>questCounts(truths())
+  const openCounts = async () => {
+    const rows=truths()
+    const picked=await props.context.ui.dialog.select({title:all.error()??("Quest counts · "+all.scope()),options:QUEST_FILTERS.filter(f=>f.id!=="all").map(f=>({value:f.id,title:`${filterTruths(rows,f.id).length} ${f.label}`}))})
     if(picked)openBoard(props.context,undefined,picked)
   }
-  return <box flexDirection="column" flexShrink={0}>
-    <box flexDirection="row" flexWrap="no-wrap" gap={1} flexShrink={0}>
-      <Show when={hasQuestReturn(props.context)}><text fg={C.cyan} flexShrink={0} onMouseUp={(event:any)=>activate(event,()=>returnToQuest(props.context))}>↩ Return to Quest</text></Show>
-      <Show when={(props.context?.renderer?.width ?? 80)>=150&&!all.error()} fallback={<text fg={C.yellow} flexShrink={0} onMouseUp={(event:any)=>activate(event,()=>void counts())}>Quests · project {all.error()?"?":filterQuests(all(),"open").length} ▾</text>}>
-        <text fg={C.yellow} flexShrink={0} onMouseUp={(event:any)=>activate(event,()=>openBoard(props.context))}>Quests · project</text>
-        <For each={QUEST_FILTERS.filter(f=>!["open","all","archived"].includes(f.id))}>{f=><text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>openBoard(props.context,undefined,f.id))}>{filterQuests(all(),f.id).length} {f.label.toLowerCase()}</text>}</For>
-      </Show>
+  return <box ref={measureBox} flexDirection="column" width="100%" flexShrink={0} minWidth={0}>
+    <box flexDirection="row" flexShrink={1} minWidth={0} gap={1}>
+      <Show when={hasQuestReturn(props.context)}><text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>returnToQuest(props.context))}>↩ Quest</text></Show>
+      <text fg={C.yellow} wrapMode="none" truncate flexShrink={1} onMouseUp={(event:any)=>activate(event,()=>openBoard(props.context))}>Quests · {counts().open} open · {counts().you} need you</text>
+      <text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>void openCounts())}>▾</text>
     </box>
-    <For each={lines()}>{(row) => <text fg={C.muted} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context, row.questID))}>{row.line}</text>}</For>
+    <For each={lines()}>{row=>{
+      // fitTitle cuts on a word boundary. Leaving it to the renderer took the shortening out of the
+      // middle of a word instead, which is how "…across Codex" reached the footer as "…ross Codex".
+      const label=()=>{
+        const prefix=`↳ Open worker · ${reach(row).state} · `
+        return prefix+fitTitle(row.quest.title,Math.max(12,width()-prefix.length-1))
+      }
+      return <box flexDirection="row" gap={1} minWidth={0}>
+        <Show when={activeSessionID(props.context)===userGiverID()&&reach(row).pendingPermissions}><text fg={C.yellow} flexShrink={0} onMouseUp={(event:any)=>activate(event,()=>void reviewWorkerPermissions(props.context,row.quest.id,row.session.runID??row.session.callID))}>Review permission</text></Show>
+        <text fg={C.muted} wrapMode="none" truncate flexShrink={1} onMouseUp={(event:any)=>activate(event,()=>void openWorkerSession(props.context,row.session))}>{label()}</text>
+      </box>
+    }}</For>
   </box>
 }
 
-function laneColor(q: Quest): string {
-  if (q.state === "Working") return C.green
-  if (q.state === "Needs attention") return C.red
-  if (q.state === "Ready to complete" || q.state === "Complete") return C.cyan
-  return C.muted
+/** Role comes from the bound giver and worker receipts, never the selected composer agent. */
+function SessionRole(props: { context: any; sessionID: string }) {
+  const all = useQuests(props.context)
+  const assignment = () => all().flatMap(quest => quest.sessions.map(session => ({quest,session}))).find(row => (row.session.openCodeSessionId ?? row.session.sessionID) === props.sessionID)
+  const observation = useWorkerObservations(props.context, () => assignment() ? [assignment()!.session] : [])
+  const [boundGiver,setBoundGiver] = createSignal(userGiverID())
+  onMount(()=>{const timer=setInterval(()=>setBoundGiver(userGiverID()),1000);onCleanup(()=>clearInterval(timer))})
+  const giver = () => boundGiver() === props.sessionID
+  const go = () => void createGiver(props.context).catch(error => props.context.ui.dialog.alert({title:"Quest Giver unavailable",message:String(error)}))
+  const native = () => props.context.data?.session?.get(props.sessionID)
+  createEffect(() => {
+    const row = native(), role = giver() ? 'Quest Giver' : assignment() ? 'Worker' : undefined
+    if (!row || !role || !props.context.client.session.rename) return
+    const title = role === 'Quest Giver' ? 'Quest Giver' : 'Worker · ' + assignment()!.quest.title
+    if (row.title === title) return
+    void props.context.client.session.rename({sessionID:props.sessionID,title}).then(() => props.context.data.session.sync(props.sessionID)).catch(error => console.error('[quests] session role title:',String(error)))
+  })
+  return <box flexDirection="column" flexShrink={0} paddingLeft={1} paddingRight={1} backgroundColor={giver()?"#262416":"#18262e"}>
+    <box flexDirection="row" gap={2}>
+      <text fg={giver()?C.yellow:C.cyan} flexShrink={0}>{giver()?"◆ YOUR QUEST GIVER":assignment()?"↳ QUEST WORKER":"SESSION HISTORY"}</text>
+      <Show when={!giver()}><text fg={C.yellow} onMouseUp={(event:any)=>activate(event,go)}>◆ Go to giver · /giver</text></Show>
+    </box>
+    <Show when={assignment()}>{row => <>
+      <text fg={C.text} wrapMode="none" truncate>{row().quest.title} · {runReachability(row().session, observation).state}</text>
+      <text fg={C.muted} wrapMode="none" truncate>{workerLabel(row().session)} · {runReachability(row().session, observation).lastActivityAt ? 'Last activity '+new Date(runReachability(row().session, observation).lastActivityAt!).toLocaleTimeString() : 'Activity unconfirmed'}</text>
+    </>}</Show>
+    <Show when={giver()}><text fg={C.muted} wrapMode="none" truncate>Your one conversation across all projects · Workers report here</text></Show>
+  </box>
 }
 
-/** Every active Quest beside the session, so the chat always has the whole board in view. */
+/** One compose read: the sidebar shows the same reachability the footer and board show. */
 export function Sidebar(props: { context: any }) {
   const all = useQuests(props.context)
   const active = () => all().filter((q) => q.state !== "Archived").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 12)
-  return <box flexDirection="column" flexShrink={0}>
-    <text fg={C.yellow} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context))}>Quests · current project · open board</text>
+  const observation = useWorkerObservations(props.context,()=>active().flatMap(q=>ownedRuns(q)))
+  const {width,ref:measureBox}=useBoxWidth(props.context,40)
+  return <box ref={measureBox} flexDirection="column" flexShrink={0}>
+    <text fg={C.yellow} onMouseUp={(event:any)=>activate(event,()=>void createGiver(props.context).catch(error=>props.context.ui.dialog.alert({title:"Quest Giver unavailable",message:String(error)})))}>◆ Your Quest Giver · /giver</text>
+    <text fg={C.yellow} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context))}>Quests · {all.scope()} · open board</text>
     <Show when={all.error()}>{message=><text fg={C.orange} wrapMode="word">{message()}</text>}</Show>
     <text fg={C.cyan} onMouseUp={(event:any)=>activate(event,()=>void createGiver(props.context).catch(error=>props.context.ui.dialog.alert({title:"Start Quest",message:String(error)})))}>+ Start Quest</text>
     <Show when={active().length > 0} fallback={<text fg={C.dim} wrapMode="word">None yet. Tell the Quest Giver what you want done.</text>}>
       <For each={active()}>{(q) => {
         const p = questProgress(q)
-        return <text fg={C.text} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context, q.id))}><span fg={laneColor(q)}>{progressGlyph(p)}</span> {q.title} <span fg={C.dim}>{p.done}/{p.total}</span></text>
+        // The glyph and the step count are fixed furniture, so the title is what has to give. Letting
+        // the renderer shorten the whole line instead gutted the title and kept the count: a column of
+        // rows reading "Redesign the Qu...ar and footer 4/11".
+        const title = () => fitTitle(q.title, Math.max(8, width() - `${p.done}/${p.total}`.length - 3))
+        return <text fg={C.text} wrapMode="none" truncate onMouseUp={(event: any) => activate(event, () => openBoard(props.context, q.id))}><span fg={toneColor(questTruth(q,observation).reach.tone)}>{progressGlyph(p)}</span> {title()} <span fg={C.dim}>{p.done}/{p.total}</span></text>
       }}</For>
     </Show>
   </box>
@@ -192,9 +287,11 @@ export function Sidebar(props: { context: any }) {
 export default Plugin.define({
   id: "quests",
   setup(context) {
-    context.ui.router.register({ name: "quests", render: (route: any) => <QuestBoard context={context} initialQuestID={route.data?.questID} initialFilter={route.data?.filter} initialAllProjects={route.data?.allProjects} returnRoute={route.data?.returnRoute} /> })
+    context.ui.router.register({ name: "quests", render: (route: any) => <QuestBoard context={context} initialQuestID={route.data?.questID} initialFilter={route.data?.filter} initialAllProjects={route.data?.allProjects} initialProjectDirectory={route.data?.projectDirectory} returnRoute={route.data?.returnRoute} /> })
     context.ui.slot({ append: "app", render: () => <Commands context={context} /> })
-    context.ui.slot({ append: "prompt.footer", render: () => <Footer context={context} /> })
+    context.ui.slot({ append: "session.composer.top", render: (input:any) => <SessionRole context={context} sessionID={input.sessionID} /> })
+    context.ui.slot({ append: "session.composer.top", render: () => <QuestStatus context={context} /> })
+    context.ui.slot({ append: "home.footer", render: () => <QuestStatus context={context} /> })
     // One worker face: the host's own background chip already carries the live
     // line (dispatch descriptions are set to the chip format), so the sidebar
     // stays the general board list — a second chip here would render the same

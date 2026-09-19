@@ -10,7 +10,12 @@
   },
   "animations": true,
   "plugins": [
-    "./tui-bootstrap/usage",
-    "./tui-bootstrap/quests"
+    "./tui-bootstrap/system",
+    "./tui-bootstrap/quests",
+    "./tui-bootstrap/composer",
+    "./tui-bootstrap/context-graph",
+    "./tui-bootstrap/duration-graph",
+    "./tui-bootstrap/generation-indicator",
+    "./tui-bootstrap/interrupt"
   ]
 }

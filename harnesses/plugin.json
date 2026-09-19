@@ -5,7 +5,6 @@
   "server": "harnesses/server.ts",
   "assets": [
     "harnesses/index.ts",
-    "harnesses/opencode-mcp-stdio.mjs",
     "usage/usage-collector.ts",
     "models/model-profiles.json"
   ]

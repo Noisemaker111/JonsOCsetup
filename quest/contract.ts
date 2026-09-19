@@ -1,3 +1,4 @@
+import { questWorkflow } from "./workflow"
 import { stagesFromSteps, nextQuestStep, questProgress } from "./steps"
 import { latestSessionAttempts } from "./session-lineage"
 import type { Quest, QuestStage } from "./types"
@@ -49,7 +50,7 @@ export function migrateQuestContract(input: Quest): Quest {
 export function questView(q: Quest) {
   const next = nextQuestStep(q)
   return {
-    id: q.id, title: q.title, description: q.description ?? q.objective,
+    id: q.id, title: q.title, description: q.description ?? q.objective, workflow: questWorkflow(q),
     project: q.project ?? null,
     steps: q.stages.map(s => ({ id: s.id, title: s.title, commandID: s.commandID, detail: s.detail, state: s.status, needs: s.needs, note: s.note })),
     progress: questProgress(q), nextStepID: next?.id ?? null,

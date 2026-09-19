@@ -29,6 +29,7 @@ export type QuestSession = {
   updatedAt: string; lastHeartbeatAt?: string; leaseExpiresAt?: string; commandSummary?: string; result?: string; routingNote?:string
   /** Terminal was a quota/model-failover notice ("Usage reached — ... Falling over"), not a verdict on the work. */
   quotaExhausted?: boolean
+  permissionDecisions?: Array<{requestID:string;reply:"once"|"reject";state:"sending"|"acknowledged"|"unknown";actor:"user"|"reviewer";model?:string;reason:string;at:string}>
 }
 export type FileClaim = { sessionID?: string; repo: string; worktree?: string; include: string[]; exclude: string[]; state: "active" | "released" }
 export type QuestStageStatus = "pending" | "working" | "blocked" | "done"
@@ -58,7 +59,9 @@ export type QuestArtifactRef = {
 }
 export type Evidence = {
   commits: Array<{ repo: string; hash: string; worktreeHead?: string; verified: boolean }>
-  tests: Array<{ command: string; result: "passed" | "failed"; at: string; summary?: string }>
+  /** `stepID` and `artifact` are present when the worker that ran the check recorded it against its
+   *  own assigned step, which is what lets a delivered step be judged rather than taken on trust. */
+  tests: Array<{ command: string; result: "passed" | "failed"; at: string; summary?: string; stepID?: string; artifact?: string }>
   builds: Array<{ name: string; result: "passed" | "failed"; at: string }>
   artifacts: QuestArtifactRef[]
   publish: Array<{ target: string; result: "succeeded" | "failed" | "credentials-limitation"; at: string }>

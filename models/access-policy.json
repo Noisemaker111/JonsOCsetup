@@ -28,7 +28,7 @@
     },
     {
       "providerID": "opencode-go",
-      "modelPattern": ".+",
+      "modelPattern": "(?!kimi-k3).+",
       "transports": [
         {
           "origin": "https://opencode.ai",
@@ -76,6 +76,16 @@
       "providerID": "grok-build",
       "modelPattern": ".+",
       "transports": []
+    }
+  ],
+  "selectionRestrictions": [
+    {
+      "modelPattern": "(?:.*/)?gpt-5[.-]6-luna(?:[-#].*)?",
+      "forbiddenReasoning": [
+        "medium"
+      ],
+      "requireExplicitReasoning": true,
+      "reason": "Jon has prohibited Luna medium. Do not replace it with an implicit default or a lower-effort workaround; choose an authorized exact route"
     }
   ]
 }

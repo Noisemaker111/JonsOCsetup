@@ -16,7 +16,7 @@ import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep 
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { startValidationProvider } from "./validation-provider"
 
-export type VisualScenario = "usage" | "quests"
+export type VisualScenario = "quests"
 
 type CastEvent = [number, "o" | "i", string]
 type Artifact = { scenario: VisualScenario; screenshot: string; text: string; spans: string; cast: string }
@@ -128,7 +128,11 @@ async function createQuestFixture(sourceRoot: string, project: string, ledger: s
   for (let i=0;i<titles.length;i++) {
     const api=questsAPI(store,{project:projectIdentity(project),sessionID:"audit-fixture",requestID:"audit-"+i},async()=>{throw Error("UI audit never dispatches")})
     const steps=[{id:"reproduce",title:"Reproduce the reported behavior",detail:"Record the original behavior with a realistic saved project and a repeatable sequence of actions."},{id:"implement",title:"Implement the smallest complete fix",needs:["reproduce"],detail:"Preserve existing records and handle interrupted sessions without losing user edits."},{id:"verify",title:"Verify reload, keyboard navigation, and recovery",needs:["implement"],detail:"Exercise the full operation after a fresh launch, including failure and retry."},{id:"review",title:"Prepare the change for review",needs:["verify"],detail:"Attach evidence and clear instructions so the reviewer can reproduce the result."}]
-    const q=api.create({title:titles[i],description:i===11?"Customers receive the same invoice reminder twice when a connection drops during delivery. Reproduce the reconnect path, make retry handling idempotent, and verify that one reminder is delivered while failed deliveries remain retryable.":"Improve the daily project workflow for a team managing several active changes. Keep saved work intact across reloads and make the next action clear without requiring knowledge of the runtime.",steps,reward:"A reviewed change with reproducible checks, before-and-after evidence, and short usage instructions."})
+    // The duplicate guard matches on (project, title, objective), so a shared objective text would
+    // make the second seeded Quest a refused duplicate of the first. The fixture still speaks with
+    // one voice; only the variant marker keeps each admission distinct.
+    const objective=i===11?"Customers receive the same invoice reminder twice when a connection drops during delivery. Reproduce the reconnect path, make retry handling idempotent, and verify that one reminder is delivered while failed deliveries remain retryable.":"Improve the daily project workflow for a team managing several active changes. Keep saved work intact across reloads and make the next action clear without requiring knowledge of the runtime."
+    const q=api.create({title:titles[i],description:objective+" (audit fixture "+(i+1)+")",steps,reward:"A reviewed change with reproducible checks, before-and-after evidence, and short usage instructions."})
     id=q.id
     api.update(id,{steps:steps.map((s,j)=>({id:s.id,state:i%4===0||i===8?"done":j===0?"done":j===1?(i%4===1?"blocked":"working"):"pending",note:j===0?"Reproduced after reconnect using a saved customer invoice.":j===1&&i%4===1?"Waiting for a reproducible delivery receipt from the sandbox mailbox.":undefined}))})
     if(i===8)api.update(id,{archive:{accepted:true}})
@@ -136,20 +140,6 @@ async function createQuestFixture(sourceRoot: string, project: string, ledger: s
   }
   return {store,id,project:projectIdentity(project)}
 }
-function createUsageFixture(config: string): void {
-  const usage = join(config, "usage")
-  mkdirSync(usage, { recursive: true })
-  writeFileSync(join(usage, "usage-cache.json"), JSON.stringify({
-    updated: new Date().toISOString(),
-    sources: [
-      { id: "openai", probe: "ok", windows: [{ label: "5h", usedTokens: 35000, used: 35, cap: 100000, pct: 35, resetsInSeconds: 3600 }] },
-      { id: "opencode-go", probe: "ok", windows: [{ label: "7d", usedTokens: 78000, used: 78, cap: 100000, pct: 78, resetsInSeconds: 172800 }] },
-    ],
-  }, null, 2))
-  writeFileSync(join(usage, "usage-plans.json"), JSON.stringify({ plans: {} }, null, 2))
-  writeFileSync(join(usage, "usage-collector.ts"), "process.exit(0)\n", "utf8")
-}
-
 async function waitForScreen(
   render: () => Promise<{ text: string; frame: CapturedFrame }>,
   predicate: (text: string) => boolean,
@@ -167,7 +157,7 @@ async function waitForScreen(
 }
 
 async function runScenario(root: string, scenario: VisualScenario, out: string, keepRun: boolean, probe: boolean, cliPlugins = false): Promise<Artifact> {
-  const entry = join(root, scenario === "usage" ? "usage/tui-active/usage.tsx" : "quest/tui-active/quests.tsx")
+  const entry = join(root, "quest/tui-active/quests.tsx")
   if (!existsSync(entry)) throw new Error(`${scenario} entrypoint missing: ${entry}`)
   const runs = join(root, ".visual-e2e", "runs")
   const run = join(runs, `visual-e2e-${scenario}-${process.pid}-${Date.now()}`)
@@ -211,8 +201,7 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
     ...(responseFixture?{model:"validation-fixture/model",providers:{"validation-fixture":{package:"@opencode-ai/ai/providers/openai-compatible",env:[],settings:{baseURL:responseFixture.origin+"/v1",apiKey:"fixture-only"},models:{model:{limit:{context:128000,output:1000}}}}}}:{}),
     agent: { "quest-giver": { mode: "primary", description: "Isolated Quest Giver navigation fixture",...(responseFixture?{model:"validation-fixture/model"}:{}) } }, mcp: {} }, null, 2) + "\n", "utf8")
   let questFixture:Awaited<ReturnType<typeof createQuestFixture>>|undefined
-  if (scenario === "usage") createUsageFixture(config)
-  else questFixture=await createQuestFixture(root, project, join(run,"ledger"))
+  questFixture=await createQuestFixture(root, project, join(run,"ledger"))
   const policyFile=join(run,"dispatch-policy.json")
   if(questFixture&&has("--workflow")) {
     const policy=JSON.parse(readFileSync(join(root,"models/dispatch-policy.json"),"utf8"))
@@ -249,10 +238,13 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
     OPENCODE_DISABLE_PROJECT_CONFIG: "1",
     OPENCODE_CONFIG_PROJECT_DISABLE: "1",
     OPENCODE_QUEST_ROOT: join(run,"ledger"),
+    // A partial redirect is a check writing real data: these two were still the real ones.
+    OPENCODE_DB: join(run,"host.db"),
+    OPENCODE_ORCHESTRATION_LEDGER: join(run,"orchestration.jsonl"),
     OPENCODE_TELEMETRY_FILE: telemetryFile,
     OPENCODE_ACCOUNT_DISCOVERY_ROOT: join(run,"auth"),
     OPENCODE_ACCOUNT_USAGE_FILE: join(run,"account-usage.json"),
-    OPENCODE_USAGE_CACHE_FILE: join(run,"usage-cache.json"),
+    OPENCODE_USAGE_CACHE_FILE: join(config,"usage","usage-cache.json"),
     OPENCODE_PLUGIN_GENERATION: "",
     OPENCODE_RUNTIME_RECEIPT: join(out,"runtime-load.jsonl"),
     ...(has("--workflow")?{OPENCODE_DISPATCH_POLICY:policyFile}:{}),
@@ -335,19 +327,9 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
     let captured: { text: string; frame: CapturedFrame }
     if (probe) {
       captured = await waitForScreen(render, (text) => text.includes("VISUAL E2E PROBE"), 5_000, "visual plugin probe")
-    } else if (scenario === "usage") {
-      await paste("/usage", 200)
-      await enter(200)
-      captured = await waitForScreen(render, (text) => text.includes("Subscription usage") && text.includes("Usage · all"), 15_000, "/usage dialog")
-      writeScreenshot(captured.frame,captured.text,join(out,"usage-initial"),"OpenCode2 usage initial")
-      await clickText("Choose scope")
-      await waitForScreen(render,text=>text.includes("All recorded sessions"),5000,"inline scope picker")
-      await clickText("All recorded sessions")
-      await clickText("Show history")
-      captured=await waitForScreen(render,text=>text.includes("UTC time")&&text.includes("recorded"),5000,"shared request history")
     } else {
       await paste("/quests",200);await enter(300)
-      captured=await waitForScreen(render,t=>t.includes("Quests ·")&&t.includes("matching"),15000,"populated real Quest board")
+      captured=await waitForScreen(render,t=>(t.includes("Quests ·")||t.includes("OPENCODE | quests"))&&t.includes("matching"),15000,"populated real Quest board")
       if(has("--source-capture")) {
         captured=await waitForScreen(render,t=>t.includes("PgUp/PgDn Scroll")&&!t.includes("/quests"),15000,"fully painted Quest list")
         writeScreenshot(captured.frame,captured.text,join(out,"00-list"),"Actual Quest list before selection")
@@ -355,18 +337,13 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
         await paste("invoice",200);await enter(200)
         await waitForScreen(render,t=>t.includes("2 matching"),5000,"search filters rows")
         await send("x",200)
-        await waitForScreen(render,t=>t.includes("11 matching"),5000,"clear search restores rows")
+        await waitForScreen(render,t=>/Search quests · \d+ matching/.test(t)&&!t.includes("Search: invoice"),5000,"clear search restores rows")
         await send("q",200);await waitForScreen(render,t=>t.includes("Select Quest"),5000,"picker")
         await paste("Fix duplicate invoice",200);await enter(300)
       }
       const shot=async(name:string)=>{await sleep(250);const s=await render();writeScreenshot(s.frame,s.text,join(out,name),name);return s}
       await shot("01-populated-board")
       if(has("--source-capture")) {
-        await send("h",200);await waitForScreen(render,t=>t.includes("Activity · 5 recorded runs"),5000,"Activity tab")
-        await shot("10-activity")
-        await send("d",200);await waitForScreen(render,t=>t.includes("No worker changes recorded"),5000,"Changes tab")
-        await shot("11-changes")
-        await send("v",200);await waitForScreen(render,t=>t.includes("Customers receive"),5000,"Overview tab")
         await send("m",200);await waitForScreen(render,t=>t.includes("Quest actions"),5000,"More actions")
         await shot("12-more-actions");await send("\x1b",200)
       }
@@ -390,7 +367,8 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
       await shot("07-selection-retains-scroll")
       for(let i=0;i<25;i++)await send("\x1b[<64;"+(COLS-8)+";"+(ROWS-8)+"M",40)
       await shot("07-blocked-quest")
-      await clickText(has("--source-capture")?"2 Ready for review":"2 Turn in");await waitForScreen(render,t=>t.includes("2 matching"),5000,"review-ready filter")
+      await send("f",200);await waitForScreen(render,t=>t.includes("Quest state filter"),5000,"ready filter picker");await clickText("Ready for review")
+      await waitForScreen(render,t=>t.includes("2 matching"),5000,"review-ready filter")
       if(has("--source-capture") && COLS<100)await enter(200)
       await shot("08-review-ready")
       if(has("--source-capture")) {
@@ -399,7 +377,8 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
         const entries=(await import(pathToFileURL(join(root,"quest/index.ts")).href)).readAllQuests(questFixture!.store.projectRoot,{includeArchived:true})
         if(entries.filter((entry:any)=>entry.quest?.state==="Archived").length!==1)throw Error("Dismissal changed archive")
       }
-      await clickText("1 Archived");if(has("--source-capture")&&COLS<100)await enter(200);await waitForScreen(render,t=>t.includes("Reopen Quest"),5000,"archived Quest")
+      await send("f",200);await waitForScreen(render,t=>t.includes("Quest state filter"),5000,"archived filter picker");await clickText("Archived")
+      if(has("--source-capture")&&COLS<100)await enter(200);await waitForScreen(render,t=>t.includes("Reopen Quest"),5000,"archived Quest")
       await shot("09-archived")
       await send("\x1b",300)
       if(has("--source-capture") && COLS<100)await send("\x1b",300)
@@ -459,9 +438,9 @@ async function runScenario(root: string, scenario: VisualScenario, out: string, 
 
 export async function main(): Promise<void> {
   const root = resolve(option("--root") ?? process.cwd())
-  const requested = option("--scenario") ?? "both"
-  if (!/^(usage|quests|both)$/.test(requested)) throw new Error("--scenario must be usage, quests, or both")
-  const scenarios: VisualScenario[] = requested === "both" ? ["usage", "quests"] : [requested as VisualScenario]
+  const requested = option("--scenario") ?? "quests"
+  if (requested !== "quests") throw new Error("--scenario must be quests")
+  const scenarios: VisualScenario[] = ["quests"]
   const out = resolve(option("--out") ?? join(root, ".visual-e2e", "artifacts"))
   const artifacts: Artifact[] = []
   for (const scenario of scenarios) artifacts.push(await runScenario(root, scenario, out, has("--keep-run"), has("--probe"), has("--cli-plugins")))

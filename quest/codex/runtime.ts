@@ -6,33 +6,21 @@ import {spawnSync} from "node:child_process"
 import {coordination} from "../coordination"
 import {QuestStore} from "../store"
 import {questRoot} from "../root"
+import {questOperations} from "../operations.mjs"
 import {questsAPI,QuestError} from "../api"
 import {projectIdentity} from "../project"
 import {acquireLock} from "../locking"
-import {sameDirectory,checkoutIndependent,recoverWorkspace,validateRecoveryBinding,recoveryReadInput,recoveryCommand,recoveryPatch,type RecoveryBinding,type RecoveryOptions} from "./recovery-workspace"
+import {sameDirectory,hasCheckout,checkoutIndependent,recoverWorkspace,validateRecoveryBinding,recoveryReadInput,recoveryCommand,recoveryPatch,type RecoveryBinding,type RecoveryOptions} from "./recovery-workspace"
 
 export type HookInput={session_id:string;cwd:string;hook_event_name:string;tool_name?:string;tool_use_id?:string;tool_input?:any;tool_response?:any;transcript_path?:string;source?:string}
 type Session={diagnostics?:Record<string,string>;recovery?:RecoveryBinding;directory:string;sessionID:string;questID?:string;pending:string[];calls?:Record<string,{tool:string;outer?:string;running?:boolean;fingerprint?:string;updatedInput?:any;recoveryTicket?:string}>;reconciled?:string[];baseline?:string;clean?:boolean;snapshotUnavailable?:string;ended?:boolean;detached?:boolean;transcript?:string;events:any[]}
 const key=(v:string)=>createHash('sha256').update(v).digest('hex')
-// This loader is carried in the hook's rewritten argv, not in the writable
-// staged file. Execute the verified bytes in memory, avoiding a hash/exec reopen
-// race. The installed runner is a self-contained Bun bundle (node:* imports only).
-const recoveryLoader=String.raw`
-const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
-function check(p){for(let a=path.resolve(p);;a=path.dirname(a)){if(fs.lstatSync(a).isSymbolicLink()||fs.realpathSync(a)!==a)throw Error('Recovery path contains a symlink/junction');if(path.dirname(a)===a)break}}
-function read(p){
- p=path.resolve(p);
- check(p);const before=fs.lstatSync(p);
- if(!before.isFile()||before.nlink!==1||before.size>8*1024*1024)throw Error('Recovery file must be a bounded unlinked regular file');
- const fd=fs.openSync(p,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW??0));
- try{const opened=fs.fstatSync(fd);if(!opened.isFile()||opened.dev!==before.dev||opened.ino!==before.ino)throw Error('Recovery file replaced');const bytes=Buffer.alloc(before.size);let offset=0;while(offset<bytes.length){const n=fs.readSync(fd,bytes,offset,bytes.length-offset,null);if(!n)throw Error('Recovery file shortened');offset+=n}const after=fs.fstatSync(fd);check(p);if(after.size!==before.size||after.mtimeMs!==before.mtimeMs)throw Error('Recovery file changed');return bytes}finally{fs.closeSync(fd)}
-}
-`
+import {readRecoveryFile,checkRecoveryPath} from './recovery-loader-lib'
 // Exported for exact-bundle boundary tests; source .ts execution retains its
 // development imports. Production always stages the sibling installed .js.
 export function stagedRecoveryCommand(runner:string,recovered:{command:string;ticket:string}){
  if(!runner.endsWith('.js'))return recovered
- const {read,check}=new Function('require',recoveryLoader+';return {read,check};')(require) as {read:(path:string)=>Buffer;check:(path:string)=>void}
+ const read=readRecoveryFile,check=checkRecoveryPath
  const bytes=read(runner),ticketBytes=read(recovered.ticket)
  check(tmpdir())
  const owned=mkdtempSync(join(tmpdir(),'quest-recovery-runner-')),staged=join(owned,'recovery-command.js')
@@ -43,12 +31,12 @@ export function stagedRecoveryCommand(runner:string,recovered:{command:string;ti
  // necessarily read the canonical ledger either. Session state retains this path.
  const ticket=join(owned,recovered.ticket.split(/[\\/]/).at(-1)!)
  writeFileSync(ticket,ticketBytes,{flag:'wx',mode:0o600})
- const code=recoveryLoader+`const bytes=read(${JSON.stringify(staged)});if(crypto.createHash('sha256').update(bytes).digest('hex')!==${JSON.stringify(hash)})throw Error('Recovery helper digest mismatch');const runner=await import('data:text/javascript;base64,'+bytes.toString('base64'));await runner.runRecoveryTicket(${JSON.stringify(ticket)},${JSON.stringify(ticketHash)});`
+ // The loader lives beside the installed hook, outside the recovered writable
+ // workspace. Never stage executable verification code or inline it in argv.
+ const loader=join(runner,'..','recovery-loader.js')
+ check(loader)
  const quote=(value:string)=>"'"+value.replaceAll("'","''")+"'"
- // Windows PowerShell 5 native argv drops embedded double quotes. Carry only
- // base64 plus a fixed decoder across that boundary (no shell interpolation).
- const launch="eval(Buffer.from('"+Buffer.from("(async()=>{const require=(await import('node:module')).createRequire(process.cwd()+'/quest-recovery-loader.js');"+code+'})().catch(error=>{console.error(error);process.exitCode=1})').toString('base64')+"','base64').toString())"
- return {command:'& '+quote(process.execPath)+' --eval '+quote(launch),ticket}
+ return {command:'& '+[process.execPath,loader,staged,hash,ticket,ticketHash].map(quote).join(' '),ticket}
 }
 function boundRecoveryCommand(store:QuestStore,binding:RecoveryBinding,command:string,options:RecoveryOptions,workdir?:string){
  const runner=options.runner??join(import.meta.dir,import.meta.path.endsWith('.ts')?'recovery-command.ts':'recovery-command.js')
@@ -57,12 +45,15 @@ function boundRecoveryCommand(store:QuestStore,binding:RecoveryBinding,command:s
 const git=(directory:string,args:string[])=>{const r=spawnSync('git',['-C',directory,...args],{encoding:'utf8',windowsHide:true});if(r.status!==0)throw new Error('Cannot inspect checkout: '+r.stderr);return r.stdout}
 const save=(file:string,value:unknown)=>{const tmp=file+'.'+randomUUID()+'.tmp';writeFileSync(tmp,JSON.stringify(value));renameSync(tmp,file)}
 const runtime=(store:QuestStore)=>{const dir=join(store.runtime,'codex');mkdirSync(dir,{recursive:true});return dir}
-export function consumeTicket(store:QuestStore,ticket:unknown){
- if(typeof ticket!=='string'||! /^[a-f0-9-]{36}$/.test(ticket))throw new QuestError('HOOK_REQUIRED','Enable and trust the Quest plugin hooks, then use a fresh Codex session.')
- const file=join(runtime(store),'ticket-'+ticket+'.json');let row:any
- try{row=JSON.parse(readFileSync(file,'utf8'));unlinkSync(file)}catch{throw new QuestError('HOOK_REQUIRED','Quest host context is missing or already consumed. Retry the original Quest operation.')}
- if(Date.now()-row.at>60_000)throw new QuestError('HOOK_REQUIRED','Quest host context expired; retry the original operation.')
- return row as {directory:string;sessionID:string;at:number}
+/** Codex supplies threadId outside model-controlled tool arguments. */
+export function sessionContext(store:QuestStore,meta:any){
+ const sessionID=meta?.threadId
+ if(typeof sessionID!=='string'||!sessionID)throw new QuestError('HOOK_REQUIRED','Quest requires the configured Codex host session metadata.')
+ let state:Session
+ try{state=JSON.parse(readFileSync(join(runtime(store),key(sessionID)+'.json'),'utf8'))}
+ catch{throw new QuestError('HOOK_REQUIRED','Quest session context is unavailable; enable the configured Quest hooks.')}
+ if(state.sessionID!==sessionID||state.ended)throw new QuestError('HOOK_REQUIRED','Quest session context is inactive.')
+ return {directory:state.directory,sessionID}
 }
 const resultObject=(value:any)=>{if(typeof value==='string'){try{return JSON.parse(value)}catch{return undefined}}return value}
 // Failed dispatches do not receive PostToolUse on this host. Only terminal host
@@ -111,27 +102,25 @@ export function codexHook(input:HookInput,store=new QuestStore(questRoot()),reco
  if(!sameDirectory(state.directory,input.cwd))throw new Error('Session checkout changed; open a fresh session in the intended checkout')
  let directory=state.recovery?.directory??input.cwd
  let context={directory,sessionID:input.session_id,host:'codex'}
- const event=input.hook_event_name,questCall=/^mcp__.+__quest$/.test(input.tool_name??'')
+ const event=input.hook_event_name,questCall=(input.tool_name??'').startsWith('mcp__quest__')&&Object.hasOwn(questOperations,(input.tool_name??'').slice('mcp__quest__'.length))
  state.transcript??=input.transcript_path
  if(event==='SessionStart'){state.ended=false;save(file,state);reconcilePriorSessions(store,input.cwd,input.session_id);return {}}
  if(event==='PreToolUse'){
   if(questCall){
-   const ticket=randomUUID();save(join(dir,'ticket-'+ticket+'.json'),{directory:input.cwd,sessionID:input.session_id,at:Date.now()});
-   return {hookSpecificOutput:{hookEventName:event,permissionDecision:'allow',updatedInput:{...input.tool_input,_questTicket:ticket}}}
+   save(file,state)
+   return {}
   }
    if(checkoutIndependent(input.tool_name??'',input.tool_input)){
     if(!state.recovery)return {}
     let updatedInput=recoveryReadInput(state.recovery,input.tool_name??'',input.tool_input)
-    if(updatedInput&&input.tool_name==='Bash'){
-     validateRecoveryBinding(state.recovery)
-      const recovered=boundRecoveryCommand(store,state.recovery,updatedInput.command,{...recoveryOptions,needsEnvironment:false},updatedInput.workdir)
-     updatedInput={...updatedInput,command:recovered.command}
-    }
+    // Literal reads retain the host's normal filesystem boundary. Rewriting a
+    // read into a recovery ticket would add writes and dependency preparation.
     if(updatedInput)return {hookSpecificOutput:{hookEventName:event,permissionDecision:'allow',updatedInput,additionalContext:'Task reads use recovered checkout '+state.recovery.directory}}
     // Literal external skill reads and web operations remain checkout independent.
     // Audit commands have an implicit cwd and must retain the task binding.
     return {}
    }
+  if(!state.recovery&&!hasCheckout(input.cwd))return {}
   const fingerprint=key(JSON.stringify({tool:input.tool_name,input:input.tool_input}))
   const prior=input.tool_use_id&&state.calls?.[input.tool_use_id]
   if(prior?.updatedInput&&prior.fingerprint!==fingerprint)throw Error('Retried tool identity has different input; refusing to replay')
@@ -147,7 +136,6 @@ export function codexHook(input:HookInput,store=new QuestStore(questRoot()),reco
   }}
   let ownership:any=coordination(store,context)({action:'join',title,scopes:['.']})
   if(!ownership.acquired){
-   if(!['Bash','apply_patch'].includes(input.tool_name??''))return {hookSpecificOutput:{hookEventName:event,permissionDecision:'deny',permissionDecisionReason:'This tool cannot be rebound safely while another session owns the checkout. Shell and patch operations recover automatically; the existing owner remains protected.'}}
    // Bootstrap is runtime code, outside the blocked ordinary-tool path. Only
    // create our own worktree; never release or edit another participant.
    state.recovery=recoverWorkspace(store,input.cwd,input.session_id,recoveryOptions)
@@ -170,7 +158,7 @@ export function codexHook(input:HookInput,store=new QuestStore(questRoot()),reco
    if(state.recovery){
     if(input.tool_name==='Bash'){const command=boundRecoveryCommand(store,state.recovery,input.tool_input?.command,recoveryOptions,input.tool_input?.workdir);updatedInput={...input.tool_input,command:command.command};recoveryTicket=command.ticket}
    else if(input.tool_name==='apply_patch')updatedInput={...input.tool_input,command:recoveryPatch(input.tool_input?.command,state.recovery)}
-   else return {hookSpecificOutput:{hookEventName:event,permissionDecision:'deny',permissionDecisionReason:'This persistent tool has no verified worktree binding. Use the recovered shell or patch tools; the original checkout remains protected.'}}
+   else return {hookSpecificOutput:{hookEventName:event,permissionDecision:'deny',permissionDecisionReason:'Task workspace is ready at '+state.recovery.directory+'. This host cannot change the filesystem binding of '+input.tool_name+'. Continue the operation with shell or patch tools in that workspace; their binding is automatic.'}}
   }
    if(state.baseline===undefined){try{if(state.recovery){state.baseline=state.recovery.preparation?.tree??state.recovery.head;state.clean=false}else{state.baseline=git(directory,['rev-parse','HEAD']).trim();state.clean=git(directory,['status','--porcelain']).trim()===''}}catch(error){state.baseline='';state.clean=false;state.snapshotUnavailable=String(error)}}
   if(q)state.questID=q
@@ -181,15 +169,11 @@ export function codexHook(input:HookInput,store=new QuestStore(questRoot()),reco
  }
  if(event==='PostToolUse'){
   if(questCall){
-   // Inspecting another Quest must not silently adopt it as this task.
-   if(input.tool_input?.action==='create'){
-    const response=resultObject(input.tool_response)
-    const value=response?.structuredContent??resultObject(response?.content?.find((x:any)=>x.type==='text')?.text)
-    if(value?.id)state.questID=value.id
-   }
+   // Remote Quest IDs are not local hook-journal records. Explicit reports use the product API.
    save(file,state);return {}
   }
   if(checkoutIndependent(input.tool_name??'',input.tool_input))return {}
+  if(!state.recovery&&!hasCheckout(input.cwd))return {}
 
   // A running command has not finished. Keep its reservation if the host never sends completion.
   const response=resultObject(input.tool_response)

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 import { acquireLock } from "../quest/locking"
-import { applicableQuotaWindows, planRoutes, pacedSubscriptionAdmission, type PlannerInput, type RoutingDecision } from "./route-planner"
+import { applicableQuotaWindows, planRoutes, pacedSubscriptionAdmission, unlimitedSubscriptionConcurrency, type PlannerInput, type RoutingDecision } from "./route-planner"
 
 type Reservation = { runID: string; routeID: string; accountID: string; windows: Record<string, number>; exclusive?:boolean; paced?:boolean; cash?:{budgetID:string;currency:string;value:number;kind:"reservation"|"actual"}; startedAt?:string; windowResetAt?: Record<string,string>; state: "active" | "unknown" | "settled" | "cancelled"; completedAt?: string; accountedAt?: string; reason: string }
 type Ledger = { version: 1; reservations: Reservation[] }
@@ -33,8 +33,10 @@ export class RouteReservations {
         if (!account) continue
         if (reservation.state !== "settled" || !(Date.parse(account.observedAt) > Date.parse(reservation.completedAt ?? ""))) account.concurrentWorkers = (account.concurrentWorkers ?? 0) + 1
         if (reservation.exclusive) {
+          // Preserve old ownership, but do not let a historical single-worker policy block independent runs.
+          if (unlimitedSubscriptionConcurrency(account,effective.request)) continue
           // This is a concurrency hold, not an attributed consumption estimate.
-          if (reservation.state !== "settled" || !(Date.parse(account.observedAt) > Date.parse(reservation.completedAt ?? ""))) account.dispatchHold = "Uncalibrated worker hold: " + reservation.runID + "; await its terminal outcome and a fresh quota observation"
+          if (reservation.state !== "settled" || !(Date.parse(account.observedAt) > Date.parse(reservation.completedAt ?? ""))) account.dispatchHold = "Uncalibrated worker hold: " + reservation.runID + (reservation.state === "settled" ? "; terminal outcome confirmed at " + reservation.completedAt + "; await a newer quota observation (latest " + account.observedAt + ")" : "; outcome " + reservation.state + "; await its terminal outcome and a fresh quota observation")
           continue
         }
         // A finished worker does not by itself refresh the provider's balance.
@@ -48,9 +50,9 @@ export class RouteReservations {
       const decision = planRoutes(effective)
       if (!decision.selected) return { reservation: null, decision }
       const route = effective.routes.find(r => r.id === decision.selected!.routeID)!
-      const account=effective.accounts.find(a=>a.id===route.accountID)!,paced=route.admission==="configured-choice"&&pacedSubscriptionAdmission(account,input.request.now)
+      const account=effective.accounts.find(a=>a.id===route.accountID)!,paced=!unlimitedSubscriptionConcurrency(account,input.request)&&route.admission==="configured-choice"&&pacedSubscriptionAdmission(account,input.request.now)
       const windows = applicableQuotaWindows(account, route)
-      const reservation: Reservation = { runID, routeID: route.id, accountID: route.accountID, windows: Object.fromEntries(windows.filter(w=>route.quotaPerTask[w.id]!==undefined).map(w=>[w.id,route.quotaPerTask[w.id]])), paced, exclusive:!paced && route.admission === "configured-choice" && windows.some(w=>!Number.isFinite(route.quotaPerTask[w.id])||route.quotaPerTask[w.id]<=0), windowResetAt: Object.fromEntries(windows.map(w=>[w.id,w.resetAt])), state: "active", startedAt:input.request.now, ...(input.request.cashBudget&&route.cashReservation?{cash:{budgetID:input.request.cashBudget.id,currency:route.cashReservation.currency,value:route.cashReservation.upperBound,kind:"reservation" as const}}:{}), reason: decision.summary+(paced?" Explicit scoped pacing permits up to "+account.pacing!.desiredConcurrency+" concurrent managed workers; consumption remains uncalibrated.":"") }
+      const reservation: Reservation = { runID, routeID: route.id, accountID: route.accountID, windows: Object.fromEntries(windows.filter(w=>route.quotaPerTask[w.id]!==undefined).map(w=>[w.id,route.quotaPerTask[w.id]])), paced, exclusive:!unlimitedSubscriptionConcurrency(account,input.request) && !paced && route.admission === "configured-choice" && windows.some(w=>!Number.isFinite(route.quotaPerTask[w.id])||route.quotaPerTask[w.id]<=0), windowResetAt: Object.fromEntries(windows.map(w=>[w.id,w.resetAt])), state: "active", startedAt:input.request.now, ...(input.request.cashBudget&&route.cashReservation?{cash:{budgetID:input.request.cashBudget.id,currency:route.cashReservation.currency,value:route.cashReservation.upperBound,kind:"reservation" as const}}:{}), reason: decision.summary+(paced?" Explicit scoped pacing permits up to "+account.pacing!.desiredConcurrency+" concurrent managed workers; consumption remains uncalibrated.":"") }
       ledger.reservations.push(reservation); this.save(ledger)
       return { reservation, decision }
     } finally { lock.release() }

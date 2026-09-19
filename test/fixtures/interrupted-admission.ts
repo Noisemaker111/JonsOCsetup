@@ -1,0 +1,9 @@
+
+import{writeFileSync}from'node:fs';import{join}from'node:path';
+import{QuestStore}from'../../quest/store';import{questsAPI}from'../../quest/api';import{startQuestRun}from'../../quest/runtime';import{projectIdentity,physicalDirectory}from'../../quest/project';import{installSharedWorkspaceGuard}from'../../quest/shared-guard';
+const root=physicalDirectory(process.argv[2]),phase=process.argv[3],store=new QuestStore(root),policy=join(root,'policy.json'),settings=join(root,'settings.json');writeFileSync(policy,'{}');writeFileSync(settings,JSON.stringify({version:1,workspaceMode:'worktree'}));
+let created:any;
+const host={get:async({sessionID}:any)=>{if(phase==='preflight'||phase==='created'&&sessionID==='ses_bound')process.exit(0);return sessionID==='ses_bound'?created:{id:'giver',location:{directory:root}}},create:async(input:any)=>{if(phase==='creating')process.exit(0);return created={id:'ses_bound',...input}},prompt:async()=>{if(phase==='prompting')process.exit(0);throw Error('No prompt should be sent')}};
+await installSharedWorkspaceGuard({session:host,tool:{transform:async()=>{}}},store);
+const start=startQuestRun(store,host,{policyFile:policy,settingsFile:settings,beforePrompt:async()=>{},reserve:async()=>({route:{accountID:'configured',providerID:'configured',modelID:'chosen',reasoning:'high',agent:'worker',serviceTier:'default',harness:'native'},bootstrapByProject:{},ledger:{settle(){}}})});
+const api=questsAPI(store,{project:projectIdentity(root),directory:root,sessionID:'giver',requestID:phase},start),q=api.create({title:'Recover '+phase+' admission',description:'Preserve the unstarted work',steps:[{id:'read',title:'Read source'}]});writeFileSync(join(root,phase+'.json'),JSON.stringify({id:q.id}));await api.run(q.id,{readOnly:true,model:'configured/chosen#high',task:'utility'});

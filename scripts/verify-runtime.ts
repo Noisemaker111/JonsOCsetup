@@ -18,7 +18,9 @@ mkdirSync(project, { recursive: true })
 const database = process.env.OPENCODE_DB ?? join(homedir(), ".local/share/opencode/opencode.db")
 const marker = `Runtime acceptance ${Date.now()}`
 new QuestStore(project).create({ id: "01j00000000000000000000999", title: marker, objective: "Isolated runtime verification fixture", kind: "investigation", project: projectIdentity(project) })
-const env = { ...process.env, OPENCODE_QUEST_ROOT: project, OPENCODE_ORCHESTRATION_LEDGER: join(run, "orchestration.jsonl"), CLAUDE_CODE_BRIDGE_PORT: String(await freePort()) }
+// OPENCODE_DB is deliberately the real database: this check finds the session it just started
+// by reading it back. Telemetry and state had no such reason and were writing real files.
+const env = { ...process.env, OPENCODE_QUEST_ROOT: project, OPENCODE_ORCHESTRATION_LEDGER: join(run, "orchestration.jsonl"), OPENCODE_TELEMETRY_FILE: join(run, "requests.jsonl"), XDG_STATE_HOME: join(run, "state"), CLAUDE_CODE_BRIDGE_PORT: String(await freePort()) }
 const setup = await createTestRenderer({ width: 140, height: 45 })
 const terminal = new EmbeddedTerminalRenderable(setup.renderer, { id: "runtime", width: 140, height: 45, cols: 140, rows: 45, maxScrollback: 100000 })
 setup.renderer.root.add(terminal)
@@ -69,7 +71,7 @@ function loads(launch: any) {
 }
 function assertLoads(launch: any) {
   const rows = loads(launch)
-  return ["server", "tui:usage", "tui:quests"].every((component) => rows.some((row) => row.component === component && row.generation === launch.generation && row.sourceCommit === launch.sourceCommit && Number.isInteger(row.pid) && row.pid > 0))
+  return ["server", "tui:system", "tui:quests"].every((component) => rows.some((row) => row.component === component && row.generation === launch.generation && row.sourceCommit === launch.sourceCommit && Number.isInteger(row.pid) && row.pid > 0))
 }
 const report: any = { ok: false, run, marker, checks: {} }
 let db: Database | undefined

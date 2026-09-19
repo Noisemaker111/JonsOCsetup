@@ -1,3 +1,5 @@
+> Historical record: this is a dated investigation or implementation receipt, not current operating instructions. Its pending work, model choices, commands, and verification counts describe that run. Use the [current documentation](README.md).
+
 # Codex ownership recovery follow-up — 2026-09-08
 
 ## Capability and ownership evidence

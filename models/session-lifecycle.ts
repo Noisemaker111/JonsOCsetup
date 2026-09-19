@@ -19,3 +19,13 @@ export function recoverFailedWorker(session: SessionRecord, checkpoint: SessionC
   return replaceSession({ ...session, state: "active", supersededBy: undefined }, requestedModel, checkpoint, `${session.id}:recovery:${++sequence}`, requestedVariant)
 }
 export function runningWorkerIDs(sessions: SessionRecord[]) { return sessions.filter((s) => s.state === "active" && s.workerStarted).map((s) => s.id) }
+
+/** Enforce pinned identity at the host tool boundary. */
+export function enforceSessionModelChange(event: unknown) {
+  const ev = (event ?? {}) as Record<string, unknown>
+  const input = (ev.input ?? ev.args ?? {}) as Record<string, unknown>
+  const currentModel = typeof ev.sessionModel === "string" ? ev.sessionModel : typeof input.sessionModel === "string" ? input.sessionModel : undefined
+  const requestedModel = typeof input.model === "string" ? input.model : undefined
+  if (!currentModel || !requestedModel) return
+  assertModelImmutable({ model: currentModel, variant: typeof ev.sessionVariant === "string" ? ev.sessionVariant : typeof input.sessionVariant === "string" ? input.sessionVariant : undefined, state: "active", historyCount: Number(ev.historyCount ?? input.historyCount ?? 0), workerStarted: ev.workerStarted === true || input.workerStarted === true }, requestedModel, typeof input.variant === "string" ? input.variant : undefined)
+}

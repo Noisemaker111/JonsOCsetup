@@ -1,14 +1,14 @@
+import {singleUserGiver,succeedUserGiver} from '../quest/giver-public'
 import { define } from '@opencode-ai/plugin/v2/promise'
-import { routerQuestInventory, routerWorker, routerReturnSources } from '../quest/router-public'
+import { routerQuestInventory, routerWorker } from '../quest/router-public'
 import { createGoalFacade } from '../quest/goal-public'
 import { DiscoveryHost, RouterError, redact } from './host'
 import { emptySelection, resolveTargets, verifyTarget, revalidate, instructions, targetKey, type Selection, type Target } from './resolution'
-import { DestinationRouter } from './routing'
-import { RouteReturns } from './returns'
 import { Onboarding } from './onboarding'
 import { routeFeedback } from '../quest/route-public'
-import { systemPart } from '../models/model-routing'
 import {RouterMemory} from './memory'
+import { goalCommand } from './goal-command'
+import { automaticQuestPrompt } from '../quest/giver-instruction'
 
 const string = { type: 'string', minLength: 1, maxLength: 2000 }
 const selectors = { type: 'array', minItems: 1, maxItems: 10, items: string }
@@ -17,10 +17,8 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
   if (!ctx.tool?.transform || !ctx.session?.create || !ctx.session?.get || !ctx.session?.prompt || !ctx.storage) throw new RouterError('HOST_CAPABILITY_MISSING', 'Project-router requires supported typed tools, session create/get/prompt and plugin storage')
   const memory=new RouterMemory(ctx.storage)
   const state = (id:string)=>memory.selection(id)
-  const save = (id: string, selection: Selection) => ctx.storage.set('selection/' + id, selection)
+  const save = (id:string,selection:Selection,expectedRevision?:number)=>memory.saveSelection(id,selection,expectedRevision)
   const worker = (id: string) => routerWorker(id).length > 0
-  const returns=new RouteReturns(ctx.storage,ctx.session,id=>discovery.messages(id))
-  const router = new DestinationRouter(ctx.storage, ctx.session, worker, async id => (await state(id)).revision,undefined,returns)
   const goals = createGoalFacade(ctx.session)
   const known = ()=>memory.known()
   const register = (targets:Target[])=>memory.register(targets)
@@ -46,40 +44,70 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
       const unique = [...new Map(items.map(t => [targetKey(t), t])).values()]; await register(unique)
       return { items: unique, unavailable, nextOffset: offset + page.length < filtered.length ? offset + page.length : null, limitation: 'Host-known roots, explicit registrations and Quest owner metadata; roots verified only for this bounded page' }
     } },
-    { name: 'project_resolve', description: 'Resolve explicit paths/names/approved aliases or current selection. Multiple selectors remain multiple targets. Discussion creates no work; ambiguity asks once and never launches.', input: schema({ selectors, discussion: { type: 'boolean' } }), execute: async (input, context) => memory.selectionChange(context.sessionID,async()=>{
-      const selection = await state(context.sessionID), result = resolveTargets(selection, await known(), input)
-      if (result.state === 'clarify') { selection.asked = true; await save(context.sessionID, selection) }
-      return { ...result, revision: selection.revision }
-    }) },
-    { name: 'project_select', description: 'Explicitly select/pin/correct a project or multiple targets; register an alias or forget selection/alias. Invalidates old route revisions. Does not start work.', input: schema({ action: { enum: ['select', 'pin', 'correct', 'alias', 'forget'] }, selectors, alias: { type: 'string', minLength: 1, maxLength: 80 } }, ['action']), execute: async (input, context) => memory.selectionChange(context.sessionID,async()=>{
+    { name: 'project_resolve', description: 'Resolve explicit paths/names/approved aliases or current selection. Multiple selectors remain multiple targets. Discussion creates no work; ambiguity asks once and never launches.', input: schema({ selectors, discussion: { type: 'boolean' } }), execute: async (input, context) => {
+      const read = async () => {const selection=await state(context.sessionID);return {selection,result:resolveTargets(selection,await known(),input)}}
+      const needsSave = (result:any) => (result.state==='clarify'||result.state==='unresolved')&&memory.isCurrent(context.sessionID)
+      const first=await read()
+      // Resolved lookups are independent reads. Only recording clarification needs a write lock.
+      if(!needsSave(first.result))return {...first.result,revision:first.selection.revision}
+      return memory.selectionChange(context.sessionID,async()=>{
+        const {selection,result}=await read()
+        if(needsSave(result)){const revision=selection.revision;selection.asked=true;if(input.selectors?.length)selection.pending='The requested project could not be resolved.';selection.revision++;save(context.sessionID,selection,revision)}
+        return {...result,revision:selection.revision}
+      })
+    } },
+    { name: 'project_select', description: 'Explicitly select/pin/correct a project or multiple targets; register an alias, forget selection/alias, or succeed a Quest Giver whose context is spent. Invalidates old route revisions. Does not start work.', input: schema({ action: { enum: ['select', 'pin', 'correct', 'alias', 'forget', 'succeed-giver'] }, selectors, alias: { type: 'string', minLength: 1, maxLength: 80 } }, ['action']), execute: async (input, context) => memory.selectionChange(context.sessionID,async()=>{
       if (worker(context.sessionID)) throw new RouterError('WORKER_DELEGATION_DENIED', 'Workers retain their assigned destination')
+      if(!['select','pin','correct','alias','forget','succeed-giver'].includes(input.action))throw new RouterError('INVALID_INPUT','Unknown project selection action')
+      // Succeeding the giver is the one action the current giver may take about itself, so it is
+      // handled before the guard that would send every other request back to the bound session.
+      if (input.action === 'succeed-giver') {
+        const released = succeedUserGiver()
+        return { released: released ?? null, next: released
+          ? 'Released. Start a new session and it becomes your Quest Giver; the old conversation and its Quests are untouched.'
+          : 'No giver was bound; the next session becomes your Quest Giver.' }
+      }
+      const giver=await singleUserGiver(ctx.session,context.sessionID)
+      if(giver.id!==context.sessionID)throw new RouterError('SINGLE_GIVER_REQUIRED','Continue in your existing Quest Giver: '+giver.id)
       const selection = await state(context.sessionID)
-      if (input.action === 'forget') { if (input.alias) {delete selection.aliases[input.alias.toLowerCase()];await memory.alias(input.alias)} else { selection.targets = []; delete selection.pin } }
+      // A correction is an intent to stop using the previous destination. Persist that before
+      // resolving it so missing/ambiguous inputs and failed validation cannot create in the old root.
+      if(['select','pin','correct'].includes(input.action)){
+        const revision=selection.revision
+        selection.pending='The requested project selection has not been confirmed.';selection.revision++
+        save(context.sessionID,selection,revision)
+      }
+      const unknown=Object.keys(input).filter(key=>!['action','selectors','alias'].includes(key))
+      if(unknown.length)throw new RouterError('INVALID_INPUT','Unknown project_select fields: '+unknown.join(', ')+'. Use selectors: ["<absolute project directory>"].')
+      if(['select','pin','correct'].includes(input.action)&&(!Array.isArray(input.selectors)||!input.selectors.length||input.selectors.some((s:any)=>typeof s!=='string'||!s.trim())))throw new RouterError('TARGET_REQUIRED','Provide selectors containing the explicit project directory; the previous destination was not reused')
+      if (input.action === 'forget') { if (input.alias) {delete selection.aliases[input.alias.toLowerCase()];await memory.alias(input.alias)} else { selection.targets = []; delete selection.pin;delete selection.pending } }
       else {
         const result = resolveTargets(selection, await known(), { selectors: input.selectors })
-        if (result.state !== 'resolved') return result
+        if (result.state !== 'resolved') {selection.asked=true;save(context.sessionID,selection,selection.revision);return {...result,revision:selection.revision}}
         const targets = result.targets.map(revalidate); for (const target of targets) instructions(target)
         if (input.action === 'alias') {
           if (!input.alias || targets.length !== 1 || ['__proto__', 'constructor', 'prototype'].includes(input.alias.toLowerCase())) throw new RouterError('INVALID_ALIAS', 'Alias requires one explicit target and an ordinary name')
           selection.aliases[input.alias.toLowerCase()] = targets[0]
           await memory.alias(input.alias,targets[0])
-        } else { selection.targets = targets; delete selection.pin; if (input.action === 'pin') { if (targets.length !== 1) throw new RouterError('INVALID_PIN', 'Pin one target'); selection.pin = targets[0] } }
+        } else { selection.targets = targets; delete selection.pin;delete selection.pending; if (input.action === 'pin') { if (targets.length !== 1) throw new RouterError('INVALID_PIN', 'Pin one target'); selection.pin = targets[0] } }
         await register(targets)
       }
-      selection.revision++; selection.asked = false; await save(context.sessionID, selection)
+      const revision=selection.revision;selection.revision++;selection.asked=false;save(context.sessionID,selection,revision)
       return { ...selection, note: 'Previously delivered work is not cancelled by correction. Inspect its receipt before rerouting.' }
     }) },
-    { name: 'project_route', description: 'Use the exact revision returned by project_select (never guess 0). Deliver the original authorized user request once per explicit selected destination in real destination-bound giver sessions; preserve hub. Use one stable requestKey for retries. Unknown delivery is never automatically retried. Quest operations execute there.', input: schema({ revision: { type: 'integer', minimum: 0 }, requestKey: { type: 'string', minLength: 1, maxLength: 150 }, text: { type: 'string', minLength: 1, maxLength: 16000 } }, ['revision', 'requestKey', 'text']), execute: async (input, context) => {
+    { name: 'project_route', description: 'Confirm the selected project revision for work in your one persistent Quest Giver. Never creates a destination conversation. Create or run each Quest here; workers execute in their verified project.', input: schema({ revision: { type: 'integer', minimum: 0 } }, ['revision']), execute: async (input, context) => {
       const selection = await state(context.sessionID)
+      if(selection.pending)throw new RouterError('TARGET_REQUIRED',selection.pending)
       if (!selection.targets.length) throw new RouterError('TARGET_REQUIRED', 'Use project_select with the explicit destination before routing')
-      const receipts = []
-      for (const target of selection.targets) receipts.push(await router.route({ ...input, target, authorizedTargets:selection.targets.map(targetKey),hubSessionID: context.sessionID }))
-      return { receipts, hubSessionID: context.sessionID }
+      const giver=await singleUserGiver(ctx.session,context.sessionID)
+      if(giver.id!==context.sessionID)throw new RouterError('SINGLE_GIVER_REQUIRED','Continue in your existing Quest Giver: '+giver.id)
+      if(selection.revision!==input.revision)throw new RouterError('SELECTION_CHANGED','Use the exact current project_select revision')
+      const targets=selection.targets.map(revalidate)
+      return {giverSessionID:giver.id,targets,revision:selection.revision,createdSessions:0,next:'Create and run Quests in this same conversation. Project selection changes worker location, never the user giver.'}
     } },
-    { name: 'project_result',description:'Read bounded recent result excerpts from the current selected destination conversations back into this hub. No session IDs or directory changes required; unknown delivery remains explicit.',input:schema({}),execute:async(_input,context)=>{
-      const selection=await state(context.sessionID),results=[]
-      for(const target of selection.targets){const bound=await router.destination(context.sessionID,target);results.push({target,state:bound.state,sessionID:bound.sessionID,...(bound.sessionID?{messages:await discovery.messages(bound.sessionID)}:{})})}
-      return {results,hubSessionID:context.sessionID,returns:await returns.status(context.sessionID)}
+    { name: 'project_result',description:'List Quest results and worker references for your selected projects in the one user giver. Use quest get for authoritative progress.',input:schema({}),execute:async(_input,context)=>{
+      const giver=await singleUserGiver(ctx.session,context.sessionID),selection=await state(giver.id)
+      return {giverSessionID:giver.id,quests:routerQuestInventory().filter(q=>!selection.targets.length||selection.targets.some(t=>t.id===q.project?.id||t.directory===q.project?.root)),next:'Inspect each Quest with quest get; all results return to this giver.'}
     } },
     { name: 'project_clone', description: 'Explicitly authorized safe repo-link onboarding. Reuses verified matching clones; preserves collisions/partial work; no repository scripts. URLs must be credential-free HTTPS/SSH.', input: schema({ url: string, authorized: { type: 'boolean' }, requestKey: string, retry: { type: 'boolean' } }, ['url', 'authorized', 'requestKey']), execute: async (input, context) => {
       if (worker(context.sessionID)) throw new RouterError('WORKER_DELEGATION_DENIED', 'Repo onboarding belongs to the giver')
@@ -88,39 +116,70 @@ export async function installProjectRouter(ctx: any, discovery = new DiscoveryHo
       if (result.state === 'verified' && result.target) { instructions(result.target); await register([result.target]) }
       return result
     } },
-    { name: 'project_route_status', description: 'Compact exact-model route and account diagnostics. Distinguishes unavailable authorization, missing reasoning, ambiguous account/service, stale quota and account hold. Does not reserve or launch.', input: schema({ model: string }), execute: async input => ({ ...await routeFeedback(input.model), loadedModule: import.meta.url, hostVersion: ctx.app?.version ?? 'unknown', sourceVersusLoaded: 'This receipt identifies this loaded module only; existing sessions may retain an older generation. Open a fresh verified session after parent promotion.' }) },
+    { name: 'project_route_status', description: 'Inspect automatic worker routing with no model argument, or diagnose an exact worker selector. Candidates are not the full host catalog or every supported effort. Chat model changes do not require this check. Does not reserve or launch.', input: schema({ model: string }), execute: async (input, context) => ({ ...await routeFeedback(input.model, true, context?.sessionID), loadedModule: import.meta.url, hostVersion: ctx.app?.version ?? 'unknown', sourceVersusLoaded: 'This receipt identifies this loaded module only; existing sessions may retain an older generation. Open a fresh verified session after parent promotion.' }) },
     { name: 'project_verify', description: 'Giver binds a configured verification command to an assigned step with action=bind; action=run executes that exact contract in the actual destination/assigned workspace and attaches actual proof. Workers cannot change contracts.', input: schema({questID:string,stepID:string,commandID:string,action:{enum:['bind','run']}},['questID','stepID','commandID']),execute:async(input,context)=>goals.verify(input,{sessionID:context.sessionID,requestID:context.id??context.callID}) },
-    { name: 'project_goal', description: 'Explicit canonical Quest goal start/status/pause/cancel/resume in the owning destination-bound giver or assigned worker session. Requires authorized step IDs. Restart requires explicit verified resume; never pursue historical backlog.', input: schema({ action: { enum: ['start', 'status', 'pause', 'cancel', 'resume'] }, questID: string, stepIDs: selectors,model:string }, ['action']), execute: async (input, context) => goals.control(input, { sessionID: context.sessionID, requestID: context.id ?? context.callID }) },
+    { name: 'project_goal', description: 'Explicit canonical Quest goal start/status/pause/cancel/resume in your persistent giver or assigned worker session. Requires authorized step IDs. Restart requires explicit verified resume; never pursue historical backlog.', input: schema({ action: { enum: ['start', 'status', 'pause', 'cancel', 'resume'] }, questID: string, stepIDs: selectors,model:string }, ['action']), execute: async (input, context) => goals.control(input, { sessionID: context.sessionID, requestID: context.id ?? context.callID }) },
   ]
   await ctx.tool.transform((editor: any) => { for (const operation of operations) editor.add({ ...operation, output: { type: 'object', additionalProperties: true }, execute: async (input: any, context: any) => {
     if (!context?.sessionID || !(context.id ?? context.callID)) throw new RouterError('HOST_CONTEXT_REQUIRED', 'Trusted host session and tool call identity required')
     await ctx.session.get({ sessionID: context.sessionID })
-    try { const result = await operation.execute(input, context); const output = Array.isArray(result) ? { items: result } : result; return { output, content: JSON.stringify(output) } }
+    try {
+      const result = await operation.execute(input, context)
+      // The host validates structured output as JSON, including nested optional fields.
+      // Return the same JSON value shown in content instead of raw undefined properties.
+      const content = JSON.stringify(Array.isArray(result) ? { items: result } : result)
+      return { output: JSON.parse(content), content }
+    }
     catch (error) { const output = { code: (error as any)?.code ?? 'ROUTER_FAILED', message: redact(error instanceof Error ? error.message : 'Router failed'), action: 'Inspect this bounded result; do not retry unknown launches or substitute routes' }; return { output, content: JSON.stringify(output) } }
   } }) })
-  await ctx.session.hook?.('context', (event: any) => {
-    if (!['build', 'quest-giver', 'general', 'astra'].includes(event.agent) || worker(event.sessionID)) return
-    event.system.push(systemPart('Project-router: for cross-project work discover on demand, resolve explicit user paths/names/aliases, select then route the original request. Explicit choice/correction wins; recency only supports candidates. Ask one ambiguity question without launching. Keep explicit multiple targets separate. General discussion needs no Quest. PROJECT_MISMATCH: discover the owning root, project_select, then project_route; perform Quest operations only in the real destination session. Never supply synthetic host context. A saved goal is not a live worker; inspect receipts. Unknown launch: stop and reconcile.'))
-  })
-  await ctx.command?.transform((editor: any) => editor.add({ name: 'goal', description: 'Canonical Quest goal: start <quest> <step...>, status, pause, cancel, resume', execute: async ({ sessionID, prompt }: any) => {
-    const [action, questID, ...stepIDs] = (prompt.text ?? '').trim().split(/\s+/)
-    if (!['start', 'status', 'pause', 'cancel', 'resume'].includes(action)) throw new RouterError('INVALID_GOAL', 'Use /goal start <quest> <step...>, status, pause, cancel or resume')
-    const result = await goals.control({ action, questID, stepIDs: stepIDs.length ? stepIDs : undefined } as any, { sessionID, requestID: 'goal-command:' + (prompt.id ?? crypto.randomUUID()) })
-    await ctx.session.synthetic({ sessionID, text: JSON.stringify(result) })
+  /**
+   * `/goal` is the one way in.
+   *
+   * It used to be operations only -- start, status, pause, cancel, resume -- and everything else was
+   * refused as INVALID_GOAL, so stating a goal meant writing the Quest by hand first. Anything that
+   * is not one of those five verbs is now the goal itself, and the giver files and starts it.
+   *
+   * The wording is the giver's, not this handler's. A command can only put the raw sentence in both
+   * the title and the objective, which is exactly the unreadable Quest the naming guard exists to
+   * refuse; the giver has the naming guard and the project context. So intake is a
+   * synthetic prompt: Session.synthetic admits it and calls execution.wake, so the giver takes a real
+   * turn (packages/core/src/session/session.ts:334).
+   */
+  const intakePrompt = (goal: string) => [
+    `Jon stated this goal: ${goal}`,
+    '',
+    'File it as a Quest and start it, in this turn:',
+    '  1. Create the Quest. The title names the outcome, not the',
+    '     activity, and says what this one owns that a sibling does not. The objective opens with the',
+    '     goal itself; his words go after it, not first.',
+    '  2. Give it steps that name the work of this task and the result each one is checked against.',
+    '     Never Implementation / Verification / Integration.',
+    '  3. Select the project it belongs to if that is not already obvious, then run the first step,',
+    '     choosing the route on merit.',
+    '',
+    'Reply with the Quest id, its title, its steps, and what you dispatched. If the goal is too vague',
+    'to write steps for, say exactly what you need to know instead of guessing.',
+  ].join(String.fromCharCode(10))
+
+  await ctx.command?.transform((editor: any) => editor.add({ name: 'goal', description: 'State a goal and it becomes a Quest and starts; or start <quest> <step...>, status, pause, cancel, resume', execute: async ({ sessionID, prompt }: any) => {
+    const asked = goalCommand(prompt.text)
+    if (asked.kind === 'intake') {
+      await ctx.session.synthetic({ sessionID, text: intakePrompt(asked.goal), description: 'Goal: ' + asked.goal, metadata: { projectRouterGoal: true } })
+      return
+    }
+    const request = asked.kind === 'status' ? { action: 'status' } : { action: asked.action, questID: asked.questID, stepIDs: asked.stepIDs }
+    const result = await goals.control(request as any, { sessionID, requestID: 'goal-command:' + (prompt.id ?? crypto.randomUUID()) })
+    await ctx.session.synthetic({ sessionID, text: JSON.stringify(result), metadata: { projectRouterGoal: true } })
   } }))
-  await ctx.session.hook?.('prompt',async(event:any)=>{if(event.metadata?.projectRouterGoal!==true&&event.metadata?.projectRouterReturn!==true)await goals.steer(event.sessionID)})
-  const returnTimer=setInterval(()=>void returns.tick().catch(error=>console.error('[project-router] return check failed',error)),5000);returnTimer.unref()
+  await ctx.session.hook?.('prompt',async(event:any)=>{if(!automaticQuestPrompt(event.metadata))await goals.steer(event.sessionID)})
   const abort=new AbortController()
   if(ctx.event?.subscribe)void(async()=>{try{const stream=await ctx.event.subscribe({signal:abort.signal});goals.trigger('live');for await(const event of stream){
     if(!/^session\.execution\.(succeeded|failed|interrupted)$/.test(event.type))continue
     const data=event.data??event.properties??{},id=event.id??data.executionID
     if(typeof data.sessionID==='string'&&typeof id==='string'){
       await goals.event(data.sessionID,id,event.type==='session.execution.succeeded')
-      try{await returns.event(data.sessionID,id,event.type.slice('session.execution.'.length))
-      for(const source of routerReturnSources(data.sessionID))await returns.event(source.sessionID,id,event.type.slice('session.execution.'.length),source.detail)
-      }catch(error){console.error('[project-router] return notification failed',error)}
     }
   }goals.trigger('ended')}catch{goals.trigger('failed')}})()
-  return () => {abort.abort();clearInterval(returnTimer);goals.dispose()}
+  return () => {abort.abort();goals.dispose()}
 }
 export default define({ id: 'project-router', setup: installProjectRouter })

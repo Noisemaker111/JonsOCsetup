@@ -17,6 +17,13 @@ export function isSessionQuotaExhausted(session: QuestSession): boolean {
   return QUOTA_FAILOVER_PATTERN.test(`${session.evidence?.join(" ") ?? ""} ${session.result ?? ""}`)
 }
 
+/** The saved run states that mean this Quest still owns the work: nothing here is proof of execution. */
+export const OWNED_RUN: ReadonlySet<string> = new Set(["planned", "executing", "waiting", "blocked"])
+
+/** A settled run reports the outcome we recorded; the owning host is not asked to confirm it again. */
+export const TERMINAL_RUN: ReadonlySet<string> = new Set(["completed", "failed", "cancelled", "missing", "stale"])
+export const isTerminalSession = (state: string) => TERMINAL_RUN.has(state)
+
 /** Historical attempts stay visible, but only the newest attempt in a resume lineage is live work. */
 export function latestSessionAttempts(sessions: QuestSession[]): QuestSession[] {
   const latest = new Map<string, QuestSession>()
@@ -26,4 +33,54 @@ export function latestSessionAttempts(sessions: QuestSession[]): QuestSession[] 
     if (!prior || session.attempt > prior.attempt || (session.attempt === prior.attempt && session.updatedAt > prior.updatedAt)) latest.set(root, session)
   }
   return [...latest.values()]
+}
+
+/** Only an evidenced terminal owner can release a working step; silence cannot. */
+export function terminalStepUpdates(q: import('./types').Quest) {
+  return q.stages.flatMap(step => {
+    if (step.status !== 'working') return []
+    const runs = q.sessions.filter(run => run.deliverables.includes(step.id))
+    // A step can be recorded working without any run ever claiming it, because a giver or worker
+    // update writes the status directly. Nothing owns it and nothing can: dispatch only ever selects
+    // a pending step, so neither an owner nor an ending will appear, and the Quest waits forever on
+    // a worker that was never started. That is not silence from an owner — there is no owner.
+    if (!runs.length) return [{ stageID: step.id, status: 'pending' as const,
+      evidence: 'Recorded working with no run on this Quest that ever claimed it, so nothing is executing it and nothing will end it.' }]
+    const latest = runs.at(-1)
+    // Every terminal state releases the step, not only the three a worker reports for itself.
+    // `missing` and `stale` are what reconciliation writes when it establishes that a run is over:
+    // its session is gone, its workspace was deleted, its lease expired, or its execution ended with
+    // the host. Leaving those out meant each of those settles freed the run and left the step owned
+    // by it anyway, so the board filled with working steps that had no run behind them at all.
+    if (!latest || !TERMINAL_RUN.has(latest.state) || runs.some(run => !TERMINAL_RUN.has(run.state))) return []
+    const ended = ['missing', 'stale'].includes(latest.state)
+      ? `Run recorded ${latest.state}; nothing is executing it any more.`
+      : `Worker ${latest.state} without saving this step as done.`
+    return [{ stageID: step.id, status: 'pending' as const,
+      evidence: `${ended} ${latest.result ?? latest.evidence.at(-1) ?? 'Inspect the retained run result before retrying.'}` }]
+  })
+}
+
+
+/** Runs this Quest still owns: the newest attempt of each lineage, in a state that is not over. */
+export const ownedRuns = (q: import('./types').Quest) => latestSessionAttempts(q.sessions).filter(run => OWNED_RUN.has(run.state))
+
+/**
+ * What every surface shows for one run.
+ *
+ * useWorkerObservations polls the host only for ownedRuns, so a settled run has no
+ * observation entry and every reader that asked it directly sat on "Checking owning
+ * host..." for a worker that finished. The settled run reports the outcome we recorded;
+ * only a live run is worth inspecting.
+ */
+export const observedRun = (run: QuestSession, observation: (run: QuestSession) => any) =>
+  run.state && TERMINAL_RUN.has(run.state) ? { state: run.state, reason: run.result ?? 'Recorded outcome' } : observation(run)
+
+/**
+ * The host session id an execution can actually be confirmed against. A harness run executes in
+ * another vendor's process, so the absence of a native id is not absence of work.
+ */
+export const nativeRunID = (run: QuestSession) => {
+  const id = run.openCodeSessionId ?? run.openCodeSessionID ?? run.sessionID
+  return id?.startsWith('ses_') && !run.harness && run.runtime !== 'claude-code' ? id : undefined
 }
